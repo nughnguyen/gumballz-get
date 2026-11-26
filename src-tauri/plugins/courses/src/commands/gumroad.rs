@@ -20,16 +20,22 @@ struct GumroadDownloadCompleteEvent {
 
 #[tauri::command]
 pub async fn gumroad_login(
+    app: tauri::AppHandle,
     state: tauri::State<'_, CoursesState>,
     email: String,
-    password: String,
+    // Gumroad no longer accepts the password grant (`unsupported_grant_type`),
+    // so the password is not sent anywhere: the user signs in on Gumroad's
+    // own page inside the login window opened below. The parameter stays so
+    // the command signature — and the credentials tab that calls it — is
+    // unchanged.
+    _password: String,
 ) -> Result<String, String> {
     let _ = api::delete_saved_session().await;
     state.gumroad_session.lock().await.take();
     *state.gumroad_session_validated_at.lock().await = None;
     *state.gumroad_courses_cache.lock().await = None;
 
-    match api::authenticate(&email, &password).await {
+    match api::authenticate_via_browser(&app, &email).await {
         Ok(session) => {
             let response_email = session.email.clone();
             let _ = api::save_session(&session).await;

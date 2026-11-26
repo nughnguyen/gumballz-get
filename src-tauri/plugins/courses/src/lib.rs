@@ -368,8 +368,16 @@ impl GumballzPlugin for CoursesPlugin {
                         args.get("password").cloned().ok_or("missing 'password'")?,
                     )
                     .map_err(|e| e.to_string())?;
-                    let res = commands::gumroad::gumroad_login(wrap_state(&state), email, password)
-                        .await?;
+                    let app_handle = app.ok_or_else(|| {
+                        "Tauri AppHandle not available on CoursesPlugin".to_string()
+                    })?;
+                    let res = commands::gumroad::gumroad_login(
+                        app_handle,
+                        wrap_state(&state),
+                        email,
+                        password,
+                    )
+                    .await?;
                     serde_json::to_value(res).map_err(|e| e.to_string())
                 }
                 "gumroad_login_token" => {

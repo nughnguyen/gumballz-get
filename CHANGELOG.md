@@ -7,6 +7,8 @@ bản hiện tại trong cùng commit đó.
 
 ## [Unreleased]
 
+- Đăng nhập Gumroad bằng email/mật khẩu giờ mở cửa sổ trình duyệt trong app để đăng nhập trên trang Gumroad rồi đổi mã lấy token (Gumroad đã bỏ kiểu đăng nhập gửi thẳng mật khẩu nên trước đây báo lỗi 400 unsupported_grant_type); đăng nhập bằng token vẫn giữ nguyên.
+
 ## [1.0.2] - 2026-11-26
 
 - Logo mới: mèo xanh GumballZ (chữ G là mặt mèo, mũi tên tải màu cam) thay cho logo chữ F cũ, đổi ở toàn bộ app, web và tiện ích.
