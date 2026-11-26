@@ -46,7 +46,7 @@ impl PlatformDownloader for ScribdDownloader {
             author: "Scribd".to_string(),
             platform: "scribd".to_string(),
             duration_seconds: None,
-            thumbnail_url: None,
+            thumbnail_url: scribd::first_page_thumbnail_url(&html),
             available_qualities: vec![
                 VideoQuality {
                     label: "PDF".to_string(),

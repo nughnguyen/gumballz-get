@@ -406,6 +406,46 @@ pub fn extract_image_fragments(page_html: &str) -> Vec<(String, ScribdImageFragm
     out
 }
 
+/// Thumbnail for the paste-link preview: page 1's sprite image
+/// (`html.scribd.com/.../images/1-<hash>.(png|jpg)`) — the document
+/// cover as the viewer shows it. Taken from the already-fetched embed
+/// HTML, so no extra request at resolve time. Page 1's inline chunk
+/// first; if page 1 is not inline (or has no sprite), the first sprite
+/// anywhere in the HTML, so a document whose first page is text-only
+/// still gets a preview from a later illustrated page. `None` when the
+/// document has no page image at all — the resolve + download flow must
+/// never break because the thumbnail is missing. The `orig` URLs in the
+/// raw HTML are `http://`; they are upgraded to `https://`
+/// (html.scribd.com serves https — verified live, 200).
+pub fn first_page_thumbnail_url(html: &str) -> Option<String> {
+    let pages = extract_inline_pages(html);
+    let page1 = pages
+        .iter()
+        .find(|(n, _)| *n == 1)
+        .map(|(_, chunk)| chunk.as_str());
+    let fragments = match page1 {
+        Some(chunk) => {
+            let frags = extract_image_fragments(chunk);
+            if frags.is_empty() {
+                extract_image_fragments(html)
+            } else {
+                frags
+            }
+        }
+        None => extract_image_fragments(html),
+    };
+    let (url, _) = fragments.into_iter().next()?;
+    Some(upgrade_http_to_https(url))
+}
+
+/// `http://x` -> `https://x`; anything else passes through unchanged.
+fn upgrade_http_to_https(url: String) -> String {
+    match url.strip_prefix("http://") {
+        Some(rest) => format!("https://{rest}"),
+        None => url,
+    }
+}
+
 /// `window.page4_callback(["<div...>"])` -> the inner HTML string.
 /// The callback name varies per page; parse the first JSON value in
 /// the body with a streaming deserializer (trailing `);` ignored).
@@ -2449,6 +2489,51 @@ docManager.addPage({pageNum: 3, origWidth: 800, origHeight: 1000});</script>
         // Empty clip is skipped.
         let empty = r#"<img class="absimg" style="left:0px;top:0px;width:904px;height:100px;clip:rect(5px 10px 5px 10px)" orig="http://x/y.png"/>"#;
         assert!(extract_image_fragments(empty).is_empty());
+    }
+
+    #[test]
+    fn test_first_page_thumbnail_url() {
+        // Page 1 inline with an image_layer: the first sprite, http
+        // upgraded to https.
+        let html = r##"<!doctype html><html><body>
+<div class="newpage" id="page1"><div class="image_layer" style="z-index: 1"><div class="ie_fix"><img class="absimg" style="left:-1px;top:-1px;width:904px;height:2259px;clip:rect(1px 903px 1168px 1px)" orig="http://html.scribd.com/34t2dbw9kw8500ws/images/1-64298bd981.png"/></div></div></div>
+<div class="newpage" id="page2"><div class="image_layer"><div class="ie_fix"><img class="absimg" style="left:-1px;top:-1px;width:904px;height:2259px;clip:rect(1px 903px 1168px 1px)" orig="http://html.scribd.com/34t2dbw9kw8500ws/images/2-aaaa0000.jpg"/></div></div></div>
+</body></html>"##;
+        assert_eq!(
+            first_page_thumbnail_url(html),
+            Some(
+                "https://html.scribd.com/34t2dbw9kw8500ws/images/1-64298bd981.png"
+                    .to_string()
+            )
+        );
+        // An already-https sprite passes through unchanged.
+        let https_html = html.replacen(
+            "http://html.scribd.com",
+            "https://html.scribd.com",
+            1,
+        );
+        assert_eq!(
+            first_page_thumbnail_url(&https_html),
+            Some(
+                "https://html.scribd.com/34t2dbw9kw8500ws/images/1-64298bd981.png"
+                    .to_string()
+            )
+        );
+        // Page 1 text-only, page 2 illustrated: falls back to the
+        // first sprite anywhere in the HTML.
+        let text_first = r##"<!doctype html><html><body>
+<div class="newpage" id="page1"><div class="text_layer"><span>hello</span></div></div>
+<div class="newpage" id="page2"><div class="image_layer"><div class="ie_fix"><img class="absimg" style="left:-1px;top:-1px;width:904px;height:2259px;clip:rect(1px 903px 1168px 1px)" orig="http://html.scribd.com/34t2dbw9kw8500ws/images/2-aaaa0000.jpg"/></div></div></div>
+</body></html>"##;
+        assert_eq!(
+            first_page_thumbnail_url(text_first),
+            Some(
+                "https://html.scribd.com/34t2dbw9kw8500ws/images/2-aaaa0000.jpg"
+                    .to_string()
+            )
+        );
+        // No page image at all (the EMBED_HTML fixture): None.
+        assert_eq!(first_page_thumbnail_url(EMBED_HTML), None);
     }
 
     #[test]
