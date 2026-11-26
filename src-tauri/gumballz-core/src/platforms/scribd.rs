@@ -47,13 +47,22 @@ impl PlatformDownloader for ScribdDownloader {
             platform: "scribd".to_string(),
             duration_seconds: None,
             thumbnail_url: None,
-            available_qualities: vec![VideoQuality {
-                label: "PDF".to_string(),
-                width: 0,
-                height: 0,
-                url: url.to_string(),
-                format: "pdf".to_string(),
-            }],
+            available_qualities: vec![
+                VideoQuality {
+                    label: "PDF".to_string(),
+                    width: 0,
+                    height: 0,
+                    url: url.to_string(),
+                    format: "pdf".to_string(),
+                },
+                VideoQuality {
+                    label: "DOCX".to_string(),
+                    width: 0,
+                    height: 0,
+                    url: url.to_string(),
+                    format: "docx".to_string(),
+                },
+            ],
             media_type: MediaType::File,
             file_size_bytes: None,
         })
@@ -99,6 +108,7 @@ impl PlatformDownloader for ScribdDownloader {
             target_url,
             &opts.output_dir.to_string_lossy(),
             tool_progress,
+            opts.format_id.as_deref().unwrap_or("pdf"),
         )
         .await?;
         let out_path = PathBuf::from(&outcome.output_path);

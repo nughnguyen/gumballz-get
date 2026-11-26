@@ -53,10 +53,11 @@
 //! embedded, which makes each PDF ~130 KB larger.
 
 use std::collections::BTreeMap;
-use std::io::Read;
+use std::io::{Cursor, Read, Write};
 use std::path::PathBuf;
 
 use anyhow::{anyhow, Context};
+use image::ImageEncoder;
 use serde::Serialize;
 
 use super::{report, ProgressFn};
@@ -1707,6 +1708,295 @@ pub fn build_text_pdf(pages: &[ScribdPage]) -> anyhow::Result<Vec<u8>> {
 }
 
 // ---------------------------------------------------------------------------
+// Minimal DOCX writer (no new crates): the `zip` crate + hand-built
+// WordprocessingML. DOCX is flow layout, so spans become paragraphs in
+// document order (their PDF positions are irrelevant here); consecutive
+// table-cell spans merge into one Word table; each page's sprite is
+// embedded as an inline image after its text; page breaks between
+// Scribd pages. Text is plain UTF-8, XML-escaped; Calibri is named,
+// never embedded, so Vietnamese diacritics render in any Word reader.
+// ---------------------------------------------------------------------------
+
+/// Content width of the DOCX page in EMU (Letter 8.5" with 1" margins:
+/// 6.5" * 914400 EMU/inch).
+const DOCX_CONTENT_WIDTH_EMU: u32 = 5_943_600;
+
+/// Escape text for a WordprocessingML text node (`&<>"'`).
+fn docx_escape_xml(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&apos;"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+fn docx_para(text: &str) -> String {
+    format!(
+        "<w:p><w:r><w:t xml:space=\"preserve\">{}</w:t></w:r></w:p>",
+        docx_escape_xml(text)
+    )
+}
+
+/// One Word table with visible single borders; each row is one
+/// table-cell span, each run one cell.
+fn docx_table(rows: &[Vec<String>]) -> String {
+    let mut out = String::from(
+        "<w:tbl><w:tblPr><w:tblW w:w=\"0\" w:type=\"auto\"/><w:tblBorders>\
+        <w:top w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"auto\"/>\
+        <w:left w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"auto\"/>\
+        <w:bottom w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"auto\"/>\
+        <w:right w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"auto\"/>\
+        <w:insideH w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"auto\"/>\
+        <w:insideV w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"auto\"/>\
+        </w:tblBorders><w:tblLayout w:type=\"autofit\"/></w:tblPr>",
+    );
+    for row in rows {
+        out.push_str("<w:tr>");
+        for cell in row {
+            out.push_str("<w:tc><w:tcPr><w:tcW w:w=\"0\" w:type=\"auto\"/></w:tcPr>");
+            if cell.trim().is_empty() {
+                out.push_str("<w:p/>");
+            } else {
+                out.push_str(&docx_para(cell));
+            }
+            out.push_str("</w:tc>");
+        }
+        out.push_str("</w:tr>");
+    }
+    out.push_str("</w:tbl>");
+    out
+}
+
+/// Paragraph holding one inline image (drawing), sized to the page
+/// content width with its aspect ratio kept. `rel_id` is the
+/// `r:embed` relationship id from `word/_rels/document.xml.rels`.
+fn docx_image_para(rel_id: usize, cx: u32, cy: u32) -> String {
+    format!(
+        "<w:p><w:r><w:drawing><wp:inline distT=\"0\" distB=\"0\" distL=\"0\" distR=\"0\">\
+        <wp:extent cx=\"{cx}\" cy=\"{cy}\"/><wp:docPr id=\"{rel_id}\" name=\"Picture {rel_id}\"/>\
+        <a:graphic xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\">\
+        <a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/picture\">\
+        <pic:pic xmlns:pic=\"http://schemas.openxmlformats.org/drawingml/2006/picture\">\
+        <pic:nvPicPr><pic:cNvPr id=\"{rel_id}\" name=\"image{rel_id}\"/><pic:cNvPicPr/></pic:nvPicPr>\
+        <pic:blipFill><a:blip r:embed=\"rId{rel_id}\"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>\
+        <pic:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"{cx}\" cy=\"{cy}\"/></a:xfrm>\
+        <a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></pic:spPr>\
+        </pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>"
+    )
+}
+
+/// One image ready for the DOCX package: (bytes, extension,
+/// content type). JPEG sprites embed their raw bytes; PNG sprites
+/// were decoded to RGBA for the PDF writer, so they are re-encoded
+/// to PNG here. `None` on any encode problem — the caller skips
+/// that image instead of failing the download.
+fn docx_encode_image(image: &ScribdPageImage) -> Option<(Vec<u8>, &'static str, &'static str)> {
+    match &image.kind {
+        ScribdImageKind::Jpeg { bytes, .. } => {
+            Some((bytes.clone(), "jpg", "image/jpeg"))
+        }
+        ScribdImageKind::Rgba(rgba) => {
+            let mut buf = Vec::new();
+            let mut enc = image::codecs::png::PngEncoder::new(&mut buf);
+            enc.write_image(
+                rgba,
+                image.width,
+                image.height,
+                image::ExtendedColorType::Rgba8,
+            )
+            .ok()?;
+            Some((buf, "png", "image/png"))
+        }
+    }
+}
+
+struct DocxMedia {
+    bytes: Vec<u8>,
+    ext: &'static str,
+    width: u32,
+    height: u32,
+}
+
+/// Build a .docx from Scribd pages: title once at the top, then per
+/// page the spans as paragraphs (table-cell spans merged into one
+/// table), the page's sprite image after its text, and a page break
+/// between Scribd pages.
+pub fn build_docx(pages: &[ScribdPage], title: &str) -> anyhow::Result<Vec<u8>> {
+    // Collect embeddable images first, in page order (rId1 is the
+    // styles part, so image rel ids start at rId2).
+    let mut media: Vec<DocxMedia> = Vec::new();
+    let mut page_media: Vec<Vec<usize>> = vec![Vec::new(); pages.len()];
+    for (pi, page) in pages.iter().enumerate() {
+        for image in &page.images {
+            if let Some((bytes, ext, _ct)) = docx_encode_image(image) {
+                page_media[pi].push(media.len());
+                media.push(DocxMedia {
+                    bytes,
+                    ext,
+                    width: image.width,
+                    height: image.height,
+                });
+            }
+        }
+    }
+
+    let mut body = String::new();
+    if !title.trim().is_empty() {
+        body.push_str(&format!(
+            "<w:p><w:pPr><w:pStyle w:val=\"Title\"/></w:pPr><w:r><w:t xml:space=\"preserve\">{}</w:t></w:r></w:p>",
+            docx_escape_xml(title.trim())
+        ));
+    }
+    for (pi, page) in pages.iter().enumerate() {
+        let mut table: Vec<Vec<String>> = Vec::new();
+        if !page.spans.is_empty() {
+            for span in &page.spans {
+                if span.word_runs.is_empty() {
+                    if !table.is_empty() {
+                        body.push_str(&docx_table(&table));
+                        table.clear();
+                    }
+                    let t = span.text.trim();
+                    if !t.is_empty() {
+                        body.push_str(&docx_para(t));
+                    }
+                } else {
+                    table.push(
+                        span.word_runs
+                            .iter()
+                            .map(|r| r.text.clone())
+                            .collect(),
+                    );
+                }
+            }
+        } else {
+            // Reflow fallback: one paragraph per non-empty line.
+            for line in page.text.lines() {
+                let t = line.trim();
+                if !t.is_empty() {
+                    body.push_str(&docx_para(t));
+                }
+            }
+            if page.text.trim().is_empty() && page.images.is_empty() {
+                body.push_str(&docx_para(&format!(
+                    "[Trang {}: trang ảnh, không trích xuất được chữ]",
+                    page.num
+                )));
+            }
+        }
+        if !table.is_empty() {
+            body.push_str(&docx_table(&table));
+            table.clear();
+        }
+        for &mi in &page_media[pi] {
+            let m = &media[mi];
+            let cy = DOCX_CONTENT_WIDTH_EMU as u64 * m.height.max(1) as u64
+                / m.width.max(1) as u64;
+            body.push_str(&docx_image_para(mi + 2, DOCX_CONTENT_WIDTH_EMU, cy as u32));
+        }
+        if pi + 1 < pages.len() {
+            body.push_str("<w:p><w:r><w:br w:type=\"page\"/></w:r></w:p>");
+        }
+    }
+
+    let document_xml = format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n\
+        <w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" \
+        xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" \
+        xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" \
+        xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" \
+        xmlns:pic=\"http://schemas.openxmlformats.org/drawingml/2006/picture\">\
+        <w:body>{body}<w:sectPr><w:pgSz w:w=\"12240\" w:h=\"15840\"/>\
+        <w:pgMar w:top=\"1440\" w:right=\"1440\" w:bottom=\"1440\" w:left=\"1440\" w:header=\"720\" w:footer=\"720\" w:gutter=\"0\"/>\
+        </w:sectPr></w:body></w:document>"
+    );
+
+    let mut rels = String::from(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n\
+        <Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">\
+        <Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/>",
+    );
+    for (i, m) in media.iter().enumerate() {
+        rels.push_str(&format!(
+            "<Relationship Id=\"rId{}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"media/image{}.{}\"/>",
+            i + 2,
+            i + 1,
+            m.ext
+        ));
+    }
+    rels.push_str("</Relationships>");
+
+    let content_types = "\
+        <?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n\
+        <Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">\
+        <Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>\
+        <Default Extension=\"xml\" ContentType=\"application/xml\"/>\
+        <Default Extension=\"jpg\" ContentType=\"image/jpeg\"/>\
+        <Default Extension=\"png\" ContentType=\"image/png\"/>\
+        <Override PartName=\"/word/document.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\"/>\
+        <Override PartName=\"/word/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml\"/>\
+        </Types>";
+
+    let package_rels = "\
+        <?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n\
+        <Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">\
+        <Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"word/document.xml\"/>\
+        </Relationships>";
+
+    // Minimal styles: Normal + Title, Calibri throughout.
+    let styles = "\
+        <?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n\
+        <w:styles xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">\
+        <w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii=\"Calibri\" w:hAnsi=\"Calibri\" w:cs=\"Calibri\"/>\
+        <w:sz w:val=\"22\"/><w:szCs w:val=\"22\"/><w:lang w:val=\"en-US\"/></w:rPr></w:rPrDefault>\
+        <w:pPrDefault><w:pPr><w:spacing w:after=\"160\" w:line=\"259\" w:lineRule=\"auto\"/></w:pPr></w:pPrDefault></w:docDefaults>\
+        <w:style w:type=\"paragraph\" w:default=\"1\" w:styleId=\"Normal\"><w:name w:val=\"Normal\"/><w:qFormat/>\
+        <w:rPr><w:rFonts w:ascii=\"Calibri\" w:hAnsi=\"Calibri\"/><w:sz w:val=\"22\"/><w:szCs w:val=\"22\"/></w:rPr></w:style>\
+        <w:style w:type=\"paragraph\" w:styleId=\"Title\"><w:name w:val=\"Title\"/><w:basedOn w:val=\"Normal\"/><w:qFormat/>\
+        <w:rPr><w:rFonts w:ascii=\"Calibri\" w:hAnsi=\"Calibri\"/><w:b/><w:sz w:val=\"32\"/><w:szCs w:val=\"32\"/></w:rPr></w:style>\
+        </w:styles>";
+
+    let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
+    let opts = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+    let mut files: Vec<(String, Vec<u8>)> = vec![
+        ("[Content_Types].xml".to_string(), content_types.as_bytes().to_vec()),
+        ("_rels/.rels".to_string(), package_rels.as_bytes().to_vec()),
+        ("word/document.xml".to_string(), document_xml.into_bytes()),
+        ("word/_rels/document.xml.rels".to_string(), rels.into_bytes()),
+        ("word/styles.xml".to_string(), styles.as_bytes().to_vec()),
+    ];
+    for (i, m) in media.into_iter().enumerate() {
+        files.push((format!("word/media/image{}.{}", i + 1, m.ext), m.bytes));
+    }
+    for (name, bytes) in files {
+        zip.start_file(name, opts)
+            .context("ghi file vào docx")?;
+        zip.write_all(&bytes).context("ghi file vào docx")?;
+    }
+    let out = zip.finish().context("hoàn tất docx")?;
+    Ok(out.into_inner())
+}
+
+/// File extension for a requested Scribd format: only `"docx"`
+/// (case-insensitive) produces a DOCX — anything else (including
+/// empty or unknown) falls back to PDF.
+fn scribd_format_ext(format: &str) -> &'static str {
+    if format.eq_ignore_ascii_case("docx") {
+        "docx"
+    } else {
+        "pdf"
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Network: fetch the embed page, then each page's text (inline or JSONP).
 // ---------------------------------------------------------------------------
 
@@ -1855,13 +2145,15 @@ fn truncate_name(name: &str, max_chars: usize) -> String {
     }
 }
 
-/// Full pipeline: parse -> embed HTML -> page texts -> PDF ->
-/// `<sanitized title>.pdf` in `dest_dir` (suffixed ` (2)`, ` (3)`…
-/// on collision). Returns the output path + page counts.
+/// Full pipeline: parse -> embed HTML -> page texts -> PDF/DOCX ->
+/// `<sanitized title>.pdf|.docx` in `dest_dir` (suffixed ` (2)`,
+/// ` (3)`… on collision). Returns the output path + page counts.
+/// `format` is `"docx"` for a Word document; anything else builds a PDF.
 pub async fn download_document(
     url: &str,
     dest_dir: &str,
     progress: ProgressFn,
+    format: &str,
 ) -> anyhow::Result<ScribdDownloadOutcome> {
     let info = parse_scribd_url(url)
         .ok_or_else(|| anyhow!("không phải link Scribd (document/doc/presentation/embeds)"))?;
@@ -1886,7 +2178,12 @@ pub async fn download_document(
         Some(pages.len() as u64),
         None,
     );
-    let pdf = build_text_pdf(&pages)?;
+    let ext = scribd_format_ext(format);
+    let bytes = if ext == "docx" {
+        build_docx(&pages, &doc.title)?
+    } else {
+        build_text_pdf(&pages)?
+    };
     report(
         &progress,
         "scribd",
@@ -1899,13 +2196,13 @@ pub async fn download_document(
     let dir = PathBuf::from(dest_dir);
     std::fs::create_dir_all(&dir)?;
     let base = truncate_name(&super::sanitize_name(&doc.title), 120);
-    let mut path = dir.join(format!("{}.pdf", base));
+    let mut path = dir.join(format!("{}.{}", base, ext));
     let mut i = 2;
     while path.exists() {
-        path = dir.join(format!("{} ({}).pdf", base, i));
+        path = dir.join(format!("{} ({}).{}", base, i, ext));
         i += 1;
     }
-    std::fs::write(&path, &pdf)?;
+    std::fs::write(&path, &bytes)?;
     let got = pages.iter().filter(|p| p.has_text).count() as u32;
     report(
         &progress,
@@ -2571,6 +2868,145 @@ docManager.addPage({pageNum: 3, origWidth: 800, origHeight: 1000});</script>
             pdf_num(y),
         );
         assert!(text.contains(&run2));
+    }
+
+    #[test]
+    fn test_build_docx() {
+        // A real 2x2 JPEG (encoded here with the image crate) and a
+        // 2x2 RGBA sprite: both image paths must land in the package.
+        let mut jpeg_bytes = Vec::new();
+        {
+            let mut enc = image::codecs::jpeg::JpegEncoder::new(&mut jpeg_bytes);
+            enc.encode(
+                &[255u8, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255],
+                2,
+                2,
+                image::ExtendedColorType::Rgb8,
+            )
+            .expect("jpeg encodes");
+        }
+        assert!(!jpeg_bytes.is_empty());
+        let rgba = vec![
+            0u8, 0, 255, 255, // blue, opaque
+            0, 255, 0, 128, // green, semi-transparent
+            255, 255, 255, 255, // white, opaque
+            0, 0, 0, 255, // black, opaque
+        ];
+        let pages = vec![
+            ScribdPage {
+                num: 1,
+                width: 902,
+                height: 1167,
+                text: "Xin chào Việt Nam".to_string(),
+                has_text: true,
+                spans: vec![
+                    ScribdTextSpan {
+                        left: 95.6,
+                        top: 100.0,
+                        font_size: 17.6,
+                        text: "Xin chào Việt Nam".to_string(),
+                        color: (0.0, 0.0, 0.0),
+                        letter_spacing: 0.0,
+                        word_runs: vec![],
+                    },
+                    ScribdTextSpan {
+                        left: 95.6,
+                        top: 266.8,
+                        font_size: 17.6,
+                        text: "JV001 Abet".to_string(),
+                        color: (0.0, 0.0, 0.0),
+                        letter_spacing: 0.0,
+                        word_runs: vec![
+                            ScribdWordRun {
+                                gap_before: 0.0,
+                                text: "JV001".to_string(),
+                            },
+                            ScribdWordRun {
+                                gap_before: 109.6,
+                                text: "Abet".to_string(),
+                            },
+                        ],
+                    },
+                ],
+                images: vec![ScribdPageImage {
+                    width: 2,
+                    height: 2,
+                    kind: ScribdImageKind::Rgba(rgba),
+                    fragments: vec![],
+                }],
+            },
+            ScribdPage {
+                num: 2,
+                width: 902,
+                height: 1167,
+                text: "Dòng hai\nDòng ba".to_string(),
+                has_text: true,
+                spans: vec![],
+                images: vec![ScribdPageImage {
+                    width: 2,
+                    height: 2,
+                    kind: ScribdImageKind::Jpeg {
+                        bytes: jpeg_bytes,
+                        gray: false,
+                    },
+                    fragments: vec![],
+                }],
+            },
+        ];
+        let docx = build_docx(&pages, "Tài liệu thử — Tiếng Việt").expect("docx builds");
+        let mut zip = zip::ZipArchive::new(Cursor::new(docx)).expect("docx is a valid zip");
+        for name in [
+            "[Content_Types].xml",
+            "_rels/.rels",
+            "word/document.xml",
+            "word/_rels/document.xml.rels",
+            "word/styles.xml",
+            "word/media/image1.png",
+            "word/media/image2.jpg",
+        ] {
+            assert!(zip.by_name(name).is_ok(), "missing part {name}");
+        }
+        let mut doc_xml = String::new();
+        zip.by_name("word/document.xml")
+            .expect("document.xml")
+            .read_to_string(&mut doc_xml)
+            .expect("document.xml reads");
+        // Title + Vietnamese diacritics survive as UTF-8.
+        assert!(doc_xml.contains("Tài liệu thử — Tiếng Việt"));
+        assert!(doc_xml.contains("Xin chào Việt Nam"));
+        // Table-cell span became one Word table, one cell per run.
+        assert!(doc_xml.contains("<w:tbl>"));
+        assert!(doc_xml.contains("JV001"));
+        assert!(doc_xml.contains("Abet"));
+        // Reflow fallback page: one paragraph per line.
+        assert!(doc_xml.contains("Dòng hai"));
+        assert!(doc_xml.contains("Dòng ba"));
+        // Both images referenced, and a page break between the pages.
+        assert!(doc_xml.contains("r:embed=\"rId2\""));
+        assert!(doc_xml.contains("r:embed=\"rId3\""));
+        assert!(doc_xml.contains("w:type=\"page\""));
+        // Media parts hold real image bytes, not empty placeholders.
+        let mut png = Vec::new();
+        zip.by_name("word/media/image1.png")
+            .expect("image1")
+            .read_to_end(&mut png)
+            .expect("image1 reads");
+        assert!(png.starts_with(b"\x89PNG\r\n\x1a\n"));
+        let mut jpg = Vec::new();
+        zip.by_name("word/media/image2.jpg")
+            .expect("image2")
+            .read_to_end(&mut jpg)
+            .expect("image2 reads");
+        assert!(jpg.starts_with(b"\xff\xd8"));
+    }
+
+    #[test]
+    fn test_scribd_format_ext() {
+        assert_eq!(scribd_format_ext("docx"), "docx");
+        assert_eq!(scribd_format_ext("DOCX"), "docx");
+        assert_eq!(scribd_format_ext("pdf"), "pdf");
+        assert_eq!(scribd_format_ext("epub"), "pdf");
+        assert_eq!(scribd_format_ext(""), "pdf");
     }
 
     #[test]

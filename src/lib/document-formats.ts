@@ -4,13 +4,13 @@
 // (Platform::from_url) — no second detector here.
 //
 // Only list formats the platform's downloader really produces:
-// - scribd: the Scribd downloader builds a PDF from text layers and
-//   ignores any format choice, so PDF is the only honest option.
+// - scribd: the Scribd downloader builds a PDF or a DOCX from the
+//   text layers (PDF by default, DOCX when the format is "docx").
 // - gdocs: Google's export endpoint serves PDF and DOCX for documents;
 //   the backend filters any other request back to PDF, so a DOCX pick
 //   on Slides/Sheets/published docs still downloads as PDF.
 export const DOCUMENT_FORMATS: Record<string, string[]> = {
-  scribd: ["pdf"],
+  scribd: ["pdf", "docx"],
   gdocs: ["pdf", "docx"],
 };
 

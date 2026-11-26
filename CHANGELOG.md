@@ -15,6 +15,7 @@ bản hiện tại trong cùng commit đó.
 - Tab ngang Tải xuống / Lịch sử / Công cụ giờ có viên thuốc trượt theo kiểu giọt nước: trượt mượt qua các tab với hiệu ứng nảy nhẹ khi đổi tab.
 - Dọn log khi chạy dev: không còn cảnh báo gắn metadata cho file PDF (ffmpeg chỉ gắn được cho audio/video), không còn cảnh báo kho plugin chưa có (repo chưa xuất bản), không còn 2 dòng ERROR registry khi xoá khoá cũ, hết cảnh báo `mut` thừa ở trình ghi PDF Scribd và các đoạn CSS chết Svelte báo thừa.
 - Sửa bảng trong PDF Scribd bị vỡ: Scribd không có lưới bảng thật — bảng là chữ xếp cột, trình ghi cũ áp letter-spacing thành Tc nên chữ tản ra ("J V 0 0 1 A b e t") và nuốt khoảng trắng giữa các cột ("EpisodeWord"). Giờ chữ trong ô bảng được vẽ từng cụm từ đúng vị trí cột, khoảng cách theo đúng spacer của Scribd.
+- Link Scribd giờ tải được cả DOCX (chọn trong mục định dạng, bên cạnh PDF): chữ, bảng (thành bảng Word thật) và ảnh trang đều có trong file .docx, mở được bằng Word.
 
 ## [1.0.0] - 2026-11-26
 
