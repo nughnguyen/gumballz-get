@@ -8,6 +8,7 @@ bản hiện tại trong cùng commit đó.
 ## [Unreleased]
 
 - Logo mới: mèo xanh GumballZ (chữ G là mặt mèo, mũi tên tải màu cam) thay cho logo chữ F cũ, đổi ở toàn bộ app, web và tiện ích.
+- Sửa logo ở hero trang web bị lớp nền tím che mất: CSS cũ chỉ tạo vị trí cho bản SVG của logo, bản ảnh PNG mới không được tạo vị trí nên bị che khuất.
 
 ## [1.0.1] - 2026-11-26
 

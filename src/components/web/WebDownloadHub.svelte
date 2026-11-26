@@ -525,7 +525,8 @@
     transform: rotate(-4deg);
   }
 
-  .hero-art :global(svg) {
+  .hero-art :global(svg),
+  .hero-art :global(img) {
     position: relative;
     width: 208px;
     height: 208px;
@@ -1202,7 +1203,8 @@
       width: 160px;
       height: 160px;
     }
-    .hero-art :global(svg) {
+    .hero-art :global(svg),
+    .hero-art :global(img) {
       width: 144px;
       height: 144px;
     }
