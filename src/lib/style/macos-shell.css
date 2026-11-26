@@ -374,12 +374,43 @@
   transform: translate(2px, 2px);
 }
 
+/* The active item's own fill/border/shadow now live on the sliding
+   .mac-nav-glider behind it (same pattern as the titlebar segmented
+   glider); the item itself only keeps the on-accent label. */
 .mac-nav-item.active {
-  background: var(--accent);
+  background: transparent;
   color: var(--on-accent);
   font-weight: 600;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+/* Sliding active-item pill: one accent pill glides behind the active nav
+   item. Positioned by AppSidebar from the active link's offsetTop/height
+   (left/right match the sidebar's horizontal padding, so it always covers
+   the item exactly); the transition only applies once .ready is set, so
+   the first placement snaps instead of swooping in from the top. */
+.mac-nav-glider {
+  position: absolute;
+  left: var(--space-2);
+  right: var(--space-2);
+  top: 0;
+  height: 0;
+  background: var(--accent);
   border: 2px solid var(--border-ink);
+  border-radius: var(--radius-md);
   box-shadow: 2px 2px 0 var(--shadow-hard);
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.mac-nav-glider.ready {
+  opacity: 1;
+  transition:
+    top var(--duration-slow) var(--ease-spring),
+    height var(--duration-slow) var(--ease-spring),
+    opacity var(--duration-fast) var(--ease-out);
 }
 
 .mac-nav-item:focus-visible {
@@ -544,6 +575,10 @@
 
 @media (prefers-reduced-motion: reduce) {
   .mac-source-list {
+    transition: none;
+  }
+
+  .mac-nav-glider.ready {
     transition: none;
   }
 }

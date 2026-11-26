@@ -17,6 +17,7 @@
 -->
 
 <script lang="ts">
+  import { onMount } from "svelte";
   import { page } from "$app/state";
   import { t } from "$lib/i18n";
   import NavIcon from "$components/shell/NavIcon.svelte";
@@ -99,6 +100,57 @@
   $effect(() => {
     if (!collapsed) tip = null;
   });
+
+  // Sliding active-item pill: one accent pill glides behind the active nav
+  // item instead of each item swapping its own background (same "water
+  // droplet" pattern as the titlebar segmented glider in AppToolbar).
+  // Geometry comes from the active link's offsetTop/offsetHeight within
+  // the sidebar (.mac-source-list is position: relative, the sections are
+  // not, so the aside is the offsetParent), so the pill always matches
+  // the item's real size — collapsed rail, narrow window, expanded or
+  // collapsed plugins alike.
+  let sidebarEl: HTMLElement | null = $state(null);
+  let gliderTop = $state(0);
+  let gliderHeight = $state(0);
+  let gliderReady = $state(false);
+
+  function measureGlider() {
+    if (!sidebarEl) return;
+    const active = sidebarEl.querySelector<HTMLElement>(".mac-nav-item.active");
+    if (!active) {
+      // No visible active item (e.g. a plugin route while the plugins
+      // section is collapsed): hide the pill and snap on next appearance.
+      gliderReady = false;
+      return;
+    }
+    gliderTop = active.offsetTop;
+    gliderHeight = active.offsetHeight;
+    if (!gliderReady) {
+      // First placement (or reappearance after hiding): snap, then enable
+      // transitions on the next frame so the pill never swoops in from 0.
+      requestAnimationFrame(() => {
+        gliderReady = true;
+      });
+    }
+  }
+
+  $effect(() => {
+    // Re-measure whenever the active route, the collapsed state, the
+    // plugins section, or any nav list changes.
+    void page.url.pathname;
+    void collapsed;
+    void pluginsExpanded;
+    void primaryNav.length;
+    void appNav.length;
+    void pluginNav.length;
+    measureGlider();
+  });
+
+  onMount(() => {
+    const onResize = () => measureGlider();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  });
 </script>
 
 {#snippet navLink(item: NavItem)}
@@ -126,8 +178,16 @@
   </a>
 {/snippet}
 
-<aside class="mac-source-list" class:collapsed aria-label={$t("nav.section_primary")}>
+<aside class="mac-source-list" class:collapsed aria-label={$t("nav.section_primary")} bind:this={sidebarEl}>
   <div class="mac-source-list-drag" data-tauri-drag-region></div>
+
+  <span class="mac-nav-glider" class:ready={gliderReady} style="top: {gliderTop}px; height: {gliderHeight}px;" aria-hidden="true"></span>
+
+  <nav class="mac-nav-section" aria-label={$t("nav.section_primary")}>
+    {#each primaryNav as item (item.href)}
+      {@render navLink(item)}
+    {/each}
+  </nav>
 
   {#if pluginNav.length > 0}
     <nav class="mac-nav-section" aria-label={$t("nav.section_plugins")}>
@@ -158,12 +218,6 @@
       {/if}
     </nav>
   {/if}
-
-  <nav class="mac-nav-section" aria-label={$t("nav.section_primary")}>
-    {#each primaryNav as item (item.href)}
-      {@render navLink(item)}
-    {/each}
-  </nav>
 
   <nav class="mac-nav-section" aria-label={$t("nav.section_app")}>
     <div class="mac-nav-section-header">{$t("nav.section_app")}</div>
