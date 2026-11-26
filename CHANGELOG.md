@@ -15,6 +15,7 @@ bản hiện tại trong cùng commit đó.
 - Sửa link TikTok ảnh trên máy thật: bản sửa trước nằm nhầm ở module chết không được biên dịch — đã chuyển sang module thật trong gumballz-core (thêm tiêu đề trình duyệt để TikTok không chặn, đường yt-dlp dự phòng cho âm thanh), lỗi bị TikTok chặn giờ hiện rõ thay vì báo "URL không được hỗ trợ"; xoá luôn module chết đó.
 - Thiết kế lại giao diện phần Khóa học: thẻ đăng nhập nền tảng (tiêu đề + tab credentials/Token kiểu mới), danh sách khóa học (tiêu đề Bento, ô tìm kiếm, huy hiệu trạng thái), thẻ khóa học và hộp thoại sections; mỗi khóa học có thêm nút "Mở trên nền tảng" để mở trang chủ khóa học đó; nút back ở trang Khóa học và trang Công cụ làm lại kiểu pill mới.
 - Nút "Quay lại Khóa học" giờ ôm sát nội dung thay vì kéo dài hết chiều rộng trang.
+- Bấm vào ảnh bìa hoặc tên khóa học sẽ mở trang web của khóa học đó trên trình duyệt (nút tải và nút chọn sections vẫn như cũ).
 
 ## [1.0.1] - 2026-11-26
 

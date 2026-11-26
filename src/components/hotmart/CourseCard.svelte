@@ -50,6 +50,10 @@
 
   let isDisabled = $derived(downloadStatus === "complete");
 
+  // Web page of this course (platform homepage, else the external URL).
+  // Clicking the cover or the title opens it in the browser.
+  let courseWebUrl = $derived(homepageUrl ?? externalUrl);
+
   function handleClick() {
     if (isDisabled) return;
     onDownload();
@@ -57,7 +61,7 @@
 </script>
 
 <div class="course-card">
-  <div class="card-image">
+  {#snippet cover()}
     {#if imageUrl}
       <img src={imageUrl} alt={name} loading="lazy" />
     {:else}
@@ -77,10 +81,36 @@
         </svg>
       </div>
     {/if}
-  </div>
+  {/snippet}
+  {#if courseWebUrl}
+    <button
+      type="button"
+      class="card-image card-image-link"
+      title={courseWebUrl}
+      aria-label={name}
+      onclick={() => openExternal(courseWebUrl)}
+    >
+      {@render cover()}
+    </button>
+  {:else}
+    <div class="card-image">
+      {@render cover()}
+    </div>
+  {/if}
 
   <div class="card-body">
-    <h4 class="card-title" title={name}>{name}</h4>
+    {#if courseWebUrl}
+      <button
+        type="button"
+        class="card-title card-title-link"
+        title={courseWebUrl}
+        onclick={() => openExternal(courseWebUrl)}
+      >
+        {name}
+      </button>
+    {:else}
+      <h4 class="card-title" title={name}>{name}</h4>
+    {/if}
     <div class="card-meta">
       <span class="card-price">{price}</span>
       {#if externalPlatform}
@@ -233,6 +263,13 @@
     pointer-events: none;
   }
 
+  .card-image-link {
+    padding: 0;
+    border: none;
+    border-bottom: 2px solid var(--border-ink);
+    cursor: pointer;
+  }
+
   .card-placeholder {
     width: 100%;
     height: 100%;
@@ -267,6 +304,21 @@
     line-height: 1.3;
     color: var(--secondary);
     user-select: text;
+  }
+
+  .card-title-link {
+    padding: 0;
+    border: none;
+    background: none;
+    font-family: inherit;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  @media (hover: hover) {
+    .card-title-link:hover {
+      text-decoration: underline;
+    }
   }
 
   .card-meta {
