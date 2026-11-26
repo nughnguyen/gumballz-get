@@ -20,8 +20,4 @@
   let { size = 64, decorative = true }: { size?: number; decorative?: boolean } = $props();
 </script>
 
-<svg width={size} height={size} viewBox="0 0 64 64" role={decorative ? undefined : "img"} aria-label={decorative ? undefined : "GumballZ Get"} aria-hidden={decorative ? "true" : undefined}>
-  <rect x="3" y="3" width="58" height="58" rx="10" fill="#22D3EE" stroke="#0F172A" stroke-width="4" />
-  <path d="M16 20h30v9H26v6h15v9H26v4H16V20Z" fill="#0F172A" />
-  <circle cx="47" cy="46" r="5" fill="#FBBF24" stroke="#0F172A" stroke-width="3" />
-</svg>
+<img src="/logo.png" width={size} height={size} alt={decorative ? "" : "GumballZ Get"} role={decorative ? undefined : "img"} aria-hidden={decorative ? "true" : undefined} draggable="false" />

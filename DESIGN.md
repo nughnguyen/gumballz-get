@@ -32,7 +32,7 @@ Dashboard, queue, and tools use modular asymmetric grids with 16px gaps. At narr
 
 ## Brand
 
-Use the geometric GumballZ mark from `src/lib/ui/BrandMark.svelte`. About credits Nguyen Quoc Hung (GumballZ). Do not use upstream mascot art as product branding.
+Use the GumballZ cat-G mark from `src/lib/ui/BrandMark.svelte` (light-blue cat face forming a G, with an amber download arrow). About credits Nguyen Quoc Hung (GumballZ). Do not use upstream mascot art as product branding.
 
 ## Backend boundary
 
