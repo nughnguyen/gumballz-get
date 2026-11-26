@@ -33,8 +33,8 @@ Use the stage-specific gates in the project task plan. UI changes follow `.agent
 - `node scripts/changelog-section.mjs <version>` prints one version's section (used when editing a release body: `gh release edit vX.Y.Z --notes-file <section>`).
 - The release workflow's `releaseBody` is static text; the changelog section has to be added to the body after the release is published (or by a workflow step — workflow files can only be edited through the GitHub web UI, see below).
 
-### History — one clean commit per version
-- Keep history to one clean squashed commit per version: orphan branch → `git add -A` → verify the staged diff vs origin/main → commit → force-push → reset local main → delete the branch. ALWAYS `git fetch` + compare origin/main before any force-push.
+### History — commit normally (changed 2026-11-26 ~13:00)
+- Commit normally on top of main — no more squashing into one commit (Nguyễn said so; the 1.0.0 history is one commit `00306c5`, later work is ordinary commits). Force-push only when he explicitly asks for a squash. ALWAYS `git fetch` + compare origin/main before any force-push.
 - NEVER include `.github/workflows/*` in a pushed diff: the token has no `workflow` scope, so such pushes are rejected (403). Workflow edits go through the GitHub web UI.
 - Tag only after the build verdict (CI green). Move a tag only by deleting it (remote + local) and re-creating it.
 
