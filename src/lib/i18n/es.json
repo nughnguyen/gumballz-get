@@ -3848,7 +3848,22 @@
       "unavailable": "No disponible",
       "hint_chrome": "chrome://extensions → Modo de desarrollador → \"Cargar descomprimida\" → selecciona la carpeta extraída.",
       "hint_firefox": "about:debugging#/runtime/this-firefox → \"Cargar complemento temporal\" → selecciona manifest.json en la carpeta extraída. Firefox descarta los complementos temporales al reiniciar, así que habrá que repetirlo hasta que lo publiquemos en AMO.",
-      "hint_safari": "Safari exige que las extensiones se distribuyan por la Mac App Store desde Safari 14. Aún no hay una versión de la extensión de GumballZ Get para Safari."
+      "hint_safari": "Safari exige que las extensiones se distribuyan por la Mac App Store desde Safari 14. Aún no hay una versión de la extensión de GumballZ Get para Safari.",
+      "install": "Install extension",
+      "installing": "Preparing…",
+      "installed": "Installed",
+      "modal_install_title": "Install extension — {browser}",
+      "folder_label": "Extension folder:",
+      "open_folder": "Open folder",
+      "bundled_notice": "Extension taken from the app install.",
+      "downloaded_notice": "This build does not ship the extension files, so the app downloaded them from the latest GitHub release.",
+      "install_steps_title": "2 steps left",
+      "install_step1_chrome": "Turn on \"Developer mode\" at the top right of the page that just opened.",
+      "install_step2_chrome": "Click \"Load unpacked\" and pick the folder below.",
+      "install_note_chrome": "Works for Chrome, Edge, Brave and Cốc Cốc (all Chromium).",
+      "install_step_firefox": "Click \"Load Temporary Add-on\" and pick the manifest.json file inside the folder below.",
+      "install_note_firefox": "Firefox removes temporary add-ons on restart — repeat this until the official AMO release.",
+      "open_page_failed": "Could not open the extensions page — open {url} by hand, then follow the steps below."
     },
     "rules": {
       "title": "Reglas",

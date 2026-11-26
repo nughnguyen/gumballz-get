@@ -921,6 +921,7 @@ pub fn run() {
             commands::browser_extension::browser_extension_status,
             commands::browser_extension::browser_extension_export,
             commands::browser_extension::browser_extension_open_folder,
+            commands::browser_extension::browser_extension_prepare_install,
             cookies::commands::cookies_list,
             cookies::commands::cookies_read,
             cookies::commands::cookies_import,

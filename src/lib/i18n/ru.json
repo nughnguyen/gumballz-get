@@ -3848,7 +3848,22 @@
       "unavailable": "Недоступно",
       "hint_chrome": "chrome://extensions → Режим разработчика → «Загрузить распакованное расширение» → выберите распакованную папку.",
       "hint_firefox": "about:debugging#/runtime/this-firefox → «Загрузить временное дополнение» → выберите manifest.json в распакованной папке. Firefox удаляет временные дополнения при перезапуске, так что это придётся повторять, пока мы не опубликуем расширение на AMO.",
-      "hint_safari": "Начиная с Safari 14 расширения распространяются только через Mac App Store. Версия расширения GumballZ Get для Safari пока не опубликована."
+      "hint_safari": "Начиная с Safari 14 расширения распространяются только через Mac App Store. Версия расширения GumballZ Get для Safari пока не опубликована.",
+      "install": "Install extension",
+      "installing": "Preparing…",
+      "installed": "Installed",
+      "modal_install_title": "Install extension — {browser}",
+      "folder_label": "Extension folder:",
+      "open_folder": "Open folder",
+      "bundled_notice": "Extension taken from the app install.",
+      "downloaded_notice": "This build does not ship the extension files, so the app downloaded them from the latest GitHub release.",
+      "install_steps_title": "2 steps left",
+      "install_step1_chrome": "Turn on \"Developer mode\" at the top right of the page that just opened.",
+      "install_step2_chrome": "Click \"Load unpacked\" and pick the folder below.",
+      "install_note_chrome": "Works for Chrome, Edge, Brave and Cốc Cốc (all Chromium).",
+      "install_step_firefox": "Click \"Load Temporary Add-on\" and pick the manifest.json file inside the folder below.",
+      "install_note_firefox": "Firefox removes temporary add-ons on restart — repeat this until the official AMO release.",
+      "open_page_failed": "Could not open the extensions page — open {url} by hand, then follow the steps below."
     },
     "rules": {
       "title": "Правила",

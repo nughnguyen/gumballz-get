@@ -612,6 +612,39 @@ fn pairing_open() -> bool {
     PAIR_OPEN_UNTIL_MS.load(Ordering::SeqCst) > now_ms()
 }
 
+/// Best-effort record of which browser just paired, persisted so
+/// `browser_extension_status` can report it as connected. The extension
+/// User-Agent is `... Chrome/…` for Chromium browsers (Chrome, Edge,
+/// Brave, Cốc Cốc) and `... Firefox/…` for Firefox. Any failure here is
+/// swallowed: pairing must never fail because of this bookkeeping.
+fn record_paired_browser(app: &AppHandle, user_agent: Option<&str>) {
+    let browser = match user_agent {
+        Some(ua) if ua.contains("Firefox") => "firefox",
+        Some(ua) if ua.contains("Chrome") => "chrome",
+        _ => return,
+    };
+    let Ok(dir) = app.path().app_data_dir() else {
+        return;
+    };
+    let path = dir.join("browser-extension").join("paired.json");
+    let mut browsers: Vec<String> = std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+        .and_then(|v| v.get("browsers").cloned())
+        .and_then(|b| serde_json::from_value::<Vec<String>>(b).ok())
+        .unwrap_or_default();
+    if !browsers.iter().any(|b| b == browser) {
+        browsers.push(browser.to_string());
+    }
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(
+        &path,
+        serde_json::to_string(&serde_json::json!({ "browsers": browsers })).unwrap_or_default(),
+    );
+}
+
 #[derive(Debug, Serialize)]
 struct PairResponse {
     ok: bool,
@@ -672,6 +705,8 @@ async fn pair(State(state): State<BridgeState>, headers: HeaderMap) -> Response 
         .get("user-agent")
         .and_then(|v| v.to_str().ok())
         .map(str::to_string);
+    // Record which browser paired, so Settings can show "Đã cài đặt" for it.
+    record_paired_browser(&state.app, user_agent.as_deref());
     if let Err(error) = state.app.emit(
         "bridge-paired",
         serde_json::json!({ "userAgent": user_agent }),

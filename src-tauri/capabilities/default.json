@@ -42,7 +42,9 @@
       "identifier": "opener:allow-open-url",
       "allow": [
         { "url": "https://github.com/**" },
-        { "url": "https://zypage.com/**" }
+        { "url": "https://zypage.com/**" },
+        { "url": "chrome://extensions/*" },
+        { "url": "about:debugging*" }
       ]
     },
     "clipboard-manager:allow-read-text",

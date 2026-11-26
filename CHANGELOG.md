@@ -16,6 +16,8 @@ bản hiện tại trong cùng commit đó.
 - Dọn log khi chạy dev: không còn cảnh báo gắn metadata cho file PDF (ffmpeg chỉ gắn được cho audio/video), không còn cảnh báo kho plugin chưa có (repo chưa xuất bản), không còn 2 dòng ERROR registry khi xoá khoá cũ, hết cảnh báo `mut` thừa ở trình ghi PDF Scribd và các đoạn CSS chết Svelte báo thừa.
 - Sửa bảng trong PDF Scribd bị vỡ: Scribd không có lưới bảng thật — bảng là chữ xếp cột, trình ghi cũ áp letter-spacing thành Tc nên chữ tản ra ("J V 0 0 1 A b e t") và nuốt khoảng trắng giữa các cột ("EpisodeWord"). Giờ chữ trong ô bảng được vẽ từng cụm từ đúng vị trí cột, khoảng cách theo đúng spacer của Scribd.
 - Link Scribd giờ tải được cả DOCX (chọn trong mục định dạng, bên cạnh PDF): chữ, bảng (thành bảng Word thật) và ảnh trang đều có trong file .docx, mở được bằng Word.
+- Tab “Bạn bè” trong Mạng xã hội: xem danh sách bạn bè (Facebook) / following và followers (Instagram) kèm ảnh đại diện và bài đăng của từng người, chọn từng bài tải hoặc tải hết luôn; cookie đọc từ kho chung (tiện ích tự bắt hoặc đăng nhập trong app).
+- Nút “Cài tiện ích” trong Cài đặt: app tự chuẩn bị sẵn thư mục tiện ích (bản portable tự tải file từ bản release trên GitHub) rồi mở sẵn trang chrome://extensions, chỉ cần bật Developer Mode rồi bấm “Load unpacked” chọn thư mục là xong; tiện ích đã ghép nối thì hiện “Đã cài đặt”.
 
 ## [1.0.0] - 2026-11-26
 

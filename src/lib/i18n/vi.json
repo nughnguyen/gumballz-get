@@ -3868,7 +3868,22 @@
       "unavailable": "Không khả dụng",
       "hint_chrome": "chrome://extensions → Chế độ nhà phát triển → \"Load unpacked\" → chọn thư mục đã giải nén.",
       "hint_firefox": "about:debugging#/runtime/this-firefox → \"Load Temporary Add-on\" → chọn manifest.json trong thư mục đã giải nén. Firefox sẽ gỡ tiện ích tạm khi khởi động lại, nên cần lặp lại cho đến khi chúng tôi phát hành trên AMO.",
-      "hint_safari": "Từ Safari 14, tiện ích Safari bắt buộc phải phát hành qua Mac App Store. Bản Safari của tiện ích GumballZ Get chưa được phát hành."
+      "hint_safari": "Từ Safari 14, tiện ích Safari bắt buộc phải phát hành qua Mac App Store. Bản Safari của tiện ích GumballZ Get chưa được phát hành.",
+      "install": "Cài tiện ích",
+      "installing": "Đang chuẩn bị…",
+      "installed": "Đã cài đặt",
+      "modal_install_title": "Cài đặt tiện ích — {browser}",
+      "folder_label": "Thư mục tiện ích:",
+      "open_folder": "Mở thư mục",
+      "bundled_notice": "Tiện ích được lấy từ bản cài đặt của app.",
+      "downloaded_notice": "Bản này không đi kèm file tiện ích nên app đã tải chúng từ bản phát hành mới nhất trên GitHub.",
+      "install_steps_title": "2 bước còn lại",
+      "install_step1_chrome": "Bật \"Developer mode\" (Chế độ nhà phát triển) ở góc phải trên của trang vừa mở.",
+      "install_step2_chrome": "Bấm \"Load unpacked\" rồi chọn thư mục bên dưới.",
+      "install_note_chrome": "Áp dụng cho Chrome, Edge, Brave và Cốc Cốc (đều là Chromium).",
+      "install_step_firefox": "Bấm \"Load Temporary Add-on\" rồi chọn file manifest.json trong thư mục bên dưới.",
+      "install_note_firefox": "Firefox sẽ gỡ tiện ích tạm khi khởi động lại — cần lặp lại cho đến khi có bản chính thức trên AMO.",
+      "open_page_failed": "Không mở được trang quản lý tiện ích — hãy mở {url} bằng tay rồi làm theo các bước bên dưới."
     },
     "rules": {
       "title": "Quy tắc",
