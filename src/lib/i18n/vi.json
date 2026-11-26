@@ -4832,6 +4832,7 @@
     "session_expired": "Phiên đã hết hạn — đăng nhập lại",
     "not_reachable": "Không thể kết nối nền tảng",
     "not_reachable_hint": "Kiểm tra kết nối hoặc proxy, rồi thử lại. Bạn vẫn có thể đăng nhập.",
+    "open_platform_site": "Mở trang web {{name}}",
     "platform_hidden_hint": "Các nền tảng mà plugin đã cài không hỗ trợ sẽ bị ẩn. Cập nhật trong Chợ plugin để xem thêm.",
     "sections_choose": "Chọn mục…",
     "sections_title": "Chọn nội dung cần tải",

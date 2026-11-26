@@ -7,6 +7,8 @@ bản hiện tại trong cùng commit đó.
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-11-26
+
 - Logo mới: mèo xanh GumballZ (chữ G là mặt mèo, mũi tên tải màu cam) thay cho logo chữ F cũ, đổi ở toàn bộ app, web và tiện ích.
 - Sửa logo ở hero trang web bị lớp nền tím che mất: CSS cũ chỉ tạo vị trí cho bản SVG của logo, bản ảnh PNG mới không được tạo vị trí nên bị che khuất.
 - Phần Tải xuống: mục tải xong xếp theo thời gian hoàn thành, mới nhất lên trên cùng (trước đây xếp theo thời gian cập nhật chung của cả hàng đợi nên mục mới xong lại nằm dưới cùng).
@@ -16,6 +18,10 @@ bản hiện tại trong cùng commit đó.
 - Thiết kế lại giao diện phần Khóa học: thẻ đăng nhập nền tảng (tiêu đề + tab credentials/Token kiểu mới), danh sách khóa học (tiêu đề Bento, ô tìm kiếm, huy hiệu trạng thái), thẻ khóa học và hộp thoại sections; mỗi khóa học có thêm nút "Mở trên nền tảng" để mở trang chủ khóa học đó; nút back ở trang Khóa học và trang Công cụ làm lại kiểu pill mới.
 - Nút "Quay lại Khóa học" giờ ôm sát nội dung thay vì kéo dài hết chiều rộng trang.
 - Bấm vào ảnh bìa hoặc tên khóa học sẽ mở trang web của khóa học đó trên trình duyệt (nút tải và nút chọn sections vẫn như cũ).
+- Thẻ đăng nhập Khóa học có thêm nút "Mở trang web {tên nền tảng}" để mở trang chủ nền tảng trên trình duyệt (tạo tài khoản khi chưa có).
+- Sửa đăng nhập Khóa học bị treo ở "Đang xác thực..." khi tắt cửa sổ đăng nhập (Hotmart/Udemy): giờ báo lỗi và cho nhập lại ngay; thêm nút "Hủy" khi đang đăng nhập.
+- Phiên đăng nhập Khóa học được giữ lại sau khi khởi động lại app; lỗi mạng tạm thời không còn xóa phiên đã lưu (chỉ xóa khi hết hạn 401/403).
+- Mở link khóa học trên trình duyệt giờ hoạt động (bổ sung quyền mở link cho các trang nền tảng khóa học — trước đây nút "Mở trên nền tảng" và link ảnh bìa/tên khóa học có thể đã bị chặn).
 
 ## [1.0.1] - 2026-11-26
 

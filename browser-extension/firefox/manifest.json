@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "GumballZ Get Companion",
   "description": "Detect supported media pages and send them to GumballZ Get with one click.",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "default_locale": "en",
   "browser_specific_settings": {
     "gecko": {

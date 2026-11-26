@@ -4812,6 +4812,7 @@
     "session_expired": "会话已过期——请重新登录",
     "not_reachable": "无法连接该平台",
     "not_reachable_hint": "检查你的网络连接或代理，然后重试。仍然可以登录。",
+    "open_platform_site": "Open {{name}} website",
     "platform_hidden_hint": "已安装插件不支持的平台会被隐藏。在应用市场更新插件可查看更多。",
     "sections_choose": "选择章节…",
     "sections_title": "选择要下载的内容",

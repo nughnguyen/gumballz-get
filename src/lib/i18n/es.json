@@ -4812,6 +4812,7 @@
     "session_expired": "Session expired — sign in again",
     "not_reachable": "Could not reach the platform",
     "not_reachable_hint": "Check your connection or proxy, then try again. Signing in is still possible.",
+    "open_platform_site": "Open {{name}} website",
     "platform_hidden_hint": "Platforms the installed plugin does not support are hidden. Update it in the Marketplace to see more.",
     "sections_choose": "Elegir secciones…",
     "sections_title": "Elige qué descargar",

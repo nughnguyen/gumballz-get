@@ -22,6 +22,7 @@
   import { pluginInvoke } from "$lib/plugin-invoke";
   import { listen } from "@tauri-apps/api/event";
   import { open } from "@tauri-apps/plugin-dialog";
+  import { open as openExternal } from "@tauri-apps/plugin-shell";
   import CourseCard from "$components/hotmart/CourseCard.svelte";
   import CourseSectionsDialog from "$components/hotmart/CourseSectionsDialog.svelte";
   import { showToast } from "$lib/stores/toast-store.svelte";
@@ -60,6 +61,15 @@
   let loginTabIndex = $state(0);
   let loading = $state(false);
   let error = $state("");
+
+  // Monotonic login attempt id: Cancel only resets the form; a stale
+  // attempt that later fails must not clobber the fresh attempt's state.
+  let loginAttempt = 0;
+
+  function cancelLogin() {
+    loginAttempt++;
+    loading = false;
+  }
   let captchaWarning = $state(false);
   let otpSent = $state(false);
   let otpCode = $state("");
@@ -228,6 +238,19 @@
     return `https://www.${cfg.id}.com/`;
   }
 
+  function platformSiteUrlFor(cfg: PlatformConfig | null): string | undefined {
+    if (!cfg) return undefined;
+    try {
+      return new URL(loginUrlFor(cfg)).origin;
+    } catch {
+      return undefined;
+    }
+  }
+
+  // Homepage of this platform — the link on the login card for users who
+  // have no account yet and need to create one.
+  let platformSiteUrl = $derived(platformSiteUrlFor(config));
+
   // Cookies the browser extension (or an import) already stored for this
   // platform in the Cookie Manager, so the "Cookies" tab can reuse them
   // instead of asking for a paste (#310).
@@ -338,6 +361,7 @@
     error = "";
     captchaWarning = false;
     loading = true;
+    const attempt = ++loginAttempt;
 
     try {
       if (currentMethod.method_type === "email_only" && otpSent) {
@@ -375,7 +399,7 @@
 
       if (typeof result === "string" && result === "otp_sent") {
         otpSent = true;
-        loading = false;
+        if (attempt === loginAttempt) loading = false;
         return;
       }
 
@@ -384,6 +408,7 @@
       sessionNotice = "";
       loadItems();
     } catch (e: any) {
+      if (attempt !== loginAttempt) return;
       const msg = typeof e === "string" ? e : e.message ?? "";
       if (msg.includes("otp_sent") || msg.includes("OTP sent") || msg.includes("verification code")) {
         otpSent = true;
@@ -392,13 +417,14 @@
         error = msg || $t("common.error");
       }
     } finally {
-      loading = false;
+      if (attempt === loginAttempt) loading = false;
     }
   }
 
   async function handleBrowserLogin() {
     if (!config || !currentMethod) return;
     loading = true;
+    const attempt = ++loginAttempt;
     error = "";
 
     try {
@@ -432,9 +458,10 @@
       sessionNotice = "";
       loadItems();
     } catch (e: any) {
+      if (attempt !== loginAttempt) return;
       error = typeof e === "string" ? e : e.message ?? $t("common.error");
     } finally {
-      loading = false;
+      if (attempt === loginAttempt) loading = false;
     }
   }
 
@@ -859,6 +886,21 @@
           </button>
         </form>
       {/if}
+      {#if loading}
+        <button type="button" class="button login-cancel-btn" onclick={cancelLogin}>
+          {$t("common.cancel")}
+        </button>
+      {/if}
+      {#if platformSiteUrl}
+        <button type="button" class="button login-site-btn" title={platformSiteUrl} onclick={() => openExternal(platformSiteUrl)}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+            <polyline points="15 3 21 3 21 9" />
+            <line x1="10" y1="14" x2="21" y2="3" />
+          </svg>
+          {$t("courses.open_platform_site", { name: config.name })}
+        </button>
+      {/if}
     </div>
   </div>
 {/if}
@@ -1217,6 +1259,27 @@
     background: var(--cta);
     transform: translate(2px, 2px);
     box-shadow: 2px 2px 0 var(--cta-shadow);
+  }
+
+  .login-cancel-btn,
+  .login-site-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: calc(var(--padding) / 2);
+    background: transparent;
+    border: 2px solid var(--border-ink);
+    box-shadow: none;
+    color: var(--tertiary);
+  }
+
+  @media (hover: hover) {
+    .login-cancel-btn:hover,
+    .login-site-btn:hover {
+      background: var(--surface-hi);
+      color: var(--secondary);
+    }
   }
 
   .token-input {

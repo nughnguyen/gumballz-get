@@ -131,12 +131,18 @@ pub async fn hotmart_check_session(
     if resp.status().is_success() {
         *state.session_validated_at.lock().await = Some(Instant::now());
         Ok(email)
-    } else {
+    } else if resp.status() == reqwest::StatusCode::UNAUTHORIZED
+        || resp.status() == reqwest::StatusCode::FORBIDDEN
+    {
+        // Only a real authentication failure discards the saved session.
+        // A transient server error (5xx, …) must not wipe a valid login.
         state.hotmart_session.lock().await.take();
         *state.session_validated_at.lock().await = None;
         *state.courses_cache.lock().await = None;
         let _ = delete_saved_session().await;
         Err("session_expired".to_string())
+    } else {
+        Err(format!("session_check_failed: {}", resp.status()))
     }
 }
 

@@ -159,6 +159,7 @@ export type TranslationKeys =
   | 'courses.not_connected'
   | 'courses.not_reachable'
   | 'courses.not_reachable_hint'
+  | 'courses.open_platform_site'
   | 'courses.otp_check_email'
   | 'courses.otp_code_label'
   | 'courses.platform_hidden_hint'

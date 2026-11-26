@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "GumballZ Get",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "identifier": "com.gumballz.get",
   "build": {
     "beforeDevCommand": "pnpm dev",

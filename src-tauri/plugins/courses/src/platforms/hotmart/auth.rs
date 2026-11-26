@@ -176,9 +176,20 @@ async fn extract_webview_cookies_for_uri(
 
     window
         .with_webview(move |webview| unsafe {
-            let core = webview.controller().CoreWebView2().unwrap();
-            let core2: ICoreWebView2_2 = core.cast().unwrap();
-            let manager = core2.CookieManager().unwrap();
+            // The login window may have been closed between the poll check
+            // and this extraction — never panic on the main thread for it.
+            let Ok(core) = webview.controller().CoreWebView2() else {
+                let _ = tx.send(Vec::new());
+                return;
+            };
+            let Ok(core2): Result<ICoreWebView2_2, _> = core.cast() else {
+                let _ = tx.send(Vec::new());
+                return;
+            };
+            let Ok(manager) = core2.CookieManager() else {
+                let _ = tx.send(Vec::new());
+                return;
+            };
             let uri_hstring = HSTRING::from(uri_owned);
 
             let _ = manager.GetCookies(
@@ -408,6 +419,12 @@ pub async fn authenticate(
     let mut last_log_secs: u64 = 0;
 
     loop {
+        // If the user closed the login window, stop polling at once instead
+        // of waiting out the 120 s timeout with an empty cookie jar.
+        if app.get_webview_window("hotmart-login").is_none() {
+            return Err(anyhow!("Login window was closed"));
+        }
+
         if start.elapsed() > timeout {
             let _ = login_window.close();
             return Err(anyhow!("Timeout esperando login. Verifique credenciais."));
