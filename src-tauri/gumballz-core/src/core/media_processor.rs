@@ -111,11 +111,14 @@ impl MediaProcessor {
 
         let per_image_secs = match music {
             Some(m) => match crate::core::ffmpeg::probe(m).await {
-                Ok(info) => info
-                    .duration_seconds
-                    .map(|d| d / images.len() as f64)
-                    .filter(|d| *d > 0.0)
-                    .unwrap_or(3.0),
+                Ok(info) => {
+                    let d = info.duration_seconds / images.len() as f64;
+                    if d > 0.0 && d.is_finite() {
+                        d
+                    } else {
+                        3.0
+                    }
+                }
                 Err(_) => 3.0,
             },
             None => 3.0,
