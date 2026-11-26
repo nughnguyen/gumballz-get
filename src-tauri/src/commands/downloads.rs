@@ -117,14 +117,30 @@ pub async fn get_media_formats(
     url: String,
 ) -> Result<Vec<FormatInfo>, String> {
     let _timer_start = std::time::Instant::now();
+    let is_tiktok = matches!(Platform::from_url(&url), Some(Platform::TikTok));
 
-    // yt-dlp first, best effort: it rejects some links outright (TikTok
-    // /photo/ URLs are "Unsupported URL" to every yt-dlp version), and it
-    // cannot express the watermark choice or the photo list.
+    // yt-dlp first, best effort. TikTok /photo/ URLs are "Unsupported URL"
+    // to every yt-dlp version, so probe the /video/ form of the same post
+    // (with the referer TikTok expects) — it returns the post's metadata +
+    // audio even when the native scraper is blocked.
     let mut formats: Vec<FormatInfo> = Vec::new();
     let mut ytdlp_accepted = false;
     if let Ok(ytdlp_path) = ytdlp::ensure_ytdlp().await {
-        if let Ok(json) = ytdlp::get_video_info(&ytdlp_path, &url, &[]).await {
+        let ytdlp_probe_url = if is_tiktok {
+            gumballz_core::platforms::TikTokDownloader::ytdlp_url(&url)
+        } else {
+            url.clone()
+        };
+        let extra_flags: Vec<String> = if is_tiktok {
+            vec![
+                "--referer".to_string(),
+                "https://www.tiktok.com/".to_string(),
+            ]
+        } else {
+            Vec::new()
+        };
+        if let Ok(json) = ytdlp::get_video_info(&ytdlp_path, &ytdlp_probe_url, &extra_flags).await
+        {
             formats = ytdlp::parse_formats(&json);
             ytdlp_accepted = true;
         }
@@ -132,10 +148,18 @@ pub async fn get_media_formats(
 
     // Native platform qualities: the only source for TikTok photo posts,
     // and the source of the watermark / audio choices for TikTok videos.
-    let is_tiktok = matches!(Platform::from_url(&url), Some(Platform::TikTok));
+    let mut native_blocked = false;
     if formats.is_empty() || is_tiktok {
-        if let Some(info) = native_info_for_formats(&state, &url).await {
-            formats.extend(info.available_qualities.iter().map(native_quality_to_format));
+        match native_info_for_formats(&state, &url).await {
+            Ok(Some(info)) => {
+                formats.extend(info.available_qualities.iter().map(native_quality_to_format));
+            }
+            Ok(None) => {}
+            Err(e) => {
+                if e.contains("TikTok is blocking requests") {
+                    native_blocked = true;
+                }
+            }
         }
     }
 
@@ -145,6 +169,12 @@ pub async fn get_media_formats(
         if ytdlp_accepted {
             return Ok(formats);
         }
+        // The link is a real TikTok post but TikTok blocked the probe:
+        // say so (the UI translates this to a retry-later message)
+        // instead of the generic "unsupported URL".
+        if native_blocked {
+            return Err("TikTok is blocking requests. Try again in a few minutes.".to_string());
+        }
         return Err("Unsupported URL. Check that the link is correct.".to_string());
     }
 
@@ -153,17 +183,26 @@ pub async fn get_media_formats(
 }
 
 /// Probe result for the format list: the prefetched (cached) info when the
-/// download box already probed this URL, else a fresh native probe.
+/// download box already probed this URL, else a fresh native probe. The
+/// probe error is propagated (not swallowed) so the caller can tell a
+/// TikTok block apart from "unsupported URL".
 #[cfg(not(target_os = "android"))]
 async fn native_info_for_formats(
     state: &tauri::State<'_, AppState>,
     url: &str,
-) -> Option<MediaInfo> {
+) -> Result<Option<MediaInfo>, String> {
     if let Some(info) = queue::try_get_cached_info(url).await {
-        return Some(info);
+        return Ok(Some(info));
     }
-    let resolved = crate::core::url_resolver::resolve_downloader(&state.registry, url).await?;
-    resolved.downloader.get_media_info(url).await.ok()
+    let resolved = match crate::core::url_resolver::resolve_downloader(&state.registry, url).await
+    {
+        Some(r) => r,
+        None => return Ok(None),
+    };
+    match resolved.downloader.get_media_info(url).await {
+        Ok(info) => Ok(Some(info)),
+        Err(e) => Err(e.to_string()),
+    }
 }
 
 /// One native quality (photo / video / audio / slideshow) as a format row,
