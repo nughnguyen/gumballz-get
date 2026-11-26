@@ -297,3 +297,6 @@ google*.html
 
 # Web build output
 build-web/
+
+# Local logo candidates (reference only, not shipped)
+logo-candidates/
