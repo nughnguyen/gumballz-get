@@ -30,6 +30,7 @@
   import DownloadboxAdvanced from "$components/downloadbox/DownloadboxAdvanced.svelte";
   import MediaPreview from "$components/downloadbox/MediaPreview.svelte";
   import PhotoList from "$components/downloadbox/PhotoList.svelte";
+  import VideoWatermarkChoice from "$components/downloadbox/VideoWatermarkChoice.svelte";
   import BatchDownload from "$components/downloadbox/BatchDownload.svelte";
   import SearchResults from "$components/downloadbox/SearchResults.svelte";
   import P2pSendDialog from "$components/p2p/P2pSendDialog.svelte";
@@ -1206,6 +1207,9 @@
               <MediaPreview bind:mediaPreview bind:imageLoading={previewImageLoading} />
               {#if mediaPreview && (mediaPreview.media_type === "photo" || mediaPreview.media_type === "carousel")}
                 <PhotoList qualities={mediaPreview.qualities} onDownload={downloadPhotoOption} />
+              {/if}
+              {#if mediaPreview && mediaPreview.media_type === "video"}
+                <VideoWatermarkChoice qualities={mediaPreview.qualities} onDownload={downloadPhotoOption} />
               {/if}
               {#if downloadboxState.info.content_type === "playlist" && videoOrList}
                 <VideoOrListChoice
