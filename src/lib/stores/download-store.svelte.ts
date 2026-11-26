@@ -19,6 +19,12 @@ type BaseItem = {
   error?: string;
   startedAt: number;
   lastUpdateAt: number;
+  // Stamped once when the item turns complete/error. Orders the finished
+  // list newest-first — `lastUpdateAt` cannot do that: every queue sync
+  // refreshes it to the same instant for the whole queue. Left unset
+  // when an item is first seen already finished (app reload); the page
+  // then falls back to `startedAtMs` / `id`.
+  completedAt?: number;
   queueKind?: QueueKind;
   external?: boolean;
 };
@@ -247,6 +253,7 @@ export function markComplete(courseName: string, success: boolean, error?: strin
         status: (success ? "complete" : "error") as DownloadStatus,
         error,
         lastUpdateAt: Date.now(),
+        completedAt: item.completedAt ?? Date.now(),
       };
       if (item.kind === "course") {
         downloads.set(id, { ...base, kind: "course", speed: 0 } as CourseDownloadItem);
@@ -354,6 +361,18 @@ export function syncQueueState(items: QueueItemInfo[]) {
     const existing = downloads.get(qi.id);
     const dlStatus = queueStatusToDownloadStatus(qi.status);
 
+    // Stamp the completion instant once, on the live transition to a
+    // terminal status. Never refresh it afterwards: later queue syncs
+    // must not move the item in the finished list. An item first seen
+    // already finished (app reload) keeps no stamp — the page orders it
+    // by the backend run-start time instead.
+    const wasTerminal =
+      existing?.status === "complete" || existing?.status === "error";
+    const isTerminal = dlStatus === "complete" || dlStatus === "error";
+    const completedAt = isTerminal
+      ? (existing?.completedAt ?? (existing && !wasTerminal ? now : undefined))
+      : undefined;
+
     let speed = qi.speed_bytes_per_sec;
     if (existing && existing.kind === "generic" && existing.speed > 0 && speed > 0) {
       speed = existing.speed * (1 - SPEED_SMOOTHING) + qi.speed_bytes_per_sec * SPEED_SMOOTHING;
@@ -376,6 +395,7 @@ export function syncQueueState(items: QueueItemInfo[]) {
       error: extractError(qi.status),
       startedAt: existing?.startedAt ?? now,
       lastUpdateAt: now,
+      completedAt,
       filePath: qi.file_path ?? undefined,
       fileCount: qi.file_count ?? undefined,
       thumbnail_url: qi.thumbnail_url,
@@ -431,6 +451,7 @@ export function markGenericComplete(id: number, success: boolean, error?: string
     totalBytes: totalBytes ?? item.totalBytes,
     speed: 0,
     lastUpdateAt: Date.now(),
+    completedAt: item.completedAt ?? Date.now(),
   });
   clearSpeedHistory(id);
   flushNow();

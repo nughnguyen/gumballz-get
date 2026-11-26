@@ -188,8 +188,16 @@
       }
     }
 
+    // Newest download first. `lastUpdateAt` cannot order finished items:
+    // every queue sync refreshes it to the same instant for the whole
+    // queue, so it ties and the stable sort falls back to insertion
+    // order (oldest first). `completedAt` is stamped once, when the item
+    // turns complete/error; items already finished before this session
+    // (app reload) have none and fall back to the backend run-start
+    // time, then to the id (timestamp-based).
     const byRecency = (a: GenericDownloadItem, b: GenericDownloadItem) =>
-      (b.lastUpdateAt || b.startedAt || b.id) - (a.lastUpdateAt || a.startedAt || a.id);
+      (b.completedAt ?? b.startedAtMs ?? b.startedAt ?? b.id) -
+      (a.completedAt ?? a.startedAtMs ?? a.startedAt ?? a.id);
 
     finished.sort(byRecency);
     completed.sort(byRecency);

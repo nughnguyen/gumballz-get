@@ -64,3 +64,50 @@ describe("generic download progress", () => {
     });
   });
 });
+
+describe("finished ordering (completedAt)", () => {
+  const completeItem = (id: number) => ({
+    ...queueItem(id),
+    status: { type: "Complete" as const },
+    percent: 100,
+  });
+
+  it("stamps completedAt when an item turns complete", () => {
+    const id = 910;
+    store.syncQueueState([queueItem(id)]);
+    store.syncQueueState([completeItem(id)]);
+
+    const item = store.getDownloads().get(id);
+    expect(item?.status).toBe("complete");
+    expect(item?.completedAt).toEqual(expect.any(Number));
+  });
+
+  it("does not refresh completedAt on later syncs", () => {
+    const id = 911;
+    store.syncQueueState([queueItem(id)]);
+    store.syncQueueState([completeItem(id)]);
+    const first = store.getDownloads().get(id)?.completedAt;
+
+    store.syncQueueState([completeItem(id)]);
+
+    expect(store.getDownloads().get(id)?.completedAt).toBe(first);
+  });
+
+  it("leaves completedAt unset when first seen already complete", () => {
+    const id = 912;
+    store.syncQueueState([completeItem(id)]);
+
+    expect(store.getDownloads().get(id)?.completedAt).toBeUndefined();
+  });
+
+  it("clears completedAt when a finished item runs again", () => {
+    const id = 913;
+    store.syncQueueState([queueItem(id)]);
+    store.syncQueueState([completeItem(id)]);
+    expect(store.getDownloads().get(id)?.completedAt).toEqual(expect.any(Number));
+
+    store.syncQueueState([queueItem(id)]);
+
+    expect(store.getDownloads().get(id)?.completedAt).toBeUndefined();
+  });
+});
