@@ -129,19 +129,6 @@
 <aside class="mac-source-list" class:collapsed aria-label={$t("nav.section_primary")}>
   <div class="mac-source-list-drag" data-tauri-drag-region></div>
 
-  <nav class="mac-nav-section" aria-label={$t("nav.section_primary")}>
-    {#each primaryNav as item (item.href)}
-      {@render navLink(item)}
-    {/each}
-  </nav>
-
-  <nav class="mac-nav-section" aria-label={$t("nav.section_app")}>
-    <div class="mac-nav-section-header">{$t("nav.section_app")}</div>
-    {#each appNav as item (item.href)}
-      {@render navLink(item)}
-    {/each}
-  </nav>
-
   {#if pluginNav.length > 0}
     <nav class="mac-nav-section" aria-label={$t("nav.section_plugins")}>
       <div class="mac-nav-section-header">
@@ -171,6 +158,19 @@
       {/if}
     </nav>
   {/if}
+
+  <nav class="mac-nav-section" aria-label={$t("nav.section_primary")}>
+    {#each primaryNav as item (item.href)}
+      {@render navLink(item)}
+    {/each}
+  </nav>
+
+  <nav class="mac-nav-section" aria-label={$t("nav.section_app")}>
+    <div class="mac-nav-section-header">{$t("nav.section_app")}</div>
+    {#each appNav as item (item.href)}
+      {@render navLink(item)}
+    {/each}
+  </nav>
 
   <div class="mac-source-list-footer">
     <DonateTrigger compact={collapsed} />

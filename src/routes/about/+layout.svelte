@@ -42,10 +42,24 @@
     }
     return page.url.pathname === href || page.url.pathname.startsWith(`${href}/`);
   }
+
+  const COLLAPSED_KEY = "gumballz-get.about.sidebar_collapsed";
+  let collapsed = $state(
+    typeof localStorage === "undefined"
+      ? false
+      : localStorage.getItem(COLLAPSED_KEY) === "1",
+  );
+
+  function toggleCollapsed() {
+    collapsed = !collapsed;
+    try {
+      localStorage.setItem(COLLAPSED_KEY, collapsed ? "1" : "0");
+    } catch {}
+  }
 </script>
 
 <div class="about-layout">
-  <nav class="about-sidebar" aria-label={$t("nav.about")}>
+  <nav class="about-sidebar" class:collapsed aria-label={$t("nav.about")}>
     {#each visibleTabs as tab}
       <a
         href={tab.href}
@@ -65,9 +79,21 @@
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
           {/if}
         </span>
-        {$t(tab.labelKey)}
+        <span class="about-nav-label">{$t(tab.labelKey)}</span>
       </a>
     {/each}
+    <button
+      type="button"
+      class="about-sidebar-toggle"
+      onclick={toggleCollapsed}
+      aria-expanded={!collapsed}
+      aria-label={$t(collapsed ? "nav.expand_sidebar" : "nav.collapse_sidebar")}
+      title={$t(collapsed ? "nav.expand_sidebar" : "nav.collapse_sidebar")}
+    >
+      <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M10 3L5 8l5 5" />
+      </svg>
+    </button>
   </nav>
 
   <div class="about-content">
@@ -88,26 +114,86 @@
   .about-sidebar {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--space-2);
     width: 176px;
     flex-shrink: 0;
     position: sticky;
     top: var(--space-5);
+    transition: width var(--duration-slow) var(--ease-out);
   }
 
   .about-nav-item {
     display: flex;
     align-items: center;
-    gap: 9px;
-    height: 30px;
-    padding: 0 var(--space-2);
+    gap: var(--space-3);
+    height: 40px;
+    padding: 0 var(--space-3);
     font-size: var(--text-base);
     font-weight: 400;
     color: var(--text);
     border: 2px solid transparent;
     border-radius: var(--radius-sm);
     text-decoration: none;
-    transition: background var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
+    white-space: nowrap;
+    overflow: hidden;
+    transition: background var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out), padding var(--duration-slow) var(--ease-out);
+  }
+
+  .about-nav-label {
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: opacity var(--duration-base) var(--ease-out), transform var(--duration-base) var(--ease-out), max-width var(--duration-slow) var(--ease-out);
+  }
+
+  .about-sidebar-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 32px;
+    margin-top: var(--space-2);
+    border: 2px solid var(--border-ink);
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+  }
+
+  .about-sidebar-toggle:hover {
+    background: var(--surface-hi);
+    color: var(--text);
+  }
+
+  .about-sidebar-toggle:focus-visible {
+    outline: var(--focus-ring);
+    outline-offset: -2px;
+  }
+
+  .about-sidebar-toggle svg {
+    transition: transform var(--duration-slow) var(--ease-spring);
+  }
+
+  @media (min-width: 641px) {
+    .about-sidebar.collapsed {
+      width: 56px;
+    }
+
+    .about-sidebar.collapsed .about-nav-item {
+      justify-content: center;
+      padding: 0;
+    }
+
+    .about-sidebar.collapsed .about-nav-label {
+      opacity: 0;
+      transform: translateX(-8px);
+      max-width: 0;
+    }
+
+    .about-sidebar.collapsed .about-sidebar-toggle svg {
+      transform: rotate(180deg);
+    }
   }
 
   @media (hover: hover) {
@@ -171,6 +257,10 @@
       position: static;
       flex-direction: row;
       flex-wrap: wrap;
+    }
+
+    .about-sidebar-toggle {
+      display: none;
     }
 
     .about-nav-item {
