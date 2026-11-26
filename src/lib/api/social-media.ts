@@ -287,3 +287,44 @@ export async function pullAllCreators(
     earlyExitThreshold,
   });
 }
+
+export interface BrowsePerson {
+  id: string;
+  name: string;
+  username?: string | null;
+  avatar_url?: string | null;
+  profile_url: string;
+  kind?: string | null;
+}
+
+export interface BrowsePost {
+  id: string;
+  url: string;
+  thumbnail_url?: string | null;
+  caption?: string | null;
+  taken_at?: number | null;
+  media_type: string;
+}
+
+export interface BrowseLoginStatus {
+  platform: string;
+  logged_in: boolean;
+  cookie_count: number;
+  captured_at_ms?: number | null;
+  alias?: string | null;
+}
+
+export async function browseFriends(platform: string): Promise<BrowsePerson[]> {
+  return await invoke<BrowsePerson[]>('social_media_browse_friends', { platform });
+}
+
+export async function browsePosts(platform: string, personId: string): Promise<BrowsePost[]> {
+  return await invoke<BrowsePost[]>('social_media_browse_posts', {
+    platform,
+    personId,
+  });
+}
+
+export async function checkBrowseLogin(platform: string): Promise<BrowseLoginStatus> {
+  return await invoke<BrowseLoginStatus>('social_media_login_status', { platform });
+}

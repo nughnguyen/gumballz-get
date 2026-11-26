@@ -2,6 +2,7 @@
 #![allow(warnings)]
 
 pub mod args;
+pub mod browse;
 pub mod cookies;
 pub mod dispatcher;
 pub mod fetcher;

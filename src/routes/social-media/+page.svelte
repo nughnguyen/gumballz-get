@@ -19,13 +19,14 @@
 <script lang="ts">
   import DownloadManager from '$components/social-media/DownloadManager.svelte';
   import ProfileManager from '$components/social-media/ProfileManager.svelte';
+  import FriendsBrowser from '$components/social-media/FriendsBrowser.svelte';
   import HistoryManager from '$components/social-media/HistoryManager.svelte';
   import SettingsManager from '$components/social-media/SettingsManager.svelte';
   import { setToolbar } from '$lib/stores/toolbar-store.svelte';
   import { setDraft } from '$lib/stores/social_media_download_store.svelte';
   import { t } from '$lib/i18n';
 
-  type TabKey = 'download' | 'profiles' | 'history' | 'settings';
+  type TabKey = 'download' | 'profiles' | 'friends' | 'history' | 'settings';
 
   let activeTab = $state<TabKey>('download');
 
@@ -34,6 +35,7 @@
       segments: [
         { id: 'download', label: $t('social_media.tab_download') || 'Home' },
         { id: 'profiles', label: $t('social_media.tab_profiles') || 'Profiles' },
+        { id: 'friends', label: $t('social_media.tab_friends') || 'Friends' },
         { id: 'history', label: $t('social_media.tab_history') || 'History' },
         { id: 'settings', label: $t('social_media.tab_settings') || 'Settings' },
       ],
@@ -67,6 +69,8 @@
           switchTab('download');
         }}
       />
+    {:else if activeTab === 'friends'}
+      <FriendsBrowser />
     {:else if activeTab === 'history'}
       <HistoryManager onSwitchToDownload={() => switchTab('download')} />
     {:else}

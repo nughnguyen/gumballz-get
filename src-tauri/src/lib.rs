@@ -1346,6 +1346,8 @@ pub fn run() {
             commands::social_media::login::social_media_open_login_window,
             commands::social_media::login::social_media_login_status,
             commands::social_media::login::social_media_logout_platform,
+            commands::social_media::browse::social_media_browse_friends,
+            commands::social_media::browse::social_media_browse_posts,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
