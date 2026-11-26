@@ -1,0 +1,9 @@
+[weblate]
+url = https://hosted.weblate.org/api/
+translation = gumballz-get/frontend
+
+[component "gumballz-get/frontend"]
+slug = gumballz-get/frontend
+file_format = json-nested
+filemask = src/lib/i18n/*.json
+template = src/lib/i18n/en.json

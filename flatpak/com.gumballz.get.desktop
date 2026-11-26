@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=GumballZ Get
+Comment=Download media from multiple platforms
+GenericName=Download Manager
+Exec=gumballz-get %u
+Icon=com.gumballz.get
+Terminal=false
+Type=Application
+Categories=Network;FileTransfer;Utility;
+Keywords=gumballz-get;download;downloader;video;media;udemy;hotmart;youtube;telegram;
+StartupWMClass=gumballz-get
+MimeType=x-scheme-handler/gumballz-get;

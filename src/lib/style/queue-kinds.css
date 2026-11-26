@@ -1,0 +1,45 @@
+/* Definições de token da paleta de tipos de fila (--queue-kind-*): valores-fonte
+   em hex por serem a própria definição, como os blocos de tema em app.css.
+   Os tokens *-fg são cores de texto/ícone: todos ≥ 4.5:1 sobre o card
+   (claro #FFFFFF / escuro #111827) nos dois temas. Nunca usar var(--accent)
+   como cor de texto (2.4:1 no claro) — usar var(--accent-text). */
+:root {
+  --queue-kind-video-bg: color-mix(in oklab, var(--accent) 18%, transparent);
+  --queue-kind-video-fg: var(--accent-text);
+  --queue-kind-audio-bg: color-mix(in oklab, #06b6d4 22%, transparent);
+  --queue-kind-audio-fg: #0e7490;
+  --queue-kind-image-bg: color-mix(in oklab, #16a34a 22%, transparent);
+  --queue-kind-image-fg: #15803d;
+  --queue-kind-pdf-bg: color-mix(in oklab, #dc2626 18%, transparent);
+  --queue-kind-pdf-fg: #b91c1c;
+  --queue-kind-book-bg: color-mix(in oklab, #f59e0b 22%, transparent);
+  --queue-kind-book-fg: #b45309;
+  --queue-kind-webpage-bg: color-mix(in oklab, var(--accent) 14%, transparent);
+  --queue-kind-webpage-fg: var(--accent-text);
+  --queue-kind-telegram_media-bg: color-mix(in oklab, #2aabee 22%, transparent);
+  --queue-kind-telegram_media-fg: #0369a1;
+  --queue-kind-course_lesson-bg: color-mix(in oklab, #8b5cf6 22%, transparent);
+  --queue-kind-course_lesson-fg: #7c3aed;
+  --queue-kind-generic-bg: color-mix(in oklab, var(--secondary) 12%, transparent);
+  --queue-kind-generic-fg: var(--tertiary);
+}
+
+/* O badge do tipo usa só ícone (sem borda própria): o anel inset 1px aqui
+   separa o chip do card sem mudar o tamanho do ícone de 13px. */
+.queue-kind-badge {
+  box-shadow: inset 0 0 0 1px var(--border-ink);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --queue-kind-video-fg: color-mix(in oklab, var(--accent) 80%, white);
+    --queue-kind-audio-fg: #22d3ee;
+    --queue-kind-image-fg: #4ade80;
+    --queue-kind-pdf-fg: #f87171;
+    --queue-kind-book-fg: #fbbf24;
+    --queue-kind-webpage-fg: color-mix(in oklab, var(--accent) 80%, white);
+    --queue-kind-telegram_media-fg: #38bdf8;
+    --queue-kind-course_lesson-fg: #a78bfa;
+    --queue-kind-generic-fg: var(--secondary);
+  }
+}

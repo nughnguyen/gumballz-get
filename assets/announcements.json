@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "id": "announcement-gumballz-get",
+  "active": false,
+  "title": "GumballZ Get",
+  "thumbnail": "https://raw.githubusercontent.com/nughnguyen/gumballz-get/main/assets/readme/hero.png",
+  "body": "Welcome to GumballZ Get! Download media, videos, courses, audio and documents quickly and locally.",
+  "cta": {
+    "label": "Visit GitHub",
+    "url": "https://github.com/nughnguyen/gumballz-get"
+  },
+  "expires_at": null
+}

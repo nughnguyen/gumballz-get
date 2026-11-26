@@ -1,0 +1,76 @@
+{
+  "updated_at": "2026-11-23",
+  "targets": {
+    "/": {
+      "content-clipping": 4,
+      "content-inset": 7,
+      "control-size": 4,
+      "font-family": 34,
+      "font-size": 2,
+      "label-consistency": 3,
+      "text-contrast": 3
+    },
+    "/about": {
+      "control-size": 2,
+      "label-consistency": 3,
+      "text-contrast": 2
+    },
+    "/convert": {
+      "control-size": 2,
+      "font-size": 4,
+      "label-consistency": 3,
+      "text-contrast": 2
+    },
+    "/courses": {
+      "control-size": 2,
+      "font-size": 4,
+      "label-consistency": 3,
+      "text-contrast": 2
+    },
+    "/downloads": {
+      "control-gap": 2,
+      "control-size": 9,
+      "label-consistency": 3,
+      "text-contrast": 2
+    },
+    "/marketplace": {
+      "control-gap": 1,
+      "control-size": 18,
+      "label-consistency": 3,
+      "text-contrast": 20
+    },
+    "/social-media": {
+      "control-gap": 3,
+      "control-size": 4,
+      "label-consistency": 3,
+      "text-contrast": 2
+    },
+    "/settings": {
+      "control-gap": 18,
+      "control-size": 2,
+      "font-size": 10,
+      "label-consistency": 3,
+      "text-contrast": 4
+    },
+    "/study": {
+      "control-gap": 4,
+      "control-size": 7,
+      "font-size": 4,
+      "label-consistency": 3,
+      "text-contrast": 3
+    },
+    "/telegram": {
+      "control-size": 2,
+      "font-size": 4,
+      "label-consistency": 3,
+      "text-contrast": 2
+    },
+    "/tools": {
+      "content-clipping": 2,
+      "control-gap": 8,
+      "control-size": 12,
+      "label-consistency": 17,
+      "text-contrast": 6
+    }
+  }
+}

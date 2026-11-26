@@ -1,0 +1,13 @@
+{
+  "id": "example-plugin",
+  "name": "Example Plugin",
+  "version": "0.1.0",
+  "category": "utility",
+  "icon": "puzzle",
+  "enabled": false,
+  "description": "A minimal GumballZ Get plugin scaffold.",
+  "author": "Your Name",
+  "license": "GPL-3.0",
+  "capabilities": ["core:toast"],
+  "nav": []
+}

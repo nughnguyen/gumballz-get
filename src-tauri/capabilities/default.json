@@ -1,0 +1,59 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capability for the main window",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    {
+      "identifier": "shell:allow-open",
+      "allow": [
+        { "url": "https://github.com/**" },
+        { "url": "https://zypage.com/**" },
+        { "url": "https://www.youtube.com/**" },
+        { "url": "https://*.youtube.com/**" },
+        { "url": "https://www.instagram.com/**" },
+        { "url": "https://www.reddit.com/**" },
+        { "url": "https://x.com/**" },
+        { "url": "https://t.me/**" },
+        { "url": "mailto:**" }
+      ]
+    },
+    "store:default",
+    "dialog:default",
+    "notification:default",
+    "fs:default",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        { "path": "$APPDATA" }, { "path": "$APPDATA/**" },
+        { "path": "$APPLOCALDATA" }, { "path": "$APPLOCALDATA/**" },
+        { "path": "$APPCONFIG" }, { "path": "$APPCONFIG/**" },
+        { "path": "$DOWNLOAD" }, { "path": "$DOWNLOAD/**" },
+        { "path": "$TEMP" }, { "path": "$TEMP/**" }
+      ],
+      "deny": [
+        { "path": "$HOME/.ssh/**" },
+        { "path": "$HOME/.aws/**" },
+        { "path": "**/.git/**" }
+      ]
+    },
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        { "url": "https://github.com/**" },
+        { "url": "https://zypage.com/**" }
+      ]
+    },
+    "clipboard-manager:allow-read-text",
+    "clipboard-manager:allow-write-text",
+    "updater:allow-check",
+    "updater:allow-download-and-install",
+    "process:allow-restart",
+    "core:window:allow-start-dragging",
+    "core:window:allow-set-badge-count",
+    "core:window:allow-set-progress-bar",
+    "core:window:allow-set-overlay-icon",
+    "autostart:default"
+  ]
+}
