@@ -881,6 +881,7 @@
   .back-link {
     display: inline-flex;
     align-items: center;
+    align-self: flex-start;
     gap: 6px;
     padding: 6px 12px;
     font-size: var(--text-sm);
