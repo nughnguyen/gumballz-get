@@ -7,6 +7,7 @@ pub mod dispatcher;
 pub mod fetcher;
 pub mod http;
 pub mod ledger;
+pub mod login;
 pub mod pull;
 
 use chrono::Utc;

@@ -4237,7 +4237,20 @@
         "import_done": "{{count}} elementos en cola",
         "login_webview_btn": "Iniciar sesión vía página de Bilibili",
         "login_webview_loading": "Abriendo ventana de inicio de sesión..."
-      }
+      },
+      "social_login_title": "Sign in inside the app",
+      "social_login_desc": "Sign in to Facebook or Instagram right inside the app — no browser extension, no copying cookies.",
+      "social_login_facebook": "Sign in to Facebook",
+      "social_login_instagram": "Sign in to Instagram",
+      "social_login_loading": "Waiting for sign-in…",
+      "social_login_logged_in": "Signed in",
+      "social_login_not_logged_in": "Not signed in",
+      "social_login_logout": "Sign out",
+      "social_login_success": "Signed in to {{platform}}.",
+      "social_login_cancelled": "You closed the sign-in window.",
+      "social_login_timeout": "Sign-in timed out. Please try again.",
+      "social_login_no_session": "No sign-in session was found. Please try again.",
+      "social_logout_done": "Signed out of {{platform}}."
     },
     "hero_desc_appearance": "Personaliza el tema de la aplicación, colores de énfasis y transparencia",
     "hero_desc_typography": "Elige fuentes de interfaz, escala de lectura y ajustes tipográficos",

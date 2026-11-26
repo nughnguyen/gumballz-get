@@ -180,6 +180,7 @@
       } catch {
         healthByKey = {};
       }
+      await refreshLoginStatus();
     } catch (e) {
       showToast("error", String(e));
     } finally {
@@ -361,6 +362,86 @@
       showToast("error", ($t(key) as string) || String(e));
     } finally {
       bilibiliWebviewLoading = false;
+    }
+  }
+
+  type SocialLoginStatus = {
+    platform: string;
+    logged_in: boolean;
+    cookie_count: number;
+    captured_at_ms: number | null;
+    alias: string | null;
+  };
+  type SocialLoginResult = {
+    platform: string;
+    logged_in: boolean;
+    cookie_count: number;
+    final_url: string;
+  };
+  const socialPlatforms = [
+    { id: "facebook", name: "Facebook", loginKey: "settings.cookies.social_login_facebook" },
+    { id: "instagram", name: "Instagram", loginKey: "settings.cookies.social_login_instagram" },
+  ] as const;
+  let loginStatus = $state<Record<string, SocialLoginStatus | null>>({});
+  let loginBusy = $state<Record<string, boolean>>({});
+
+  function platformName(id: string): string {
+    return id === "facebook" ? "Facebook" : id === "instagram" ? "Instagram" : id;
+  }
+
+  async function refreshLoginStatus() {
+    for (const p of socialPlatforms) {
+      try {
+        const res = await invoke<SocialLoginStatus>("social_media_login_status", {
+          platform: p.id,
+        });
+        loginStatus = { ...loginStatus, [p.id]: res };
+      } catch {
+        loginStatus = { ...loginStatus, [p.id]: null };
+      }
+    }
+  }
+
+  async function startSocialLogin(platform: string) {
+    if (loginBusy[platform]) return;
+    loginBusy = { ...loginBusy, [platform]: true };
+    try {
+      const res = await invoke<SocialLoginResult>("social_media_open_login_window", {
+        platform,
+      });
+      showToast(
+        "success",
+        ($t("settings.cookies.social_login_success", {
+          platform: platformName(res.platform),
+        }) as string) ?? `Signed in to ${res.platform}`,
+      );
+      await refreshLoginStatus();
+      await reload();
+    } catch (e) {
+      const key = typeof e === "string" ? e : "";
+      showToast("error", (key ? ($t(key) as string) : "") || String(e));
+    } finally {
+      loginBusy = { ...loginBusy, [platform]: false };
+    }
+  }
+
+  async function handleSocialLogout(platform: string) {
+    if (loginBusy[platform]) return;
+    loginBusy = { ...loginBusy, [platform]: true };
+    try {
+      await invoke("social_media_logout_platform", { platform });
+      showToast(
+        "success",
+        ($t("settings.cookies.social_logout_done", {
+          platform: platformName(platform),
+        }) as string) ?? `Signed out of ${platform}`,
+      );
+      await refreshLoginStatus();
+      await reload();
+    } catch (e) {
+      showToast("error", String(e));
+    } finally {
+      loginBusy = { ...loginBusy, [platform]: false };
     }
   }
 
@@ -559,6 +640,46 @@
       </div>
     </label>
   </header>
+
+  <div class="social-login">
+    <div class="social-login-head">
+      <span class="social-login-title">{$t("settings.cookies.social_login_title")}</span>
+      <span class="social-login-desc">{$t("settings.cookies.social_login_desc")}</span>
+    </div>
+    {#each socialPlatforms as p (p.id)}
+      <div class="social-row">
+        <div class="social-info">
+          <span class="social-name">{p.name}</span>
+          {#if loginStatus[p.id]?.logged_in}
+            <span class="social-status">{$t("settings.cookies.social_login_logged_in")}</span>
+          {:else}
+            <span class="social-status">{$t("settings.cookies.social_login_not_logged_in")}</span>
+          {/if}
+        </div>
+        {#if loginStatus[p.id]?.logged_in}
+          <button
+            type="button"
+            class="ghost-btn subtle"
+            onclick={() => handleSocialLogout(p.id)}
+            disabled={loginBusy[p.id]}
+          >
+            {$t("settings.cookies.social_login_logout")}
+          </button>
+        {:else}
+          <button
+            type="button"
+            class="ghost-btn"
+            onclick={() => startSocialLogin(p.id)}
+            disabled={loginBusy[p.id]}
+          >
+            {loginBusy[p.id]
+              ? $t("settings.cookies.social_login_loading")
+              : $t(p.loginKey)}
+          </button>
+        {/if}
+      </div>
+    {/each}
+  </div>
 
   {#if bucketList.length > 0}
     <div class="bulk-bar">
@@ -944,4 +1065,25 @@
     transform: translate(2px, 2px);
     box-shadow: none;
   }
+  .social-login {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 14px;
+    background: var(--surface-hi);
+    border: 2px solid var(--border-ink);
+    border-radius: var(--border-radius);
+  }
+  .social-login-head { display: flex; flex-direction: column; gap: 2px; }
+  .social-login-title { font-size: 13px; font-weight: 600; color: var(--secondary); }
+  .social-login-desc { font-size: 12px; color: var(--secondary); line-height: 1.4; }
+  .social-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .social-info { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .social-name { font-size: 13px; font-weight: 600; color: var(--secondary); }
+  .social-status { font-size: 12px; color: var(--text-dim); }
 </style>

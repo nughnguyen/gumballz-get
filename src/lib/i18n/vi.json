@@ -4257,7 +4257,20 @@
         "import_done": "Đã xếp hàng {{count}} mục",
         "login_webview_btn": "Đăng nhập qua trang Bilibili",
         "login_webview_loading": "Đang mở cửa sổ đăng nhập..."
-      }
+      },
+      "social_login_title": "Đăng nhập trong app",
+      "social_login_desc": "Đăng nhập Facebook hoặc Instagram ngay trong app — không cần tiện ích trình duyệt, không cần sao chép cookie.",
+      "social_login_facebook": "Đăng nhập Facebook",
+      "social_login_instagram": "Đăng nhập Instagram",
+      "social_login_loading": "Đang chờ đăng nhập…",
+      "social_login_logged_in": "Đã đăng nhập",
+      "social_login_not_logged_in": "Chưa đăng nhập",
+      "social_login_logout": "Đăng xuất",
+      "social_login_success": "Đã đăng nhập {{platform}}.",
+      "social_login_cancelled": "Bạn đã đóng cửa sổ đăng nhập.",
+      "social_login_timeout": "Hết thời gian chờ đăng nhập, thử lại sau.",
+      "social_login_no_session": "Không tìm thấy phiên đăng nhập, thử lại sau.",
+      "social_logout_done": "Đã đăng xuất {{platform}}."
     },
     "hero_desc_appearance": "Tùy chỉnh chủ đề, màu nhấn và độ trong suốt của cửa sổ ứng dụng",
     "hero_desc_typography": "Chọn font giao diện, cỡ chữ đọc và preset kiểu chữ",
