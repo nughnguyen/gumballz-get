@@ -19,6 +19,7 @@
 <script lang="ts">
   import { t } from "$lib/i18n";
   import { pluginInvoke } from "$lib/plugin-invoke";
+  import { open as openExternal } from "@tauri-apps/plugin-shell";
   import DialogContainer from "$components/dialog/DialogContainer.svelte";
 
   type Section = {
@@ -40,11 +41,13 @@
   let {
     courseId = $bindable<number | string | null>(null),
     courseName = "",
+    homepageUrl = "",
     command,
     onConfirm,
   }: {
     courseId?: number | string | null;
     courseName?: string;
+    homepageUrl?: string;
     command: string;
     onConfirm: (sectionIds: number[]) => void;
   } = $props();
@@ -117,6 +120,16 @@
     <div class="sections-heading">
       <h2 id="course-sections-title">{$t("courses.sections_title")}</h2>
       {#if courseName}<p class="sections-course" title={courseName}>{courseName}</p>{/if}
+      {#if homepageUrl}
+        <button class="sections-homepage" onclick={() => openExternal(homepageUrl)} title={homepageUrl}>
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+            <polyline points="15 3 21 3 21 9" />
+            <line x1="10" y1="14" x2="21" y2="3" />
+          </svg>
+          {$t("hotmart.open_external")}
+        </button>
+      {/if}
     </div>
     <button class="dialog-close" onclick={close} aria-label={$t("common.close")}>
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -207,6 +220,30 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .sections-homepage {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 6px;
+    padding: 3px 10px;
+    font-size: var(--text-sm);
+    font-weight: 500;
+    color: var(--tertiary);
+    background: transparent;
+    border: 2px solid var(--border-ink);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+  }
+
+  .sections-homepage:hover {
+    background: var(--surface-hi);
+    color: var(--secondary);
+  }
+
+  .sections-homepage:active {
+    transform: translate(1px, 1px);
   }
 
   .dialog-close {
@@ -305,9 +342,8 @@
   }
 
   .section-row.checked {
-    outline: 2px solid var(--border-ink);
-    outline-offset: -2px;
     background: var(--surface-hi);
+    box-shadow: 2px 2px 0 var(--shadow-hard);
   }
 
   .section-row input {
@@ -316,11 +352,19 @@
   }
 
   .section-index {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 5px;
     font-size: var(--text-xs, 12px);
+    font-weight: 600;
     font-variant-numeric: tabular-nums;
-    color: var(--gray);
-    min-width: 2ch;
-    text-align: right;
+    color: var(--secondary);
+    background: var(--surface-hi);
+    border: 2px solid var(--border-ink);
+    border-radius: 6px;
   }
 
   .section-text {
@@ -372,9 +416,19 @@
   }
 
   .btn-primary {
-    background: var(--secondary);
-    color: var(--primary);
-    font-weight: 500;
+    background: var(--cta);
+    color: var(--on-cta);
+    font-weight: 600;
+    box-shadow: 3px 3px 0 var(--cta-shadow);
+  }
+
+  .btn-primary:hover {
+    filter: brightness(1.05);
+  }
+
+  .btn-primary:active {
+    transform: translate(2px, 2px);
+    box-shadow: 1px 1px 0 var(--cta-shadow);
   }
 
   .btn-primary:disabled {

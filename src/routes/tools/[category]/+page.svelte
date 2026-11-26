@@ -100,17 +100,35 @@
   .tools-back {
     display: inline-flex;
     align-items: center;
-    gap: var(--space-1);
+    gap: 6px;
     align-self: flex-start;
+    padding: 6px 12px;
     font-size: var(--text-sm);
-    font-weight: 500;
-    color: var(--accent-hi);
+    font-weight: 600;
+    color: var(--secondary);
+    background: var(--button-elevated);
+    border: 2px solid var(--border-ink);
+    border-radius: var(--radius-md);
+    box-shadow: 2px 2px 0 var(--shadow-hard);
     text-decoration: none;
+    transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
   }
 
   .tools-back:hover {
-    text-decoration: underline;
-    text-underline-offset: 2px;
+    background: var(--button-elevated-hover);
+    transform: translate(-1px, -1px);
+    box-shadow: 3px 3px 0 var(--shadow-hard);
+    text-decoration: none;
+  }
+
+  .tools-back:active {
+    transform: translate(2px, 2px);
+    box-shadow: none;
+  }
+
+  .tools-back:focus-visible {
+    outline: var(--focus-ring);
+    outline-offset: var(--focus-ring-offset);
   }
 
   .tools-category-head {

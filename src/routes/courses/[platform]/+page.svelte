@@ -27,6 +27,7 @@
   import { showToast } from "$lib/stores/toast-store.svelte";
   import { getDownloads } from "$lib/stores/download-store.svelte";
   import { getSettings } from "$lib/stores/settings-store.svelte";
+  import { PLATFORM_ICONS, DEFAULT_ICON } from "../platform-icons";
   import { t } from "$lib/i18n";
 
   let downloads = $derived(getDownloads());
@@ -173,6 +174,40 @@
 
   function getItemImage(item: any): string | undefined {
     return item.image_url ?? item.preview_url ?? undefined;
+  }
+
+  function getIconSvg(icon: string): string {
+    return PLATFORM_ICONS[icon] ?? DEFAULT_ICON;
+  }
+
+  // Homepage (product page) of a course, from platform data already in
+  // the item — no backend change. Used by the "open on platform" button.
+  //  - external_url: external-platform courses already carry it.
+  //  - url: Udemy returns a relative course path (/course/...); absolute
+  //    URLs are used as-is, relative ones are prefixed with the
+  //    platform site origin (from its login URL).
+  //  - Gumroad: the API short_url is gumroad.com/l/{id}, and the id is
+  //    the slug, so the product page is gumroad.com/l/{id}.
+  // Returns undefined when no page URL can be derived — the button is
+  // then hidden instead of linking nowhere.
+  function getItemHomepageUrl(item: any): string | undefined {
+    const ext = typeof item.external_url === "string" ? item.external_url.trim() : "";
+    if (ext) return ext;
+    const raw = typeof item.url === "string" ? item.url.trim() : "";
+    if (raw) {
+      if (/^https?:\/\//i.test(raw)) return raw;
+      if (raw.startsWith("/") && config) {
+        try {
+          return new URL(loginUrlFor(config)).origin + raw;
+        } catch {
+          return undefined;
+        }
+      }
+    }
+    if (config?.id === "gumroad" && item.id != null && String(item.id).trim() !== "") {
+      return `https://gumroad.com/l/${encodeURIComponent(String(item.id).trim())}`;
+    }
+    return undefined;
   }
 
   function goToPage(p: number) {
@@ -636,6 +671,7 @@
             imageUrl={getItemImage(item)}
             externalPlatform={item.external_platform === true}
             externalUrl={typeof item.external_url === "string" ? item.external_url : undefined}
+            homepageUrl={getItemHomepageUrl(item)}
             downloadStatus={getDownloadStatus(item)}
             downloadPercent={getDownloadPercent(item)}
             onDownload={() => downloadItem(item)}
@@ -648,6 +684,7 @@
         <CourseSectionsDialog
           bind:courseId={sectionsCourseId}
           courseName={sectionsCourse ? getItemName(sectionsCourse) : ""}
+          homepageUrl={sectionsCourse ? getItemHomepageUrl(sectionsCourse) ?? "" : ""}
           command={config.commands.curriculum}
           onConfirm={(ids) => sectionsCourse && downloadItem(sectionsCourse, ids)}
         />
@@ -675,8 +712,19 @@
   </div>
 {:else if config}
   <div class="page-center">
-    <div class="login-card">
-      <h2>{config.name}</h2>
+    <div class="login-card" style:--platform-color={config.color}>
+      <div class="login-accent" aria-hidden="true"></div>
+      <div class="login-identity">
+        <div class="login-icon">
+          <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            {@html getIconSvg(config.icon)}
+          </svg>
+        </div>
+        <div class="login-identity-text">
+          <h2>{config.name}</h2>
+          <span class="login-platform-tag">{config.id}</span>
+        </div>
+      </div>
 
       {#if sessionNotice === "expired"}
         <div class="session-notice" role="status">{$t("courses.session_expired")}</div>
@@ -714,7 +762,7 @@
             <p class="error-msg">{error}</p>
           {/if}
           <p class="browser-hint">{$t("courses.browser_hint")}</p>
-          <button class="button" onclick={handleBrowserLogin} disabled={loading}>
+          <button class="button login-submit" onclick={handleBrowserLogin} disabled={loading}>
             {#if loading}
               {$t("hotmart.authenticating")}
             {:else}
@@ -800,7 +848,7 @@
             <p class="captcha-warning">{$t("hotmart.captcha_detected")}</p>
           {/if}
 
-          <button type="submit" class="button" disabled={loading || (otpSent && otpCode.length < 4)}>
+          <button type="submit" class="button login-submit" disabled={loading || (otpSent && otpCode.length < 4)}>
             {#if loading}
               {$t("hotmart.authenticating")}
             {:else if otpSent}
@@ -834,14 +882,35 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
+    padding: 6px 12px;
     font-size: var(--text-sm);
-    font-weight: 500;
-    color: var(--gray);
+    font-weight: 600;
+    color: var(--secondary);
+    background: var(--button-elevated);
+    border: 2px solid var(--border-ink);
+    border-radius: var(--radius-md);
+    box-shadow: 2px 2px 0 var(--shadow-hard);
+    text-decoration: none;
     margin-bottom: var(--padding);
+    transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
   }
 
   @media (hover: hover) {
-    .back-link:hover { color: var(--secondary); }
+    .back-link:hover {
+      background: var(--button-elevated-hover);
+      transform: translate(-1px, -1px);
+      box-shadow: 3px 3px 0 var(--shadow-hard);
+    }
+  }
+
+  .back-link:active {
+    transform: translate(2px, 2px);
+    box-shadow: none;
+  }
+
+  .back-link:focus-visible {
+    outline: var(--focus-ring);
+    outline-offset: var(--focus-ring-offset);
   }
 
   .page-center {
@@ -873,12 +942,17 @@
     justify-content: space-between;
     flex-wrap: wrap;
     gap: var(--padding);
+    padding: var(--padding) calc(var(--padding) * 1.5);
+    background: var(--button-elevated);
+    border: 2px solid var(--border-ink);
+    border-radius: var(--border-radius);
+    box-shadow: 4px 4px 0 var(--shadow-hard);
   }
 
   .session-info {
     font-size: var(--text-sm);
-    font-weight: 500;
-    color: var(--gray);
+    font-weight: 600;
+    color: var(--secondary);
   }
 
   .session-actions {
@@ -923,7 +997,13 @@
     gap: var(--padding);
   }
 
-  .courses-header h2 { margin-block: 0; }
+  .courses-header h2 {
+    margin-block: 0;
+    font-family: var(--font-display);
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: var(--track-snug);
+  }
 
   .subtext {
     font-size: var(--text-sm);
@@ -980,36 +1060,106 @@
 
   .login-card {
     width: 100%;
-    max-width: 400px;
+    max-width: 440px;
     background: var(--button-elevated);
     border: 2px solid var(--border-ink);
-    border-radius: var(--border-radius);
-    padding: calc(var(--padding) * 2);
+    border-radius: var(--radius-lg);
+    box-shadow: 4px 4px 0 var(--shadow-hard);
+    overflow: hidden;
     display: flex;
     flex-direction: column;
     gap: calc(var(--padding) * 1.5);
+    padding: 0 calc(var(--padding) * 2) calc(var(--padding) * 2);
   }
 
-  .login-card h2 { margin-block: 0; }
+  .login-accent {
+    height: 6px;
+    margin-inline: calc(var(--padding) * -2);
+    background: var(--platform-color, var(--accent));
+  }
+
+  .login-identity {
+    display: flex;
+    align-items: center;
+    gap: var(--padding);
+    padding-top: calc(var(--padding) * 0.5);
+  }
+
+  .login-icon {
+    width: 52px;
+    height: 52px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: calc(var(--border-radius) - 2px);
+    background: color-mix(in srgb, var(--platform-color, var(--accent)) 15%, transparent);
+    color: var(--platform-color, var(--accent));
+    border: 2px solid var(--border-ink);
+  }
+
+  .login-identity-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .login-card h2 {
+    margin-block: 0;
+    font-family: var(--font-display);
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: var(--track-snug);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .login-platform-tag {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--gray);
+    letter-spacing: 0.04em;
+  }
 
   .login-tabs {
     display: flex;
-    gap: 0;
+    gap: 4px;
+    padding: 4px;
+    background: var(--input-bg);
+    border: 2px solid var(--border-ink);
+    border-radius: var(--radius-md);
   }
 
   .login-tab {
     flex: 1;
-    border-radius: 0;
+    border-radius: var(--radius-md);
     font-size: var(--text-sm);
+    font-weight: 600;
     padding: calc(var(--padding) * 0.75) var(--padding);
+    box-shadow: none;
+    border: none;
+    background: transparent;
+    color: var(--tertiary);
   }
 
-  .login-tab:first-child {
-    border-radius: var(--border-radius) 0 0 var(--border-radius);
+  @media (hover: hover) {
+    .login-tab:hover {
+      background: var(--button-hover);
+      color: var(--secondary);
+    }
   }
 
-  .login-tab:last-child {
-    border-radius: 0 var(--border-radius) var(--border-radius) 0;
+  .login-tab.active {
+    background: var(--cta);
+    color: var(--on-cta);
+    box-shadow: 2px 2px 0 var(--cta-shadow);
+  }
+
+  .login-tab.active:hover {
+    background: var(--cta);
+    color: var(--on-cta);
   }
 
   .form {
@@ -1041,8 +1191,32 @@
   }
 
   .input::placeholder { color: var(--gray); }
-  .input:focus-visible { border-color: var(--secondary); outline: none; }
+  .input:focus-visible { border-color: var(--accent); outline: none; box-shadow: 2px 2px 0 var(--shadow-hard); }
   .input:disabled { opacity: 0.85; cursor: default; }
+
+  .login-card .login-submit {
+    width: 100%;
+    min-height: 40px;
+    font-size: var(--text-md);
+    font-weight: 600;
+    background: var(--cta);
+    color: var(--on-cta);
+    border: 2px solid var(--border-ink);
+    box-shadow: 4px 4px 0 var(--cta-shadow);
+  }
+
+  @media (hover: hover) {
+    .login-card .login-submit:hover:not(:disabled) {
+      background: var(--cta);
+      filter: brightness(1.07);
+    }
+  }
+
+  .login-card .login-submit:active:not(:disabled) {
+    background: var(--cta);
+    transform: translate(2px, 2px);
+    box-shadow: 2px 2px 0 var(--cta-shadow);
+  }
 
   .token-input {
     min-height: 80px;
@@ -1089,12 +1263,22 @@
     color: var(--danger);
     font-size: var(--text-sm);
     font-weight: 500;
+    margin-block: 0;
+    padding: calc(var(--padding) * 0.75) var(--padding);
+    background: color-mix(in srgb, var(--danger) 12%, transparent);
+    border: 2px solid var(--danger);
+    border-radius: var(--border-radius);
   }
 
   .captcha-warning {
     color: var(--warning);
     font-size: var(--text-sm);
     font-weight: 500;
+    margin-block: 0;
+    padding: calc(var(--padding) * 0.75) var(--padding);
+    background: color-mix(in srgb, var(--warning) 12%, transparent);
+    border: 2px solid var(--warning);
+    border-radius: var(--border-radius);
   }
 
   .spinner-section {

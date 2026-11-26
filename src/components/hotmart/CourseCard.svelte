@@ -28,6 +28,7 @@
     imageUrl?: string;
     externalPlatform?: boolean;
     externalUrl?: string;
+    homepageUrl?: string;
     downloadStatus?: CardDownloadStatus;
     downloadPercent?: number;
     onDownload: () => void;
@@ -40,6 +41,7 @@
     imageUrl,
     externalPlatform = false,
     externalUrl,
+    homepageUrl,
     downloadStatus = "idle",
     downloadPercent = 0,
     onDownload,
@@ -184,6 +186,16 @@
         </button>
       {/if}
     {/if}
+    {#if !externalPlatform && homepageUrl}
+      <button class="button card-homepage" onclick={() => openExternal(homepageUrl)} title={homepageUrl}>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+          <polyline points="15 3 21 3 21 9" />
+          <line x1="10" y1="14" x2="21" y2="3" />
+        </svg>
+        {$t("hotmart.open_external")}
+      </button>
+    {/if}
   </div>
 </div>
 
@@ -196,6 +208,13 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+
+  @media (hover: hover) {
+    .course-card:hover {
+      transform: translateY(-2px);
+    }
   }
 
   .card-image {
@@ -204,6 +223,7 @@
     overflow: hidden;
     border-radius: var(--border-radius) var(--border-radius) 0 0;
     background: var(--button-elevated);
+    border-bottom: 2px solid var(--border-ink);
   }
 
   .card-image img {
@@ -319,6 +339,35 @@
     pointer-events: none;
   }
 
+  .card-homepage {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: calc(var(--padding) / 2);
+    margin-top: calc(var(--padding) / 2);
+    background: transparent;
+    border: 2px solid var(--border-ink);
+    box-shadow: none;
+    color: var(--tertiary);
+    font-size: var(--text-sm);
+  }
+
+  @media (hover: hover) {
+    .card-homepage:hover {
+      background: var(--surface-hi);
+      color: var(--secondary);
+    }
+  }
+
+  .card-homepage:active {
+    transform: translate(2px, 2px);
+  }
+
+  .card-homepage svg {
+    pointer-events: none;
+  }
+
   .status-downloading {
     opacity: 0.85;
     cursor: default;
@@ -360,10 +409,12 @@
 
   .mini-progress-track {
     width: 100%;
-    height: 4px;
+    height: 8px;
     background: var(--button-elevated);
-    border-radius: 2px;
+    border: 2px solid var(--border-ink);
+    border-radius: 4px;
     overflow: hidden;
+    box-sizing: border-box;
   }
 
   .mini-progress-fill {

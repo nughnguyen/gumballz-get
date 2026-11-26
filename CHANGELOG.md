@@ -11,6 +11,7 @@ bản hiện tại trong cùng commit đó.
 - Sửa logo ở hero trang web bị lớp nền tím che mất: CSS cũ chỉ tạo vị trí cho bản SVG của logo, bản ảnh PNG mới không được tạo vị trí nên bị che khuất.
 - Phần Tải xuống: mục tải xong xếp theo thời gian hoàn thành, mới nhất lên trên cùng (trước đây xếp theo thời gian cập nhật chung của cả hàng đợi nên mục mới xong lại nằm dưới cùng).
 - Link TikTok ảnh giờ tải được: hiện danh sách ảnh (tải từng ảnh hoặc tải hết), video slideshow (ảnh tự lướt kèm nhạc) và âm thanh riêng; link video TikTok có tuỳ chọn có/không watermark.
+- Thiết kế lại giao diện phần Khóa học: thẻ đăng nhập nền tảng (tiêu đề + tab credentials/Token kiểu mới), danh sách khóa học (tiêu đề Bento, ô tìm kiếm, huy hiệu trạng thái), thẻ khóa học và hộp thoại sections; mỗi khóa học có thêm nút "Mở trên nền tảng" để mở trang chủ khóa học đó; nút back ở trang Khóa học và trang Công cụ làm lại kiểu pill mới.
 
 ## [1.0.1] - 2026-11-26
 

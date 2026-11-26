@@ -175,6 +175,14 @@
   function getIconSvg(icon: string): string {
     return PLATFORM_ICONS[icon] ?? DEFAULT_ICON;
   }
+
+  function statusClass(state: SessionState | undefined): string {
+    if (state === "connected") return "st-connected";
+    if (state === "expired") return "st-expired";
+    if (state === "unreachable") return "st-error";
+    if (state === "not-connected") return "st-off";
+    return "";
+  }
 </script>
 
 {#if pluginStatus === "checking"}
@@ -215,7 +223,9 @@
 {:else}
 <div class="courses-page">
   <header class="courses-head">
-    <img src="/icons/nav/courses.svg" alt="" class="courses-hero-icon" width="56" height="56" draggable="false" />
+    <div class="courses-hero-tile">
+      <img src="/icons/nav/courses.svg" alt="" class="courses-hero-icon" width="40" height="40" draggable="false" />
+    </div>
     <div class="courses-identity">
       <h1 class="page-title">{$t("courses.title")}</h1>
       <p class="courses-subtitle">{$t("courses.subtitle")}</p>
@@ -232,12 +242,18 @@
     </div>
   {/if}
 
-  <input
-    class="search-input"
-    type="text"
-    placeholder={$t("courses.search_placeholder")}
-    bind:value={searchQuery}
-  />
+  <div class="search-wrap">
+    <svg class="search-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="11" cy="11" r="7" />
+      <line x1="21" y1="21" x2="16.5" y2="16.5" />
+    </svg>
+    <input
+      class="search-input"
+      type="text"
+      placeholder={$t("courses.search_placeholder")}
+      bind:value={searchQuery}
+    />
+  </div>
 
   <div class="platform-grid">
     {#each filteredPlatforms as platform (platform.id)}
@@ -254,7 +270,7 @@
           </svg>
         </div>
         <span class="card-name">{platform.name}</span>
-        <span class="card-status" title={authStatus[platform.id]?.state === "unreachable" ? authStatus[platform.id].detail : undefined}>
+        <span class="card-status {statusClass(authStatus[platform.id]?.state)}" title={authStatus[platform.id]?.state === "unreachable" ? authStatus[platform.id].detail : undefined}>
           {#if authStatus[platform.id]?.state === "connected"}
             <span class="status-dot connected"></span>
             <span class="status-email">{authStatus[platform.id].email}</span>
@@ -272,6 +288,10 @@
       </div>
     {/each}
   </div>
+
+  {#if filteredPlatforms.length === 0}
+    <p class="empty-text">{$t("courses.no_search_results") ?? "No matching courses"}</p>
+  {/if}
 </div>
 {/if}
 
@@ -291,12 +311,29 @@
     width: 100%;
     max-width: 900px;
     margin-bottom: var(--space-2);
+    padding: var(--space-4) var(--space-5);
+    background: var(--button-elevated);
+    border: 2px solid var(--border-ink);
+    border-radius: var(--radius-lg);
+    box-shadow: 4px 4px 0 var(--shadow-hard);
+  }
+
+  .courses-hero-tile {
+    width: 56px;
+    height: 56px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: color-mix(in srgb, var(--accent) 15%, transparent);
+    border: 2px solid var(--border-ink);
+    border-radius: 14px;
+    color: var(--accent);
   }
 
   .courses-hero-icon {
-    width: 56px;
-    height: 56px;
-    border-radius: 14px;
+    width: 40px;
+    height: 40px;
     object-fit: contain;
     flex-shrink: 0;
   }
@@ -315,11 +352,32 @@
   }
 
   h1 {
-    font-size: 20px;
-    font-weight: 500;
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: var(--track-snug);
     margin-block: 0;
     width: 100%;
     max-width: 900px;
+  }
+
+  .search-wrap {
+    position: relative;
+    width: 100%;
+    max-width: 900px;
+  }
+
+  .search-wrap .search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--gray);
+    pointer-events: none;
+  }
+
+  .search-wrap .search-input {
+    padding-left: 36px;
   }
 
   .search-input {
@@ -338,6 +396,8 @@
   .search-input:focus-visible {
     outline: var(--focus-ring);
     outline-offset: var(--focus-ring-offset);
+    border-color: var(--accent);
+    box-shadow: 2px 2px 0 var(--shadow-hard);
   }
 
   .search-input::placeholder { color: var(--gray); }
@@ -418,6 +478,30 @@
     font-weight: 500;
     color: var(--gray);
     min-height: 16px;
+    padding: 3px 10px;
+    border: 2px solid var(--border-ink);
+    border-radius: 9999px;
+    background: var(--surface-hi);
+    max-width: 100%;
+  }
+
+  .card-status.st-connected {
+    background: color-mix(in srgb, var(--success) 18%, transparent);
+    color: var(--secondary);
+  }
+
+  .card-status.st-expired {
+    background: color-mix(in srgb, var(--warning) 18%, transparent);
+    color: var(--secondary);
+  }
+
+  .card-status.st-error {
+    background: color-mix(in srgb, var(--danger) 18%, transparent);
+    color: var(--secondary);
+  }
+
+  .card-status.st-off {
+    background: var(--surface-hi);
   }
 
   .status-dot {
@@ -437,6 +521,14 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     max-width: 140px;
+  }
+
+  .empty-text {
+    color: var(--gray);
+    font-size: var(--text-base);
+    text-align: center;
+    padding: calc(var(--padding) * 3) 0;
+    margin-block: 0;
   }
 
   @media (max-width: 535px) {
@@ -459,7 +551,8 @@
   }
   .plugin-guard h2 { font-size: 17px; color: var(--secondary); }
   .plugin-guard p { font-size: 14px; max-width: 300px; }
-  .guard-link { padding: 10px 24px; font-size: 14px; font-weight: 500; background: var(--cta); color: var(--on-cta); border: 2px solid var(--border-ink); border-radius: var(--border-radius); text-decoration: none; box-shadow: 2px 2px 0 var(--shadow-hard); }
+  .guard-link { padding: 10px 24px; font-size: 14px; font-weight: 600; background: var(--cta); color: var(--on-cta); border: 2px solid var(--border-ink); border-radius: var(--border-radius); text-decoration: none; box-shadow: 4px 4px 0 var(--cta-shadow); }
+  .guard-link:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--cta-shadow); }
   .guard-detail { font-size: 12px; color: var(--tertiary); max-width: 480px; margin-top: calc(var(--padding) * 0.5); }
   .guard-detail code { font-family: var(--font-mono, ui-monospace, monospace); font-size: 11px; word-break: break-word; background: var(--surface); padding: 2px 6px; border-radius: 4px; }
   .spinner { width: 24px; height: 24px; border: 2px solid var(--input-border); border-top-color: var(--secondary); border-radius: 50%; animation: spin 0.8s linear infinite; }
