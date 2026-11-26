@@ -613,7 +613,11 @@
   flex-direction: column;
   overflow-y: auto;
   overscroll-behavior: contain;
-  transform: translateZ(0);
+  /* NOTE: do NOT add transform/filter here — either one makes this scroll
+     container the containing block for position:fixed descendants, so
+     every modal overlay inside it scrolls away with the page instead of
+     staying glued to the viewport (seen in the Telegram perf panel).
+     will-change below is the safe scroll-performance hint. */
   will-change: scroll-position;
 }
 

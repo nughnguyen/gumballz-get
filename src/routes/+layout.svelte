@@ -607,7 +607,12 @@
     margin: 0;
     overflow-y: auto;
     overscroll-behavior-y: contain;
-    transform: translateZ(0);
+    /* NOTE: do NOT add transform/filter here — either one makes this
+       scroll container the containing block for position:fixed
+       descendants, so every modal overlay inside it (perf panel,
+       upload modal, install modal, …) scrolls away with the page
+       instead of staying glued to the viewport. will-change below is
+       the safe scroll-performance hint. */
     will-change: scroll-position;
   }
 

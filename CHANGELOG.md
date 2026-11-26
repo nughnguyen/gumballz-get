@@ -20,6 +20,7 @@ bản hiện tại trong cùng commit đó.
 - Nút “Cài tiện ích” trong Cài đặt: app tự chuẩn bị sẵn thư mục tiện ích (bản portable tự tải file từ bản release trên GitHub) rồi mở sẵn trang chrome://extensions, chỉ cần bật Developer Mode rồi bấm “Load unpacked” chọn thư mục là xong; tiện ích đã ghép nối thì hiện “Đã cài đặt”.
 - Sidebar: mục Plugin chuyển xuống giữa (sau các tab trang chủ, trước phần Ứng dụng), phần Ứng dụng và Cài đặt xuống dưới cuối; mục đang chọn có viên thuốc trượt theo với hiệu ứng nảy khi chuyển tab.
 - Trình tạo keys.ts giờ chỉ ghi file khi nội dung thật sự đổi (so sánh đã chuẩn hoá xuống dòng): Vite chạy trình tạo này mỗi lần mở app, trước đây nó ghi lại file dù không đổi gì nên keys.ts cứ hiện là file đã sửa trên máy Windows.
+- Sửa lỗi popup Cài đặt hiệu năng Telegram (và mọi popup khác) trôi khỏi màn hình khi cuộn trang: khung cuộn chính có `transform: translateZ(0)` khiến popup `position: fixed` bị neo theo khung cuộn thay vì màn hình — đã bỏ transform ở cả hai chỗ, popup giờ dính chặt màn hình khi cuộn.
 
 ## [1.0.0] - 2026-11-26
 
