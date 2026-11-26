@@ -98,6 +98,21 @@ pub struct ScribdPage {
     pub images: Vec<ScribdPageImage>,
 }
 
+/// One word run inside a positioned span: Scribd table cells are a
+/// single outer span whose words are separated by `<span class=w>`
+/// spacers (fixed-width gaps) instead of plain spaces, so the words
+/// must be drawn at their own x offsets or the columns collapse
+/// ("JV EpisodeWord"). `gap_before` is the gap preceding this run,
+/// display px: the spacer width plus, when a space precedes the
+/// spacer, the word-spacing, one space advance and the
+/// letter-spacing residual (already text-layer scaled). The first
+/// run's gap is always 0.
+#[derive(Debug, Clone)]
+pub struct ScribdWordRun {
+    pub gap_before: f64,
+    pub text: String,
+}
+
 /// One text span at its original position (display px: the text-layer
 /// scale is already applied by `page_spans_from_html`). Drawn over the
 /// page image with the embedded font — real, searchable text.
@@ -115,6 +130,12 @@ pub struct ScribdTextSpan {
     pub color: (f64, f64, f64),
     /// CSS letter-spacing, display px (default 0).
     pub letter_spacing: f64,
+    /// Word runs split at `<span class=w>` spacers (table cells).
+    /// Empty for ordinary spans: the whole `text` is drawn at
+    /// (`left`, `top`). Non-empty: each run is drawn at its own x
+    /// (see `build_text_pdf`); `text` is then the runs joined
+    /// with single spaces.
+    pub word_runs: Vec<ScribdWordRun>,
 }
 
 /// One clipped window of a sprite, as placed on the page
@@ -567,6 +588,105 @@ fn parse_css_color(style: &str) -> (f64, f64, f64) {
     }
 }
 
+/// True when a span's inner HTML carries nested `<span class=l>`
+/// markers (plain `l`, not the numbered `l1`..`l12` selection
+/// markers): each carries an inline negative `margin-left` that
+/// cancels the outer span's `letter-spacing` — Scribd's way of
+/// justifying table-cell text. The PDF must not re-apply that
+/// letter-spacing as Tc or every character spreads apart
+/// ("J V 0 0 1   A b e t", doc 254039756). `re` matches
+/// `<span ... class=l` with a word boundary after the `l`, so
+/// `class=l6` markers do not count.
+fn has_l_span(inner: &str, re: &regex::Regex) -> bool {
+    re.is_match(inner)
+}
+
+/// Split one positioned span's inner HTML at `<span class=w>`
+/// word spacers (Scribd table cells: the words inside one cell are
+/// separated by fixed-width spacers instead of plain spaces).
+/// Returns word runs `(gap_before_display_px, text)` — the gap is
+/// the spacer width plus, when a space precedes the spacer, the
+/// word-spacing, one space advance (0.25em estimate: the web
+/// font's exact space advance is not in the HTML, and the spacer
+/// widths dominate the gap), and the letter-spacing residual
+/// (`ls_layer` + the margin of the innermost `<span class=l>`
+/// wrapping that space — the margins cancel the letter-spacing,
+/// but not always exactly: doc 254039756 rows 20/21 carry -30/-28
+/// against ls 22/20, a -8 residual that would otherwise shift the
+/// word a point too far right). Empty when the span has no spacers:
+/// the caller then draws it as one run. The runs' texts are the
+/// span's words with tags stripped; the spacer itself contributes
+/// no text. `w_re` matches a `<span ... class=w ... width:Wpx>`
+/// spacer (word boundary after `w`, so the empty `w7` markers do
+/// not count); `l_margin_re` captures the margin-left of an
+/// `<span class=l ...>` open tag.
+fn split_word_runs(
+    inner: &str,
+    size_layer: f64,
+    ws_layer: f64,
+    ls_layer: f64,
+    scale: f64,
+    w_re: &regex::Regex,
+    l_margin_re: &regex::Regex,
+) -> Vec<ScribdWordRun> {
+    let mut runs: Vec<ScribdWordRun> = Vec::new();
+    let mut seg_start = 0usize;
+    let mut pending_gap = 0.0f64;
+    let mut found = false;
+    for cap in w_re.captures_iter(inner) {
+        found = true;
+        let m = cap.get(0).expect("w-spacer match");
+        let seg = &inner[seg_start..m.start()];
+        let seg_text = decode_entities(&strip_tags(seg));
+        let space_before = seg_text.ends_with(char::is_whitespace);
+        let w: f64 = cap
+            .get(1)
+            .and_then(|v| v.as_str().parse().ok())
+            .unwrap_or(0.0);
+        let t = seg_text.trim().to_string();
+        if !t.is_empty() {
+            runs.push(ScribdWordRun {
+                gap_before: pending_gap,
+                text: t,
+            });
+            pending_gap = 0.0;
+        }
+        // Gap introduced by this spacer, carried to the next run.
+        pending_gap += w * scale;
+        if space_before {
+            // The space's own l-span margin (last <span class=l>
+            // open tag before the spacer) plus the outer
+            // letter-spacing is the residual the browser actually
+            // applies after the space; without it rows whose
+            // margin is not exactly -ls drift by that residual.
+            let margin_space: f64 = l_margin_re
+                .captures_iter(seg)
+                .filter_map(|c| c.get(1)?.as_str().parse().ok())
+                .last()
+                .unwrap_or(0.0);
+            pending_gap +=
+                (0.25 * size_layer + ws_layer + ls_layer + margin_space) * scale;
+        }
+        // The spacer is empty: skip past its closing tag.
+        seg_start = m.end();
+        if let Some(rel) = inner[seg_start..].find("</span>") {
+            seg_start += rel + 7;
+        }
+    }
+    if !found {
+        return Vec::new();
+    }
+    let tail = decode_entities(&strip_tags(&inner[seg_start..]));
+    let t = tail.trim().to_string();
+    if !t.is_empty() {
+        runs.push(ScribdWordRun {
+            gap_before: pending_gap,
+            text: t,
+        });
+    }
+    runs
+}
+
 /// Extract positioned text spans from one Scribd page's HTML (inline
 /// chunk or unwrapped JSONP). Each span sits inside a `<div
 /// class="ffN" style="font-size:NNpx">` wrapper (never nested); the
@@ -601,6 +721,30 @@ pub fn page_spans_from_html(page_html: &str, scale: f64) -> Vec<ScribdTextSpan> 
         return Vec::new();
     };
     let Ok(ls_re) = regex::Regex::new(r"letter-spacing\s*:\s*(-?[\d.]+)px") else {
+        return Vec::new();
+    };
+    let Ok(ws_re) = regex::Regex::new(r"word-spacing\s*:\s*(-?[\d.]+)px") else {
+        return Vec::new();
+    };
+    // Nested `<span class=l>` (inline negative margins cancel the
+    // outer letter-spacing) and `<span class=w ... width:Wpx>`
+    // word spacers (table cells). Both regexes use a word boundary
+    // after the class letter so the numbered `l1`..`l12` / `w1`..`w12`
+    // selection markers never match.
+    let Ok(l_re) = regex::Regex::new(r#"<span[^>]*class\s*=\s*["']?l\b"#) else {
+        return Vec::new();
+    };
+    let Ok(w_spacer_re) = regex::Regex::new(
+        r#"<span[^>]*class\s*=\s*["']?w\b[^>]*?width\s*:\s*([\d.]+)px"#,
+    ) else {
+        return Vec::new();
+    };
+    // Margin of an `<span class=l>` open tag: the innermost one
+    // wrapping the space before a w-spacer carries the
+    // letter-spacing residual (see `split_word_runs`).
+    let Ok(l_margin_re) = regex::Regex::new(
+        r#"<span[^>]*class\s*=\s*["']?l\b[^>]*margin-left\s*:\s*(-?[\d.]+)px"#,
+    ) else {
         return Vec::new();
     };
     // Font sizes by byte offset: the last <div ... font-size ...>
@@ -683,19 +827,43 @@ pub fn page_spans_from_html(page_html: &str, scale: f64) -> Vec<ScribdTextSpan> 
         let Some(size) = size else {
             return Vec::new();
         };
-        let text = decode_entities(&strip_tags(inner));
-        if text.trim().is_empty() {
+        let raw_text = decode_entities(&strip_tags(inner));
+        if raw_text.trim().is_empty() {
             pos = close_start + 7;
             continue;
         }
         let ls = num(&ls_re, attrs).unwrap_or(0.0);
+        let ws = num(&ws_re, attrs).unwrap_or(0.0);
+        // Table cells (doc 254039756): nested `<span class=l>`
+        // margins cancel the outer letter-spacing, and `<span
+        // class=w>` spacers are the real word gaps. Without this,
+        // the PDF re-applies the raw letter-spacing as Tc and
+        // drops the gaps, so "JV001 Abet" comes out letter-spaced
+        // and "JV EpisodeWord" runs together.
+        let letter_spacing = if has_l_span(inner, &l_re) {
+            0.0
+        } else {
+            ls * scale
+        };
+        let word_runs =
+            split_word_runs(inner, size, ws, ls, scale, &w_spacer_re, &l_margin_re);
+        let text = if word_runs.is_empty() {
+            raw_text
+        } else {
+            word_runs
+                .iter()
+                .map(|r| r.text.as_str())
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
         spans.push(ScribdTextSpan {
             left: left * scale,
             top: top * scale,
             font_size: size * scale,
             text,
             color: parse_css_color(attrs),
-            letter_spacing: ls * scale,
+            letter_spacing,
+            word_runs,
         });
         pos = close_start + 7;
     }
@@ -1161,21 +1329,43 @@ pub fn build_text_pdf(pages: &[ScribdPage]) -> anyhow::Result<Vec<u8>> {
         let scale = pw / page.width.max(1) as f64;
         if !page.spans.is_empty() {
             // Positioned mode: one PDF page, every span at its
-            // original place (x, baseline, size in points).
+            // original place (x, baseline, size in points). A span
+            // with word runs (table cell) draws each run at its own
+            // x: the run's x is the span's left plus the gaps and
+            // the measured widths of the runs before it, so the
+            // words land in their true columns.
             let mut pspans = Vec::new();
             for span in &page.spans {
                 let size = span.font_size * scale;
-                let x = span.left * scale;
                 let y = ph - (span.top + span.font_size * baseline_em) * scale;
-                let hex = font.encode_line(&span.text, &mut used);
-                pspans.push(PositionedSpan {
-                    x,
-                    y,
-                    size,
-                    color: span.color,
-                    tc: span.letter_spacing * scale,
-                    hex,
-                });
+                let tc = span.letter_spacing * scale;
+                if span.word_runs.is_empty() {
+                    let x = span.left * scale;
+                    let hex = font.encode_line(&span.text, &mut used);
+                    pspans.push(PositionedSpan {
+                        x,
+                        y,
+                        size,
+                        color: span.color,
+                        tc,
+                        hex,
+                    });
+                } else {
+                    let mut x = span.left * scale;
+                    for run in &span.word_runs {
+                        x += run.gap_before * scale;
+                        let hex = font.encode_line(&run.text, &mut used);
+                        pspans.push(PositionedSpan {
+                            x,
+                            y,
+                            size,
+                            color: span.color,
+                            tc,
+                            hex,
+                        });
+                        x += font.text_width_pt(&run.text, size);
+                    }
+                }
             }
             pdf_pages.push(PdfPageOut {
                 pw,
@@ -2263,6 +2453,127 @@ docManager.addPage({pageNum: 3, origWidth: 800, origHeight: 1000});</script>
     }
 
     #[test]
+    fn test_page_spans_table_cell() {
+        // Real table-cell span from doc 254039756 page 2 (nested
+        // `<span class=l>` markers, one `<span class=w>` spacer):
+        // the outer span's letter-spacing is cancelled by the
+        // nested margins, and the words are separated by the
+        // spacer — the PDF must draw the words at their true
+        // column positions with no letter spreading.
+        let html = r#"<div class="ff0" style="font-size:88px"><span class=a style="left:478px;top:1334px;word-spacing:265px;letter-spacing:37px">J<span class=l style="margin-left:-38px">V<span class=l style="margin-left:-37px">0<span class=l style="margin-left:-37px">0<span class=l style="margin-left:-38px">1 <span class=w style="width:262px"></span>A<span class=l style="margin-left:-38px">b<span class=l style="margin-left:-37px">e<span class=l style="margin-left:-37px">t</span></span></span></span></span></span></span></span></div>"#;
+        let spans = page_spans_from_html(html, 0.2);
+        assert_eq!(spans.len(), 1);
+        assert_eq!(spans[0].text, "JV001 Abet");
+        // Letter-spacing cancelled by the l margins (was 37px,
+        // which used to come out as Tc 4.88pt: "J V 0 0 1").
+        assert!((spans[0].letter_spacing - 0.0).abs() < 1e-9);
+        assert!((spans[0].left - 95.6).abs() < 1e-9);
+        assert!((spans[0].top - 266.8).abs() < 1e-9);
+        assert!((spans[0].font_size - 17.6).abs() < 1e-9);
+        assert_eq!(spans[0].word_runs.len(), 2);
+        assert_eq!(spans[0].word_runs[0].text, "JV001");
+        assert!((spans[0].word_runs[0].gap_before - 0.0).abs() < 1e-9);
+        assert_eq!(spans[0].word_runs[1].text, "Abet");
+        // Gap = (262 + 0.25*88 + 265 + 37 - 38) * 0.2 = 109.6
+        // display px: spacer + space + word-spacing + the
+        // letter-spacing residual (ls + innermost l margin).
+        assert!((spans[0].word_runs[1].gap_before - 109.6).abs() < 1e-9);
+
+        // Real header span (same page): two spacers. The first
+        // follows "Episode" with no space before it, so its gap
+        // is the spacer width only; the second follows "Word "
+        // with a space before it, so its gap also carries the
+        // space advance + word-spacing + residual.
+        let header = r#"<div class="ff0" style="font-size:86px"><span class=a style="left:478px;top:1039px;word-spacing:96px;letter-spacing:13px">J<span class=l style="margin-left:-14px">V <span class=l style="margin-left:-122px">E<span class=l style="margin-left:-13px">p<span class=l style="margin-left:-13px">i<span class=l style="margin-left:-13px">s<span class=l style="margin-left:-14px">o<span class=l style="margin-left:-13px">d<span class=l style="margin-left:-14px">e<span class=w style="width:381px"></span>W<span class=l style="margin-left:-16px">o<span class=l style="margin-left:-13px">r<span class=l style="margin-left:-14px">d <span class=w style="width:436px"></span>P<span class=l style="margin-left:-14px">a<span class=l style="margin-left:-13px">r<span class=l style="margin-left:-14px">t <span class=l style="margin-left:-122px">o<span class=l style="margin-left:-14px">f <span class=l style="margin-left:-122px">w<span class=l style="margin-left:-13px">h<span class=l style="margin-left:-14px">i<span class=l style="margin-left:-13px">c<span class=l style="margin-left:-13px">h <span class=l style="margin-left:-122px">v<span class=l style="margin-left:-14px">o<span class=l style="margin-left:-13px">l<span class=l style="margin-left:-13px">u<span class=l style="margin-left:-13px">m<span class=l style="margin-left:-15px">e<span class=l style="margin-left:-13px">:</span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></div>"#;
+        let spans = page_spans_from_html(header, 0.2);
+        assert_eq!(spans.len(), 1);
+        assert_eq!(spans[0].word_runs.len(), 3);
+        assert_eq!(spans[0].word_runs[0].text, "JV Episode");
+        assert_eq!(spans[0].word_runs[1].text, "Word");
+        assert_eq!(spans[0].word_runs[2].text, "Part of which volume:");
+        // Gap 1 = 381 * 0.2 = 76.2 (no space before the spacer).
+        assert!((spans[0].word_runs[1].gap_before - 76.2).abs() < 1e-9);
+        // Gap 2 = (436 + 0.25*86 + 96 + 13 - 14) * 0.2 = 110.5.
+        assert!((spans[0].word_runs[2].gap_before - 110.5).abs() < 1e-9);
+        assert!((spans[0].letter_spacing - 0.0).abs() < 1e-9);
+
+        // A plain span (no l/w markers) keeps its letter-spacing
+        // and has no word runs — existing behaviour unchanged.
+        let plain = r#"<div class="ff3" style="font-size:95px"><span class=a style="left:530px;top:734px;letter-spacing:-1px">Hi</span></div>"#;
+        let spans = page_spans_from_html(plain, 0.2);
+        assert_eq!(spans.len(), 1);
+        assert!((spans[0].letter_spacing - (-0.2)).abs() < 1e-9);
+        assert!(spans[0].word_runs.is_empty());
+    }
+
+    #[test]
+    fn test_build_text_pdf_word_runs() {
+        // A table-cell span draws each word run at its own x (same
+        // baseline, Tc 0): the words land in their true columns
+        // instead of collapsing into one run.
+        let font = EmbeddedFont::parse(EMBEDDED_FONT).expect("font parses");
+        let s = 595.0 / 902.0;
+        let ph = 1167.0 * s;
+        let size_pt = 17.6 * s;
+        let y = ph - (266.8 + 17.6 * 0.8675) * s;
+        let page = ScribdPage {
+            num: 1,
+            width: 902,
+            height: 1167,
+            text: "JV001 Abet".to_string(),
+            has_text: true,
+            spans: vec![ScribdTextSpan {
+                left: 95.6,
+                top: 266.8,
+                font_size: 17.6,
+                text: "JV001 Abet".to_string(),
+                color: (0.0, 0.0, 0.0),
+                letter_spacing: 0.0,
+                word_runs: vec![
+                    ScribdWordRun {
+                        gap_before: 0.0,
+                        text: "JV001".to_string(),
+                    },
+                    ScribdWordRun {
+                        gap_before: 109.6,
+                        text: "Abet".to_string(),
+                    },
+                ],
+            }],
+            images: vec![],
+        };
+        let pdf = build_text_pdf(&[page]).expect("pdf builds");
+        let text = String::from_utf8_lossy(&pdf);
+        assert!(text.contains("/Count 1"));
+        // Run 1 at the span's left, Tc 0.
+        let run1 = format!(
+            "/F1 {} Tf {} Tc {} {} {} rg 1 0 0 1 {} {} Tm ",
+            pdf_num(size_pt),
+            pdf_num(0.0),
+            pdf_num(0.0),
+            pdf_num(0.0),
+            pdf_num(0.0),
+            pdf_num(95.6 * s),
+            pdf_num(y),
+        );
+        assert!(text.contains(&run1));
+        // Run 2 on the same baseline, x = (left + gap) * s plus the
+        // measured width of run 1 (already in points).
+        let x2 = (95.6 + 109.6) * s + font.text_width_pt("JV001", size_pt);
+        let run2 = format!(
+            "/F1 {} Tf {} Tc {} {} {} rg 1 0 0 1 {} {} Tm ",
+            pdf_num(size_pt),
+            pdf_num(0.0),
+            pdf_num(0.0),
+            pdf_num(0.0),
+            pdf_num(0.0),
+            pdf_num(x2),
+            pdf_num(y),
+        );
+        assert!(text.contains(&run2));
+    }
+
+    #[test]
     fn test_build_text_pdf_positioned() {
         // Baseline factor from the embedded font (ascent 1000,
         // descent -265, upem 1000, line-height 1em -> 0.8675).
@@ -2283,6 +2594,7 @@ docManager.addPage({pageNum: 3, origWidth: 800, origHeight: 1000});</script>
                     text: "Hello".to_string(),
                     color: (54.0 / 255.0, 95.0 / 255.0, 145.0 / 255.0),
                     letter_spacing: 0.0,
+                    word_runs: vec![],
                 },
                 ScribdTextSpan {
                     left: 200.0,
@@ -2291,6 +2603,7 @@ docManager.addPage({pageNum: 3, origWidth: 800, origHeight: 1000});</script>
                     text: "World".to_string(),
                     color: (0.0, 0.0, 0.0),
                     letter_spacing: -0.2,
+                    word_runs: vec![],
                 },
             ],
             images: vec![],
@@ -2353,6 +2666,7 @@ docManager.addPage({pageNum: 3, origWidth: 800, origHeight: 1000});</script>
                 text: "Hi".to_string(),
                 color: (0.0, 0.0, 0.0),
                 letter_spacing: 0.0,
+                word_runs: vec![],
             }],
             images: vec![ScribdPageImage {
                 width: 2,
