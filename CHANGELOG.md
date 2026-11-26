@@ -19,6 +19,7 @@ bản hiện tại trong cùng commit đó.
 - Tab “Bạn bè” trong Mạng xã hội: xem danh sách bạn bè (Facebook) / following và followers (Instagram) kèm ảnh đại diện và bài đăng của từng người, chọn từng bài tải hoặc tải hết luôn; cookie đọc từ kho chung (tiện ích tự bắt hoặc đăng nhập trong app).
 - Nút “Cài tiện ích” trong Cài đặt: app tự chuẩn bị sẵn thư mục tiện ích (bản portable tự tải file từ bản release trên GitHub) rồi mở sẵn trang chrome://extensions, chỉ cần bật Developer Mode rồi bấm “Load unpacked” chọn thư mục là xong; tiện ích đã ghép nối thì hiện “Đã cài đặt”.
 - Sidebar: mục Plugin chuyển xuống giữa (sau các tab trang chủ, trước phần Ứng dụng), phần Ứng dụng và Cài đặt xuống dưới cuối; mục đang chọn có viên thuốc trượt theo với hiệu ứng nảy khi chuyển tab.
+- Trình tạo keys.ts giờ chỉ ghi file khi nội dung thật sự đổi (so sánh đã chuẩn hoá xuống dòng): Vite chạy trình tạo này mỗi lần mở app, trước đây nó ghi lại file dù không đổi gì nên keys.ts cứ hiện là file đã sửa trên máy Windows.
 
 ## [1.0.0] - 2026-11-26
 

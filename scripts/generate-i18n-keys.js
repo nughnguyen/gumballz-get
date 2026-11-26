@@ -81,8 +81,21 @@ export type TranslationKeys =\n`;
   output += "  // Allows dynamic/computed keys while preserving autocomplete for known keys\n";
   output += "  | (string & {});\n";
 
-  fs.writeFileSync(outputFile, output, "utf-8");
-  console.log(`Generated ${keys.length} translation keys in keys.ts`);
+  // Only write when the content actually changed (normalising line
+  // endings): Vite runs this generator on every dev/build start, and a
+  // needless rewrite dirties keys.ts in git on Windows checkouts.
+  let existing = null;
+  try {
+    existing = fs.readFileSync(outputFile, "utf-8").replace(/\r\n/g, "\n");
+  } catch {
+    existing = null;
+  }
+  if (existing === output) {
+    console.log(`keys.ts is up to date (${keys.length} translation keys)`);
+  } else {
+    fs.writeFileSync(outputFile, output, "utf-8");
+    console.log(`Generated ${keys.length} translation keys in keys.ts`);
+  }
 
   const otherLocales = fs
     .readdirSync(i18nDir)
