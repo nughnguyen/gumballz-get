@@ -1844,7 +1844,7 @@ fn docx_encode_image(image: &ScribdPageImage) -> Option<(Vec<u8>, &'static str, 
         }
         ScribdImageKind::Rgba(rgba) => {
             let mut buf = Vec::new();
-            let mut enc = image::codecs::png::PngEncoder::new(&mut buf);
+            let enc = image::codecs::png::PngEncoder::new(&mut buf);
             enc.write_image(
                 rgba,
                 image.width,
