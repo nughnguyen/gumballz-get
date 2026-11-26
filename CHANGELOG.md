@@ -23,6 +23,7 @@ bản hiện tại trong cùng commit đó.
 - Sửa lỗi popup Cài đặt hiệu năng Telegram (và mọi popup khác) trôi khỏi màn hình khi cuộn trang: khung cuộn chính có `transform: translateZ(0)` khiến popup `position: fixed` bị neo theo khung cuộn thay vì màn hình — đã bỏ transform ở cả hai chỗ, popup giờ dính chặt màn hình khi cuộn.
 - Dán link Scribd giờ hiện ảnh thumbnail là trang đầu của tài liệu trong thẻ xem trước, thay cho ảnh mặc định; tài liệu chỉ có chữ thì vẫn hiện ảnh mặc định như trước.
 - Hiện tốc độ tải thật và số byte đã tải: Scribd, Google Docs/Slides, Instagram, TikTok, X, Threads, Bluesky, Reddit, torrent, P2P, Telegram và gallery-dl giờ báo số byte thật tải về để app tính tốc độ; lúc biên dịch file thì tốc độ về 0 là đúng vì không tải mạng nữa.
+- Thiết kế lại mục Giới thiệu trong app: bố cục lưới Bento mới (hero, 3 ô tính năng, 3 ô dẫn tới Nhật ký thay đổi / Dự án / Điều khoản, credits và donate xếp cạnh nhau), giữ nguyên mọi link và thông tin phiên bản.
 
 ## [1.0.0] - 2026-11-26
 
