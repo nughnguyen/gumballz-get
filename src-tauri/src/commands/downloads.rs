@@ -112,18 +112,134 @@ pub async fn detect_platform(url: String) -> Result<PlatformInfo, String> {
 
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
-pub async fn get_media_formats(url: String) -> Result<Vec<FormatInfo>, String> {
+pub async fn get_media_formats(
+    state: tauri::State<'_, AppState>,
+    url: String,
+) -> Result<Vec<FormatInfo>, String> {
     let _timer_start = std::time::Instant::now();
-    let ytdlp_path = ytdlp::ensure_ytdlp()
-        .await
-        .map_err(|e| format!("yt-dlp unavailable: {}", e))?;
 
-    let json = ytdlp::get_video_info(&ytdlp_path, &url, &[])
-        .await
-        .map_err(|e| format!("Failed to get formats: {}", e))?;
+    // yt-dlp first, best effort: it rejects some links outright (TikTok
+    // /photo/ URLs are "Unsupported URL" to every yt-dlp version), and it
+    // cannot express the watermark choice or the photo list.
+    let mut formats: Vec<FormatInfo> = Vec::new();
+    let mut ytdlp_accepted = false;
+    if let Ok(ytdlp_path) = ytdlp::ensure_ytdlp().await {
+        if let Ok(json) = ytdlp::get_video_info(&ytdlp_path, &url, &[]).await {
+            formats = ytdlp::parse_formats(&json);
+            ytdlp_accepted = true;
+        }
+    }
+
+    // Native platform qualities: the only source for TikTok photo posts,
+    // and the source of the watermark / audio choices for TikTok videos.
+    let is_tiktok = matches!(Platform::from_url(&url), Some(Platform::TikTok));
+    if formats.is_empty() || is_tiktok {
+        if let Some(info) = native_info_for_formats(&state, &url).await {
+            formats.extend(info.available_qualities.iter().map(native_quality_to_format));
+        }
+    }
+
+    if formats.is_empty() {
+        // yt-dlp accepted the URL but found no formats: keep the old
+        // "no formats" state instead of calling the link unsupported.
+        if ytdlp_accepted {
+            return Ok(formats);
+        }
+        return Err("Unsupported URL. Check that the link is correct.".to_string());
+    }
 
     tracing::debug!("[perf] get_media_formats took {:?}", _timer_start.elapsed());
-    Ok(ytdlp::parse_formats(&json))
+    Ok(formats)
+}
+
+/// Probe result for the format list: the prefetched (cached) info when the
+/// download box already probed this URL, else a fresh native probe.
+#[cfg(not(target_os = "android"))]
+async fn native_info_for_formats(
+    state: &tauri::State<'_, AppState>,
+    url: &str,
+) -> Option<MediaInfo> {
+    if let Some(info) = queue::try_get_cached_info(url).await {
+        return Some(info);
+    }
+    let resolved = crate::core::url_resolver::resolve_downloader(&state.registry, url).await?;
+    resolved.downloader.get_media_info(url).await.ok()
+}
+
+/// One native quality (photo / video / audio / slideshow) as a format row,
+/// so the format list shows the same choices the download box offers.
+#[cfg(not(target_os = "android"))]
+fn native_quality_to_format(q: &VideoQuality) -> FormatInfo {
+    let (ext, has_video, has_audio, vcodec, acodec, note) = match q.format.as_str() {
+        "jpg" | "jpeg" | "png" | "webp" => (
+            q.format.clone(),
+            false,
+            false,
+            None,
+            None,
+            Some("Photo".to_string()),
+        ),
+        "mp3" => (
+            "mp3".to_string(),
+            false,
+            true,
+            None,
+            Some("mp3".to_string()),
+            Some("Audio".to_string()),
+        ),
+        "tiktok_direct_wm" => (
+            "mp4".to_string(),
+            true,
+            true,
+            Some("h264".to_string()),
+            Some("aac".to_string()),
+            Some("Video (with watermark)".to_string()),
+        ),
+        "tiktok_direct_no_wm" => (
+            "mp4".to_string(),
+            true,
+            true,
+            Some("h264".to_string()),
+            Some("aac".to_string()),
+            Some("Video (no watermark)".to_string()),
+        ),
+        "tiktok_slideshow" => (
+            "mp4".to_string(),
+            true,
+            true,
+            Some("h264".to_string()),
+            Some("aac".to_string()),
+            Some("Slideshow video (no watermark)".to_string()),
+        ),
+        "tiktok_direct" => (
+            "mp4".to_string(),
+            true,
+            true,
+            Some("h264".to_string()),
+            Some("aac".to_string()),
+            Some("Video".to_string()),
+        ),
+        other => (other.to_string(), false, false, None, None, None),
+    };
+    FormatInfo {
+        format_id: q.label.clone(),
+        ext,
+        resolution: if q.width > 0 && q.height > 0 {
+            Some(format!("{}x{}", q.width, q.height))
+        } else {
+            None
+        },
+        width: if q.width > 0 { Some(q.width) } else { None },
+        height: if q.height > 0 { Some(q.height) } else { None },
+        fps: None,
+        vcodec,
+        acodec,
+        filesize: None,
+        tbr: None,
+        has_video,
+        has_audio,
+        format_note: note,
+    }
 }
 
 #[cfg(not(target_os = "android"))]

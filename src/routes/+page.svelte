@@ -29,6 +29,7 @@
   import OutputLocationPicker from "$components/downloadbox/OutputLocationPicker.svelte";
   import DownloadboxAdvanced from "$components/downloadbox/DownloadboxAdvanced.svelte";
   import MediaPreview from "$components/downloadbox/MediaPreview.svelte";
+  import PhotoList from "$components/downloadbox/PhotoList.svelte";
   import BatchDownload from "$components/downloadbox/BatchDownload.svelte";
   import SearchResults from "$components/downloadbox/SearchResults.svelte";
   import P2pSendDialog from "$components/p2p/P2pSendDialog.svelte";
@@ -681,6 +682,13 @@
     selectedFormatId = formatId;
   }
 
+  /** Photo list / slideshow / audio option: download just that item
+   * (label), or the whole photo post when label is null. */
+  function downloadPhotoOption(label: string | null) {
+    selectedFormatId = label;
+    void handleAction();
+  }
+
   function clearFormatSelection() {
     selectedFormatId = null;
   }
@@ -1196,6 +1204,9 @@
                 onPresetMusic={presetMusic}
               />
               <MediaPreview bind:mediaPreview bind:imageLoading={previewImageLoading} />
+              {#if mediaPreview && (mediaPreview.media_type === "photo" || mediaPreview.media_type === "carousel")}
+                <PhotoList qualities={mediaPreview.qualities} onDownload={downloadPhotoOption} />
+              {/if}
               {#if downloadboxState.info.content_type === "playlist" && videoOrList}
                 <VideoOrListChoice
                   choice={listChoice}

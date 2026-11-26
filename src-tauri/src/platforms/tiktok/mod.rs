@@ -218,7 +218,13 @@ impl TikTokDownloader {
             .to_string()
     }
 
-    fn extract_video_url(detail: &serde_json::Value) -> Option<String> {
+    fn extract_video_urls(detail: &serde_json::Value) -> (Option<String>, Option<String>) {
+        (Self::extract_play_addr(detail), Self::extract_download_addr(detail))
+    }
+
+    /// Watermarked video URL (playAddr). TikTok's player URL carries the
+    /// watermark; the clean URL lives in downloadAddr (see below).
+    fn extract_play_addr(detail: &serde_json::Value) -> Option<String> {
         if let Some(play_addr) = detail.pointer("/video/playAddr") {
             if let Some(url) = play_addr.as_str() {
                 if Self::is_valid_play_addr(url) {
@@ -235,14 +241,6 @@ impl TikTokDownloader {
                             return Some(url.to_string());
                         }
                     }
-                }
-            }
-        }
-
-        if let Some(download_addr) = detail.pointer("/video/downloadAddr") {
-            if let Some(url) = download_addr.as_str() {
-                if Self::is_valid_play_addr(url) {
-                    return Some(url.to_string());
                 }
             }
         }
@@ -270,20 +268,39 @@ impl TikTokDownloader {
         None
     }
 
-    fn extract_image_urls(detail: &serde_json::Value) -> Option<Vec<String>> {
+    /// Watermark-free video URL (downloadAddr). Empty for most photo posts.
+    fn extract_download_addr(detail: &serde_json::Value) -> Option<String> {
+        detail
+            .pointer("/video/downloadAddr")
+            .and_then(|v| v.as_str())
+            .filter(|u| Self::is_valid_play_addr(u))
+            .map(|s| s.to_string())
+    }
+
+    fn extract_image_urls(detail: &serde_json::Value) -> Option<Vec<(String, u32, u32)>> {
         let images = detail
             .pointer("/imagePost/images")
             .and_then(|v| v.as_array())?;
 
-        let urls: Vec<String> = images
+        let urls: Vec<(String, u32, u32)> = images
             .iter()
             .filter_map(|img| {
                 let url_list = img.pointer("/imageURL/urlList")?.as_array()?;
-                url_list
+                let strs: Vec<&str> = url_list.iter().filter_map(|u| u.as_str()).collect();
+                let url = strs
                     .iter()
-                    .filter_map(|u| u.as_str())
                     .find(|u| u.contains(".jpeg"))
-                    .map(|u| u.to_string())
+                    .or_else(|| strs.iter().find(|u| u.starts_with("http")))
+                    .map(|u| u.to_string())?;
+                let width = img
+                    .get("imageWidth")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0) as u32;
+                let height = img
+                    .get("imageHeight")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0) as u32;
+                Some((url, width, height))
             })
             .collect();
 
@@ -294,17 +311,32 @@ impl TikTokDownloader {
         Some(urls)
     }
 
+    /// yt-dlp rejects /photo/ URLs ("Unsupported URL") but accepts the
+    /// /video/ form of the same post id, returning its metadata + audio.
+    fn ytdlp_url(url: &str) -> String {
+        if let Ok(mut parsed) = url::Url::parse(url) {
+            if parsed.path().contains("/photo/") {
+                let new_path = parsed.path().replace("/photo/", "/video/");
+                parsed.set_path(&new_path);
+                return parsed.to_string();
+            }
+        }
+        url.to_string()
+    }
+
     async fn fallback_ytdlp(&self, url: &str) -> anyhow::Result<MediaInfo> {
         let ytdlp_path = crate::core::ytdlp::ensure_ytdlp().await?;
         let extra_flags = vec![
             "--referer".to_string(),
             "https://www.tiktok.com/".to_string(),
         ];
-        let json = crate::core::ytdlp::get_video_info(&ytdlp_path, url, &extra_flags).await?;
+        let probe_url = Self::ytdlp_url(url);
+        let json =
+            crate::core::ytdlp::get_video_info(&ytdlp_path, &probe_url, &extra_flags).await?;
         let mut info =
             crate::platforms::generic_ytdlp::GenericYtdlpDownloader::parse_video_info(&json)?;
         for q in &mut info.available_qualities {
-            q.url = url.to_string();
+            q.url = probe_url.clone();
             q.format = "ytdlp".to_string();
         }
         Ok(info)
@@ -324,7 +356,9 @@ impl TikTokDownloader {
             "https://www.tiktok.com/".to_string(),
         ];
 
-        let json = crate::core::ytdlp::get_video_info(&ytdlp_path, url, &extra_flags).await?;
+        let probe_url = Self::ytdlp_url(url);
+        let json =
+            crate::core::ytdlp::get_video_info(&ytdlp_path, &probe_url, &extra_flags).await?;
 
         let title = json
             .get("title")
@@ -356,7 +390,7 @@ impl TikTokDownloader {
                 label: "original".to_string(),
                 width: 0,
                 height: 0,
-                url: url.to_string(),
+                url: probe_url,
                 format: "ytdlp".to_string(),
             }],
             media_type: MediaType::Video,
@@ -374,6 +408,304 @@ impl TikTokDownloader {
 
     fn extract_duration(detail: &serde_json::Value) -> Option<f64> {
         detail.pointer("/video/duration").and_then(|v| v.as_f64())
+    }
+
+    /// The quality the user picked in the format list / photo list, or the
+    /// audio track for the Music preset. None = download the whole post as
+    /// the media-type arms do today.
+    fn selected_quality<'a>(
+        info: &'a MediaInfo,
+        opts: &DownloadOptions,
+    ) -> Option<&'a VideoQuality> {
+        if let Some(fid) = &opts.format_id {
+            if let Some(q) = info.available_qualities.iter().find(|q| &q.label == fid) {
+                return Some(q);
+            }
+        }
+        if opts.download_mode.as_deref() == Some("audio") {
+            if let Some(q) = info
+                .available_qualities
+                .iter()
+                .find(|q| q.format == "mp3")
+            {
+                return Some(q);
+            }
+        }
+        None
+    }
+
+    async fn download_quality(
+        &self,
+        info: &MediaInfo,
+        quality: &VideoQuality,
+        opts: &DownloadOptions,
+        headers: &HeaderMap,
+        progress: mpsc::Sender<ProgressUpdate>,
+    ) -> anyhow::Result<DownloadResult> {
+        let title = sanitize_filename::sanitize(&info.title);
+        match quality.format.as_str() {
+            "jpg" | "jpeg" | "png" | "webp" => {
+                let total_photos = info
+                    .available_qualities
+                    .iter()
+                    .filter(|q| {
+                        matches!(q.format.as_str(), "jpg" | "jpeg" | "png" | "webp")
+                    })
+                    .count();
+                let n = quality
+                    .label
+                    .strip_prefix("photo_")
+                    .and_then(|s| s.parse::<usize>().ok())
+                    .unwrap_or(1);
+                let filename = if total_photos <= 1 {
+                    format!("{}.{}", title, quality.format)
+                } else {
+                    format!("{}_photo_{}.{}", title, n, quality.format)
+                };
+                let output = opts.output_dir.join(&filename);
+                let (tx, _rx) = mpsc::channel(8);
+                let bytes = direct_downloader::download_direct_with_headers(
+                    &self.client,
+                    &quality.url,
+                    &output,
+                    tx,
+                    Some(headers.clone()),
+                    Some(&opts.cancel_token),
+                )
+                .await?;
+                let _ = progress.send(ProgressUpdate::percent(100.0)).await;
+                Ok(DownloadResult {
+                    file_path: output,
+                    file_size_bytes: bytes,
+                    duration_seconds: 0.0,
+                    torrent_id: None,
+                })
+            }
+            "mp3" => {
+                let filename = format!("{}.mp3", title);
+                let output = opts.output_dir.join(&filename);
+                let bytes = direct_downloader::download_direct_with_headers(
+                    &self.client,
+                    &quality.url,
+                    &output,
+                    progress,
+                    Some(headers.clone()),
+                    Some(&opts.cancel_token),
+                )
+                .await?;
+                Ok(DownloadResult {
+                    file_path: output,
+                    file_size_bytes: bytes,
+                    duration_seconds: 0.0,
+                    torrent_id: None,
+                })
+            }
+            "tiktok_direct" | "tiktok_direct_wm" | "tiktok_direct_no_wm" => {
+                let filename = if quality.label.starts_with("slideshow") {
+                    format!("{}_slideshow.mp4", title)
+                } else {
+                    format!("{}.mp4", title)
+                };
+                let output = opts.output_dir.join(&filename);
+                self.download_direct_video(
+                    &quality.url,
+                    &output,
+                    info.duration_seconds.unwrap_or(0.0),
+                    headers,
+                    opts,
+                    progress,
+                )
+                .await
+            }
+            "tiktok_slideshow" => {
+                self.download_slideshow(info, opts, headers, progress).await
+            }
+            other => Err(anyhow!("Unsupported quality format: {}", other)),
+        }
+    }
+
+    /// Direct video download with TikTok headers, falling back to yt-dlp
+    /// when the direct fetch fails (same as the Video arm always did).
+    async fn download_direct_video(
+        &self,
+        url: &str,
+        output: &std::path::Path,
+        duration_seconds: f64,
+        headers: &HeaderMap,
+        opts: &DownloadOptions,
+        progress: mpsc::Sender<ProgressUpdate>,
+    ) -> anyhow::Result<DownloadResult> {
+        let result = direct_downloader::download_direct_with_headers(
+            &self.client,
+            url,
+            output,
+            progress.clone(),
+            Some(headers.clone()),
+            Some(&opts.cancel_token),
+        )
+        .await;
+
+        match result {
+            Ok(bytes) => Ok(DownloadResult {
+                file_path: output.to_path_buf(),
+                file_size_bytes: bytes,
+                duration_seconds,
+                torrent_id: None,
+            }),
+            Err(e) => {
+                tracing::warn!(
+                    "[tiktok] direct download failed: {}, falling back to yt-dlp",
+                    e
+                );
+                let _ = tokio::fs::remove_file(output).await;
+                let ytdlp_path = match &opts.ytdlp_path {
+                    Some(p) => p.clone(),
+                    None => crate::core::ytdlp::find_ytdlp_cached()
+                        .await
+                        .ok_or_else(|| anyhow!("yt-dlp not found"))?,
+                };
+                crate::core::ytdlp::download_video(
+                    &ytdlp_path,
+                    url,
+                    &opts.output_dir,
+                    None,
+                    progress,
+                    opts.download_mode.as_deref(),
+                    None,
+                    opts.filename_template.as_deref(),
+                    opts.referer.as_deref().or(Some("https://www.tiktok.com/")),
+                    opts.cancel_token.clone(),
+                    None,
+                    opts.concurrent_fragments,
+                    false,
+                    &[],
+                    opts.audio_format.as_deref(),
+                )
+                .await
+            }
+        }
+    }
+
+    /// Slideshow video for a photo post: fetch the photos + music, then
+    /// render them to MP4 with ffmpeg (each photo an equal slice of the
+    /// music). No watermark by construction — the source photos are clean.
+    async fn download_slideshow(
+        &self,
+        info: &MediaInfo,
+        opts: &DownloadOptions,
+        headers: &HeaderMap,
+        progress: mpsc::Sender<ProgressUpdate>,
+    ) -> anyhow::Result<DownloadResult> {
+        let photos: Vec<&VideoQuality> = info
+            .available_qualities
+            .iter()
+            .filter(|q| matches!(q.format.as_str(), "jpg" | "jpeg" | "png" | "webp"))
+            .collect();
+        if photos.is_empty() {
+            return Err(anyhow!("No photos to build a slideshow"));
+        }
+        let music = info
+            .available_qualities
+            .iter()
+            .find(|q| q.format == "mp3");
+
+        let tmp = std::env::temp_dir().join(format!(
+            "gumballz-slideshow-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        tokio::fs::create_dir_all(&tmp).await?;
+        let result = self
+            .build_slideshow(info, &photos, music, &tmp, opts, headers, progress)
+            .await;
+        let _ = tokio::fs::remove_dir_all(&tmp).await;
+        result
+    }
+
+    async fn build_slideshow(
+        &self,
+        info: &MediaInfo,
+        photos: &[&VideoQuality],
+        music: Option<&VideoQuality>,
+        tmp: &std::path::Path,
+        opts: &DownloadOptions,
+        headers: &HeaderMap,
+        progress: mpsc::Sender<ProgressUpdate>,
+    ) -> anyhow::Result<DownloadResult> {
+        let total = photos.len() + usize::from(music.is_some());
+        let mut done = 0usize;
+        let mut image_paths = Vec::with_capacity(photos.len());
+        for (i, q) in photos.iter().enumerate() {
+            let path = tmp.join(format!("img{:03}.jpg", i + 1));
+            let (tx, _rx) = mpsc::channel(8);
+            direct_downloader::download_direct_with_headers(
+                &self.client,
+                &q.url,
+                &path,
+                tx,
+                Some(headers.clone()),
+                Some(&opts.cancel_token),
+            )
+            .await?;
+            image_paths.push(path);
+            done += 1;
+            let _ = progress
+                .send(ProgressUpdate::percent(done as f64 / total as f64 * 60.0))
+                .await;
+        }
+
+        let mut music_path = None;
+        if let Some(m) = music {
+            let path = tmp.join("music.mp3");
+            let (tx, _rx) = mpsc::channel(8);
+            direct_downloader::download_direct_with_headers(
+                &self.client,
+                &m.url,
+                &path,
+                tx,
+                Some(headers.clone()),
+                Some(&opts.cancel_token),
+            )
+            .await?;
+            music_path = Some(path);
+            done += 1;
+            let _ = progress
+                .send(ProgressUpdate::percent(done as f64 / total as f64 * 60.0))
+                .await;
+        }
+
+        let (w, h) = photos
+            .first()
+            .map(|q| (q.width, q.height))
+            .unwrap_or((1080, 1920));
+        let filename = format!(
+            "{}_slideshow.mp4",
+            sanitize_filename::sanitize(&info.title)
+        );
+        let output = opts.output_dir.join(&filename);
+        let _ = progress.send(ProgressUpdate::percent(75.0)).await;
+        crate::core::media_processor::MediaProcessor::slideshow_from_images(
+            &image_paths,
+            music_path.as_deref(),
+            w,
+            h,
+            &output.to_string_lossy(),
+        )
+        .await?;
+        let size = tokio::fs::metadata(&output)
+            .await
+            .map(|m| m.len())
+            .unwrap_or(0);
+        let _ = progress.send(ProgressUpdate::percent(100.0)).await;
+        Ok(DownloadResult {
+            file_path: output,
+            file_size_bytes: size,
+            duration_seconds: 0.0,
+            torrent_id: None,
+        })
     }
 }
 
@@ -425,57 +757,126 @@ impl PlatformDownloader for TikTokDownloader {
             post_id
         );
 
+        let (video_wm, video_no_wm) = Self::extract_video_urls(&detail);
+        let music_url = Self::extract_music_url(&detail);
+
         if let Some(image_urls) = Self::extract_image_urls(&detail) {
+            let (first_w, first_h) = image_urls
+                .first()
+                .map(|(_, w, h)| (*w, *h))
+                .unwrap_or((0, 0));
             let media_type = if image_urls.len() == 1 {
                 MediaType::Photo
             } else {
                 MediaType::Carousel
             };
 
-            let qualities: Vec<VideoQuality> = image_urls
+            let mut qualities: Vec<VideoQuality> = image_urls
                 .iter()
                 .enumerate()
-                .map(|(i, u)| VideoQuality {
+                .map(|(i, (u, w, h))| VideoQuality {
                     label: format!("photo_{}", i + 1),
-                    width: 0,
-                    height: 0,
+                    width: *w,
+                    height: *h,
                     url: u.clone(),
                     format: "jpg".to_string(),
                 })
                 .collect();
+
+            // Slideshow video, like TikTok plays the post: TikTok's own
+            // render when it serves one, otherwise synthesized from the
+            // photos + music at download time (no watermark by construction).
+            if let Some(no_wm) = &video_no_wm {
+                qualities.push(VideoQuality {
+                    label: "slideshow".to_string(),
+                    width: first_w,
+                    height: first_h,
+                    url: no_wm.clone(),
+                    format: "tiktok_direct_no_wm".to_string(),
+                });
+            } else if let Some(wm) = &video_wm {
+                qualities.push(VideoQuality {
+                    label: "slideshow_wm".to_string(),
+                    width: first_w,
+                    height: first_h,
+                    url: wm.clone(),
+                    format: "tiktok_direct_wm".to_string(),
+                });
+            } else {
+                qualities.push(VideoQuality {
+                    label: "slideshow".to_string(),
+                    width: first_w,
+                    height: first_h,
+                    url: String::new(),
+                    format: "tiktok_slideshow".to_string(),
+                });
+            }
+
+            if let Some(m) = &music_url {
+                qualities.push(VideoQuality {
+                    label: "audio".to_string(),
+                    width: 0,
+                    height: 0,
+                    url: m.clone(),
+                    format: "mp3".to_string(),
+                });
+            }
 
             return Ok(MediaInfo {
                 title: filename_base,
                 author,
                 platform: "tiktok".to_string(),
                 duration_seconds: None,
-                thumbnail_url: None,
+                thumbnail_url: image_urls.first().map(|(u, _, _)| u.clone()),
                 available_qualities: qualities,
                 media_type,
                 file_size_bytes: None,
             });
         }
 
-        if let Some(video_url) = Self::extract_video_url(&detail) {
+        if video_wm.is_some() || video_no_wm.is_some() {
+            let mut qualities: Vec<VideoQuality> = Vec::new();
+            if let Some(wm) = &video_wm {
+                qualities.push(VideoQuality {
+                    label: "video_wm".to_string(),
+                    width: 0,
+                    height: 0,
+                    url: wm.clone(),
+                    format: "tiktok_direct_wm".to_string(),
+                });
+            }
+            if let Some(nw) = &video_no_wm {
+                qualities.push(VideoQuality {
+                    label: "video_no_wm".to_string(),
+                    width: 0,
+                    height: 0,
+                    url: nw.clone(),
+                    format: "tiktok_direct_no_wm".to_string(),
+                });
+            }
+            if let Some(m) = &music_url {
+                qualities.push(VideoQuality {
+                    label: "audio".to_string(),
+                    width: 0,
+                    height: 0,
+                    url: m.clone(),
+                    format: "mp3".to_string(),
+                });
+            }
+
             return Ok(MediaInfo {
                 title: filename_base,
                 author,
                 platform: "tiktok".to_string(),
                 duration_seconds: Self::extract_duration(&detail),
                 thumbnail_url: None,
-                available_qualities: vec![VideoQuality {
-                    label: "best".to_string(),
-                    width: 0,
-                    height: 0,
-                    url: video_url,
-                    format: "tiktok_direct".to_string(),
-                }],
+                available_qualities: qualities,
                 media_type: MediaType::Video,
                 file_size_bytes: None,
             });
         }
 
-        if let Some(music_url) = Self::extract_music_url(&detail) {
+        if let Some(music_url) = music_url {
             return Ok(MediaInfo {
                 title: filename_base,
                 author,
@@ -532,6 +933,14 @@ impl PlatformDownloader for TikTokDownloader {
         let mut headers = self.download_headers(&cookies);
         crate::core::http_client::inject_ua_header(&mut headers, opts.user_agent.as_deref());
 
+        // A quality picked in the format list / photo list (or the Music
+        // preset) downloads just that item instead of the whole post.
+        if let Some(quality) = Self::selected_quality(info, opts) {
+            return self
+                .download_quality(info, quality, opts, &headers, progress)
+                .await;
+        }
+
         match info.media_type {
             MediaType::Video => {
                 let quality = info
@@ -539,37 +948,22 @@ impl PlatformDownloader for TikTokDownloader {
                     .first()
                     .ok_or_else(|| anyhow!("No video URL available"))?;
 
-                if quality.format == "tiktok_direct" {
+                if matches!(
+                    quality.format.as_str(),
+                    "tiktok_direct" | "tiktok_direct_wm" | "tiktok_direct_no_wm"
+                ) {
                     let filename = format!("{}.mp4", sanitize_filename::sanitize(&info.title));
                     let output = opts.output_dir.join(&filename);
-
-                    let result = direct_downloader::download_direct_with_headers(
-                        &self.client,
-                        &quality.url,
-                        &output,
-                        progress.clone(),
-                        Some(headers),
-                        Some(&opts.cancel_token),
-                    )
-                    .await;
-
-                    match result {
-                        Ok(bytes) => {
-                            return Ok(DownloadResult {
-                                file_path: output,
-                                file_size_bytes: bytes,
-                                duration_seconds: info.duration_seconds.unwrap_or(0.0),
-                                torrent_id: None,
-                            });
-                        }
-                        Err(e) => {
-                            tracing::warn!(
-                                "[tiktok] direct download failed: {}, falling back to yt-dlp",
-                                e
-                            );
-                            let _ = tokio::fs::remove_file(&output).await;
-                        }
-                    }
+                    return self
+                        .download_direct_video(
+                            &quality.url,
+                            &output,
+                            info.duration_seconds.unwrap_or(0.0),
+                            &headers,
+                            opts,
+                            progress,
+                        )
+                        .await;
                 }
 
                 let ytdlp_path = match &opts.ytdlp_path {
@@ -599,11 +993,24 @@ impl PlatformDownloader for TikTokDownloader {
                 .await
             }
             MediaType::Photo | MediaType::Carousel => {
+                // Only the photo qualities are files here: the same info
+                // also carries the slideshow video + audio track as options.
+                let photos: Vec<&VideoQuality> = info
+                    .available_qualities
+                    .iter()
+                    .filter(|q| {
+                        matches!(q.format.as_str(), "jpg" | "jpeg" | "png" | "webp")
+                    })
+                    .collect();
+                if photos.is_empty() {
+                    return Err(anyhow!("No photos available"));
+                }
+
                 let mut total_bytes = 0u64;
-                let count = info.available_qualities.len();
+                let count = photos.len();
                 let mut last_path = opts.output_dir.clone();
 
-                for (i, quality) in info.available_qualities.iter().enumerate() {
+                for (i, quality) in photos.iter().enumerate() {
                     let filename = if count == 1 {
                         format!("{}.jpg", sanitize_filename::sanitize(&info.title))
                     } else {

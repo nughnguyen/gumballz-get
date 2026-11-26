@@ -10,6 +10,7 @@ bản hiện tại trong cùng commit đó.
 - Logo mới: mèo xanh GumballZ (chữ G là mặt mèo, mũi tên tải màu cam) thay cho logo chữ F cũ, đổi ở toàn bộ app, web và tiện ích.
 - Sửa logo ở hero trang web bị lớp nền tím che mất: CSS cũ chỉ tạo vị trí cho bản SVG của logo, bản ảnh PNG mới không được tạo vị trí nên bị che khuất.
 - Phần Tải xuống: mục tải xong xếp theo thời gian hoàn thành, mới nhất lên trên cùng (trước đây xếp theo thời gian cập nhật chung của cả hàng đợi nên mục mới xong lại nằm dưới cùng).
+- Link TikTok ảnh giờ tải được: hiện danh sách ảnh (tải từng ảnh hoặc tải hết), video slideshow (ảnh tự lướt kèm nhạc) và âm thanh riêng; link video TikTok có tuỳ chọn có/không watermark.
 
 ## [1.0.1] - 2026-11-26
 

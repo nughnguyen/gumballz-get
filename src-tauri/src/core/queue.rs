@@ -65,12 +65,36 @@ fn in_flight_map() -> &'static tokio::sync::Mutex<HashMap<String, Arc<tokio::syn
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct PreviewQuality {
+    pub label: String,
+    pub url: String,
+    pub format: String,
+    pub width: u32,
+    pub height: u32,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct MediaPreviewEvent {
     pub url: String,
     pub title: String,
     pub author: String,
     pub thumbnail_url: Option<String>,
     pub duration_seconds: Option<f64>,
+    pub media_type: String,
+    pub qualities: Vec<PreviewQuality>,
+}
+
+fn media_type_name(media_type: &crate::models::media::MediaType) -> &'static str {
+    match media_type {
+        crate::models::media::MediaType::Video => "video",
+        crate::models::media::MediaType::Audio => "audio",
+        crate::models::media::MediaType::Photo => "photo",
+        crate::models::media::MediaType::Gif => "gif",
+        crate::models::media::MediaType::Carousel => "carousel",
+        crate::models::media::MediaType::Playlist => "playlist",
+        crate::models::media::MediaType::Course => "course",
+        crate::models::media::MediaType::File => "file",
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, serde::Deserialize)]
@@ -2253,6 +2277,18 @@ pub async fn prefetch_info_with_emit(
                     author: info.author.clone(),
                     thumbnail_url: info.thumbnail_url.clone(),
                     duration_seconds: info.duration_seconds,
+                    media_type: media_type_name(&info.media_type).to_string(),
+                    qualities: info
+                        .available_qualities
+                        .iter()
+                        .map(|q| PreviewQuality {
+                            label: q.label.clone(),
+                            url: q.url.clone(),
+                            format: q.format.clone(),
+                            width: q.width,
+                            height: q.height,
+                        })
+                        .collect(),
                 };
                 let _ = app.emit("media-info-preview", preview);
             }

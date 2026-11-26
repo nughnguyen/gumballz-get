@@ -384,8 +384,20 @@ export async function initDownloadListener(): Promise<() => void> {
     author: string;
     thumbnail_url: string | null;
     duration_seconds: number | null;
+    media_type?: string | null;
+    qualities?: {
+      label: string;
+      url: string;
+      format: string;
+      width: number;
+      height: number;
+    }[];
   }>("media-info-preview", (event) => {
-    setMediaPreview(event.payload);
+    setMediaPreview({
+      ...event.payload,
+      media_type: event.payload.media_type ?? null,
+      qualities: event.payload.qualities ?? [],
+    });
   });
 
   let cookieErrorShown = false;

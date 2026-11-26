@@ -4278,6 +4278,15 @@
     "hero_desc_advanced": "硬體加速、除錯診斷、儲存路徑與應用程式重設"
   },
   "downloadbox": {
+    "audio_track": "Audio",
+    "photo_download": "Download",
+    "photo_label": "Photo {{n}}",
+    "photos_download_all": "Download all photos",
+    "photos_title": "Photos in this post ({{count}})",
+    "slideshow_video": "Slideshow video (no watermark)",
+    "slideshow_video_watermark": "Slideshow video (with watermark)",
+    "video_no_watermark": "Video (no watermark)",
+    "video_with_watermark": "Video (with watermark)",
     "placeholder": "貼上 URL、磁力連結、.torrent，或搜尋",
     "searching": "搜尋中...",
     "search_empty": "找不到結果",

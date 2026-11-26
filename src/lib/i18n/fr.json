@@ -4278,6 +4278,15 @@
     "hero_desc_advanced": "Accélération matérielle, diagnostics de débogage et réinitialisation"
   },
   "downloadbox": {
+    "audio_track": "Audio",
+    "photo_download": "Download",
+    "photo_label": "Photo {{n}}",
+    "photos_download_all": "Download all photos",
+    "photos_title": "Photos in this post ({{count}})",
+    "slideshow_video": "Slideshow video (no watermark)",
+    "slideshow_video_watermark": "Slideshow video (with watermark)",
+    "video_no_watermark": "Video (no watermark)",
+    "video_with_watermark": "Video (with watermark)",
     "placeholder": "Collez une URL ou recherchez",
     "searching": "Recherche...",
     "search_empty": "Aucun résultat trouvé",

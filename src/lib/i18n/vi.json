@@ -4298,6 +4298,15 @@
     "hero_desc_advanced": "Tăng tốc phần cứng, chẩn đoán gỡ lỗi, đường dẫn lưu trữ và đặt lại ứng dụng"
   },
   "downloadbox": {
+    "audio_track": "Âm thanh",
+    "photo_download": "Tải",
+    "photo_label": "Ảnh {{n}}",
+    "photos_download_all": "Tải tất cả ảnh",
+    "photos_title": "Ảnh trong bài đăng ({{count}})",
+    "slideshow_video": "Video slideshow (không watermark)",
+    "slideshow_video_watermark": "Video slideshow (có watermark)",
+    "video_no_watermark": "Video (không watermark)",
+    "video_with_watermark": "Video (có watermark)",
     "placeholder": "Dán URL, liên kết magnet, .torrent, hoặc tìm kiếm",
     "searching": "Đang tìm kiếm...",
     "search_empty": "Không tìm thấy kết quả",
