@@ -12,19 +12,19 @@ const FALLBACK_DOWNLOADS: ReleaseDownloads = {
   // naming the unreleased version sends every button to a 404 (seen
   // 2026-11-25: fallback said v1.0.3 before the tag, hero Windows
   // button 404'd). Bump this block only after the release is live.
-  version: 'v1.0.1',
+  version: 'v1.0.2',
   releaseUrl: RELEASES_PAGE,
   publishedAt: '2026-11-26',
-  notes: 'About redesign (Bento layout), real download speed, Scribd thumbnails, in-app login, Friends tab, 2-click extension install.',
+  notes: 'Logo meo GumballZ moi, TikTok anh tai duoc (tung anh/slideshow/am thanh), giao dien Khoa hoc moi, sua treo dang nhap Hotmart/Udemy, giu phien dang nhap.',
   // Asset names use the Tauri bundle name `GumballZ.Get_...` (dot), NOT
   // `GumballZ-Get_...` (hyphen) — the hyphenated URLs 404. Keep these in
   // sync with the real release assets on every version bump.
-  windowsExe: `${RELEASES_PAGE}/download/v1.0.1/GumballZ.Get_1.0.1_x64-setup.exe`,
-  windowsMsi: `${RELEASES_PAGE}/download/v1.0.1/GumballZ.Get_1.0.1_x64_en-US.msi`,
-  macDmg: `${RELEASES_PAGE}/download/v1.0.1/GumballZ.Get_1.0.1_aarch64.dmg`,
-  linuxAppImage: `${RELEASES_PAGE}/download/v1.0.1/GumballZ.Get_1.0.1_amd64.AppImage`,
-  linuxDeb: `${RELEASES_PAGE}/download/v1.0.1/GumballZ.Get_1.0.1_amd64.deb`,
-  chromeExtensionZip: `${RELEASES_PAGE}/download/v1.0.1/gumballz-get-chrome-extension-v1.0.1.zip`
+  windowsExe: `${RELEASES_PAGE}/download/v1.0.2/GumballZ.Get_1.0.2_x64-setup.exe`,
+  windowsMsi: `${RELEASES_PAGE}/download/v1.0.2/GumballZ.Get_1.0.2_x64_en-US.msi`,
+  macDmg: `${RELEASES_PAGE}/download/v1.0.2/GumballZ.Get_1.0.2_aarch64.dmg`,
+  linuxAppImage: `${RELEASES_PAGE}/download/v1.0.2/GumballZ.Get_1.0.2_amd64.AppImage`,
+  linuxDeb: `${RELEASES_PAGE}/download/v1.0.2/GumballZ.Get_1.0.2_amd64.deb`,
+  chromeExtensionZip: `${RELEASES_PAGE}/download/v1.0.2/gumballz-get-chrome-extension-v1.0.2.zip`
 };
 
 /** File suffixes that are release metadata, not user downloads. */
