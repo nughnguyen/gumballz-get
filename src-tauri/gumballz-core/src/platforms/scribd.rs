@@ -101,7 +101,13 @@ impl PlatformDownloader for ScribdDownloader {
                     }
                     _ => 10.0,
                 };
-                let _ = tx.try_send(ProgressUpdate::percent(pct));
+                let _ = tx.try_send(ProgressUpdate::rich(
+                    pct,
+                    tp.downloaded_bytes,
+                    None,
+                    None,
+                    None,
+                ));
             });
 
         let outcome = scribd::download_document(

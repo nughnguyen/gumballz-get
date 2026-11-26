@@ -101,7 +101,7 @@ pub async fn download(
 
     let client = super::gslides::build_google_client(Some(url)).or_else(|_| super::client())?;
     let export = export_url(&info, format);
-    let resp = client.get(&export).send().await?;
+    let mut resp = client.get(&export).send().await?;
     let status = resp.status();
     let is_html_redirect = resp
         .headers()
@@ -136,15 +136,45 @@ pub async fn download(
     let dir = PathBuf::from(dest_dir);
     std::fs::create_dir_all(&dir)?;
     let dest = dir.join(super::sanitize_name(&name));
-    let bytes = resp.bytes().await?;
+    // Stream the export in chunks instead of one buffered `bytes()`
+    // call, so the UI shows real downloaded bytes + speed while the
+    // transfer runs instead of sitting at 0 B until the very end.
+    // Reports are gated to every 256 KiB so a large file does not
+    // flood the progress channel with one event per chunk.
+    let total = resp.content_length();
+    let mut bytes: Vec<u8> = Vec::new();
+    let mut downloaded: u64 = 0;
+    let mut last_reported: u64 = 0;
+    loop {
+        match resp.chunk().await? {
+            Some(chunk) => {
+                downloaded += chunk.len() as u64;
+                bytes.extend_from_slice(&chunk);
+                if downloaded - last_reported >= 256 * 1024 {
+                    last_reported = downloaded;
+                    super::report_bytes(
+                        &progress,
+                        "gdocs",
+                        "fetch",
+                        downloaded,
+                        total,
+                        None,
+                        downloaded,
+                    );
+                }
+            }
+            None => break,
+        }
+    }
     tokio::fs::write(&dest, &bytes).await?;
-    super::report(
+    super::report_bytes(
         &progress,
         "gdocs",
         "done",
         bytes.len() as u64,
         Some(bytes.len() as u64),
         None,
+        downloaded,
     );
     Ok(dest.to_string_lossy().to_string())
 }

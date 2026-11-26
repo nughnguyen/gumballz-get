@@ -162,6 +162,9 @@ impl PlatformDownloader for GdocsDownloader {
         let tx = progress.clone();
         let tool_progress: crate::core::tools::ProgressFn = Arc::new(move |tp: ToolProgress| {
             let pct = match (tp.stage.as_str(), tp.total) {
+                ("fetch", Some(t)) if t > 0 => {
+                    5.0 + ((tp.done as f64 / t as f64) * 45.0).clamp(0.0, 45.0)
+                }
                 ("fetch", _) => 5.0,
                 ("images", Some(t)) if t > 0 => {
                     5.0 + ((tp.done as f64 / t as f64) * 45.0).clamp(0.0, 45.0)
@@ -173,7 +176,13 @@ impl PlatformDownloader for GdocsDownloader {
                 (_, Some(t)) if t > 0 => ((tp.done as f64 / t as f64) * 95.0).clamp(0.0, 95.0),
                 _ => 10.0,
             };
-            let _ = tx.try_send(ProgressUpdate::percent(pct));
+            let _ = tx.try_send(ProgressUpdate::rich(
+                pct,
+                tp.downloaded_bytes,
+                None,
+                None,
+                None,
+            ));
         });
 
         let out_path_str =

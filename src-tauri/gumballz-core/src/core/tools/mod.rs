@@ -103,6 +103,13 @@ pub struct ToolProgress {
     pub done: u64,
     pub total: Option<u64>,
     pub message: Option<String>,
+    /// Cumulative real network bytes received so far by this operation
+    /// (`None` = not tracked / no network transfer). Never estimated:
+    /// only bytes actually read off the wire (or, for gallery-dl,
+    /// already written to disk). The platform layer maps this to
+    /// `ProgressUpdate` bytes, from which the queue derives the real
+    /// download speed.
+    pub downloaded_bytes: Option<u64>,
 }
 
 pub type ProgressFn = Arc<dyn Fn(ToolProgress) + Send + Sync>;
@@ -125,6 +132,31 @@ pub fn report(
         done,
         total,
         message,
+        downloaded_bytes: None,
+    });
+}
+
+/// Like [`report`], but also carries the cumulative real network bytes
+/// received so far. Use it for the phases that actually transfer data;
+/// phases with no transfer (e.g. local compile) keep reporting the
+/// last fetched total via this same helper, so the byte count stays
+/// flat and the speed honestly drops to zero instead of being faked.
+pub fn report_bytes(
+    p: &ProgressFn,
+    id: &str,
+    stage: &str,
+    done: u64,
+    total: Option<u64>,
+    message: Option<String>,
+    downloaded_bytes: u64,
+) {
+    p(ToolProgress {
+        id: id.to_string(),
+        stage: stage.to_string(),
+        done,
+        total,
+        message,
+        downloaded_bytes: Some(downloaded_bytes),
     });
 }
 

@@ -60,7 +60,7 @@ use anyhow::{anyhow, Context};
 use image::ImageEncoder;
 use serde::Serialize;
 
-use super::{report, ProgressFn};
+use super::{report_bytes, ProgressFn};
 
 /// Parsed Scribd link: numeric document id + canonical embed URL.
 #[derive(Debug, Clone, Serialize)]
@@ -2062,12 +2062,17 @@ pub async fn fetch_embed_html(
 /// skip — unless the page has a sprite image, in which case the image
 /// is the content. A sprite that cannot be fetched or decoded falls
 /// back to text-only for that page, never failing the download.
+///
+/// Returns the pages plus the real network bytes fetched for them
+/// (JSONP text layers + sprite images, as received off the wire).
+/// Inline pages ride inside the embed HTML, already counted by the
+/// caller, so they add nothing here.
 pub async fn fetch_page_texts(
     client: &reqwest::Client,
     doc: &ScribdDocument,
     html: &str,
     progress: &ProgressFn,
-) -> anyhow::Result<Vec<ScribdPage>> {
+) -> anyhow::Result<(Vec<ScribdPage>, u64)> {
     let inline: BTreeMap<u32, String> = extract_inline_pages(html).into_iter().collect();
     let jsonp: BTreeMap<u32, String> = extract_jsonp_urls(html).into_iter().collect();
     let sizes = extract_page_sizes(html);
@@ -2075,6 +2080,7 @@ pub async fn fetch_page_texts(
     // span coordinates are in that scaled-up space.
     let text_scale = extract_text_layer_scale(html);
     let mut pages = Vec::new();
+    let mut fetched_bytes: u64 = 0;
     for n in 1..=doc.page_count {
         let mut text = String::new();
         let mut page_html: Option<String> = None;
@@ -2093,6 +2099,9 @@ pub async fn fetch_page_texts(
             {
                 if resp.status().is_success() {
                     if let Ok(bytes) = resp.bytes().await {
+                        // Raw body as received (gzip-compressed when the
+                        // server sends it): real bytes off the wire.
+                        fetched_bytes += bytes.len() as u64;
                         if let Ok(body) = decode_jsonp_body(&bytes) {
                             if let Some(inner) = unwrap_jsonp(&body) {
                                 text = page_text_from_html(&inner);
@@ -2129,6 +2138,9 @@ pub async fn fetch_page_texts(
                 {
                     if resp.status().is_success() {
                         if let Ok(bytes) = resp.bytes().await {
+                            // Counted even when the sprite fails to
+                            // decode: the bytes were really received.
+                            fetched_bytes += bytes.len() as u64;
                             if let Ok((sw, sh, kind)) = decode_sprite(&bytes) {
                                 images.push(ScribdPageImage {
                                     width: sw,
@@ -2161,16 +2173,17 @@ pub async fn fetch_page_texts(
             spans,
             images,
         });
-        report(
+        report_bytes(
             progress,
             "scribd",
             "fetch",
             n as u64,
             Some(doc.page_count as u64),
             None,
+            fetched_bytes,
         );
     }
-    Ok(pages)
+    Ok((pages, fetched_bytes))
 }
 
 fn truncate_name(name: &str, max_chars: usize) -> String {
@@ -2201,22 +2214,29 @@ pub async fn download_document(
     let html = fetch_embed_html(&client, &info.embed_url).await?;
     let doc = extract_document_json(&html)
         .ok_or_else(|| anyhow!("không đọc được thông tin tài liệu Scribd"))?;
-    report(
+    // Real network bytes so far: the embed HTML itself. Page fetches
+    // add to this; the compile phase transfers nothing, so the total
+    // stays flat there and the speed honestly drops to zero.
+    let mut fetched_bytes = html.len() as u64;
+    report_bytes(
         &progress,
         "scribd",
         "fetch",
         0,
         Some(doc.page_count as u64),
         None,
+        fetched_bytes,
     );
-    let pages = fetch_page_texts(&client, &doc, &html, &progress).await?;
-    report(
+    let (pages, page_bytes) = fetch_page_texts(&client, &doc, &html, &progress).await?;
+    fetched_bytes += page_bytes;
+    report_bytes(
         &progress,
         "scribd",
         "compile",
         0,
         Some(pages.len() as u64),
         None,
+        fetched_bytes,
     );
     let ext = scribd_format_ext(format);
     let bytes = if ext == "docx" {
@@ -2224,13 +2244,14 @@ pub async fn download_document(
     } else {
         build_text_pdf(&pages)?
     };
-    report(
+    report_bytes(
         &progress,
         "scribd",
         "compile",
         pages.len() as u64,
         Some(pages.len() as u64),
         None,
+        fetched_bytes,
     );
 
     let dir = PathBuf::from(dest_dir);
@@ -2244,13 +2265,14 @@ pub async fn download_document(
     }
     std::fs::write(&path, &bytes)?;
     let got = pages.iter().filter(|p| p.has_text).count() as u32;
-    report(
+    report_bytes(
         &progress,
         "scribd",
         "done",
         pages.len() as u64,
         Some(pages.len() as u64),
         None,
+        fetched_bytes,
     );
     Ok(ScribdDownloadOutcome {
         output_path: path.to_string_lossy().to_string(),

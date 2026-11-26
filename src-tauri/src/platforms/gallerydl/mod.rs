@@ -249,6 +249,7 @@ impl PlatformDownloader for GalleryDlDownloader {
         let started_at = SystemTime::now();
 
         let progress_tx = progress.clone();
+        let output_dir = opts.output_dir.clone();
         let reader_task = tokio::spawn(async move {
             let mut lines = BufReader::new(stdout).lines();
             let mut count: u64 = 0;
@@ -261,7 +262,12 @@ impl PlatformDownloader for GalleryDlDownloader {
                 count += 1;
                 if last_emit.elapsed() >= std::time::Duration::from_millis(250) {
                     let pct = ((count as f64 / (count as f64 + 4.0)) * 100.0).min(95.0);
-                    let _ = progress_tx.send(ProgressUpdate::percent(pct)).await;
+                    // Real bytes already on disk (files gallery-dl has
+                    // written so far), not an estimate.
+                    let (_, bytes_so_far) = collect_new_files(&output_dir, started_at);
+                    let _ = progress_tx
+                        .send(ProgressUpdate::rich(pct, Some(bytes_so_far), None, None, None))
+                        .await;
                     last_emit = std::time::Instant::now();
                 }
             }
@@ -315,7 +321,9 @@ impl PlatformDownloader for GalleryDlDownloader {
             ));
         }
 
-        let _ = progress.send(ProgressUpdate::percent(100.0)).await;
+        let _ = progress
+            .send(ProgressUpdate::rich(100.0, Some(total_bytes), None, None, None))
+            .await;
 
         Ok(DownloadResult {
             file_path,

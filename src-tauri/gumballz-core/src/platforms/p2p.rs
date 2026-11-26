@@ -177,7 +177,15 @@ impl PlatformDownloader for P2pDownloader {
 
             if file_size > 0 {
                 let pct = (received as f64 / file_size as f64) * 100.0;
-                let _ = progress.send(ProgressUpdate::percent(pct)).await;
+                let _ = progress
+                    .send(ProgressUpdate::rich(
+                        pct,
+                        Some(received),
+                        Some(file_size),
+                        None,
+                        None,
+                    ))
+                    .await;
             }
         }
 

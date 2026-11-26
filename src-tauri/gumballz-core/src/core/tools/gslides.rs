@@ -11,7 +11,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, OnceLock};
+use std::sync::{atomic::{AtomicU64, Ordering}, Arc, OnceLock};
 
 use anyhow::{anyhow, Context};
 use base64::Engine;
@@ -350,25 +350,32 @@ fn guess_image_mime(bytes: &[u8], content_type: Option<&str>) -> &'static str {
 /// Descarga en paralelo las imágenes remotas referenciadas por los SVGs y las
 /// incrusta como Data URLs (`data:<mime>;base64,...`) exactamente igual que
 /// `svgImageToBase64` en el navegador, pero con deduplicación y concurrencia.
+///
+/// Returns the real network bytes fetched: the viewer HTML bytes already
+/// received (`base_bytes`) plus every image body. Reports carry the running
+/// total so the UI shows real MB + speed instead of 0 B.
 pub async fn embed_remote_images_base64(
     client: &reqwest::Client,
     svgs: &mut [String],
     progress: &super::ProgressFn,
     progress_id: &str,
-) {
+    base_bytes: u64,
+) -> u64 {
     let urls = collect_remote_image_urls(svgs);
     if urls.is_empty() {
-        return;
+        return base_bytes;
     }
 
     let total_imgs = urls.len() as u64;
-    super::report(
+    let fetched_bytes = Arc::new(AtomicU64::new(base_bytes));
+    super::report_bytes(
         progress,
         progress_id,
         "images",
         0,
         Some(total_imgs),
         Some(format!("Descargando {} recursos de imagen...", total_imgs)),
+        base_bytes,
     );
 
     let fetched: Vec<(String, String)> = stream::iter(urls.into_iter().enumerate())
@@ -376,6 +383,7 @@ pub async fn embed_remote_images_base64(
             let client = client.clone();
             let progress = progress.clone();
             let progress_id = progress_id.to_string();
+            let fetched_bytes = fetched_bytes.clone();
             async move {
                 let res = match client.get(&url).send().await {
                     Ok(r) if r.status().is_success() => {
@@ -386,6 +394,8 @@ pub async fn embed_remote_images_base64(
                             .map(|s| s.to_string());
                         match r.bytes().await {
                             Ok(bytes) if !bytes.is_empty() => {
+                                fetched_bytes
+                                    .fetch_add(bytes.len() as u64, Ordering::Relaxed);
                                 let mime = guess_image_mime(&bytes, ct.as_deref());
                                 let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
                                 Some((url, format!("data:{};base64,{}", mime, b64)))
@@ -396,13 +406,14 @@ pub async fn embed_remote_images_base64(
                     _ => None,
                 };
                 if (idx + 1) % 5 == 0 || (idx + 1) as u64 == total_imgs {
-                    super::report(
+                    super::report_bytes(
                         &progress,
                         &progress_id,
                         "images",
                         (idx + 1) as u64,
                         Some(total_imgs),
                         None,
+                        fetched_bytes.load(Ordering::Relaxed),
                     );
                 }
                 res
@@ -414,7 +425,7 @@ pub async fn embed_remote_images_base64(
         .await;
 
     if fetched.is_empty() {
-        return;
+        return fetched_bytes.load(Ordering::Relaxed);
     }
 
     let map: HashMap<String, String> = fetched.into_iter().collect();
@@ -430,6 +441,8 @@ pub async fn embed_remote_images_base64(
             }
         }
     }
+
+    fetched_bytes.load(Ordering::Relaxed)
 }
 
 fn shared_fontdb() -> Arc<usvg::fontdb::Database> {
@@ -598,7 +611,9 @@ pub async fn compile_svg_dir_to_pdf(
 
     let progress_id = format!("gslides-dir:{}", svg_dir);
     if let Ok(client) = build_google_client(None) {
-        embed_remote_images_base64(&client, &mut svgs, &progress, &progress_id).await;
+        // Local SVGs: no viewer HTML was fetched, so the byte count
+        // starts at 0 and only the remote images add to it.
+        let _ = embed_remote_images_base64(&client, &mut svgs, &progress, &progress_id, 0).await;
     }
 
     let dir_title = dir_path
@@ -712,6 +727,7 @@ pub async fn download_presentation(
     }
 
     let mut extracted = extract_viewer_slides(&html);
+    let html_bytes = html.len() as u64;
     drop(html);
 
     if extracted.svgs.is_empty() {
@@ -721,7 +737,14 @@ pub async fn download_presentation(
     }
 
     let pages = extracted.svgs.len();
-    embed_remote_images_base64(&client, &mut extracted.svgs, &progress, &progress_id).await;
+    let fetched_bytes = embed_remote_images_base64(
+        &client,
+        &mut extracted.svgs,
+        &progress,
+        &progress_id,
+        html_bytes,
+    )
+    .await;
 
     let safe_title = super::sanitize_name(&extracted.title);
     let base_dir = PathBuf::from(dest_dir);
@@ -734,13 +757,14 @@ pub async fn download_presentation(
             let file_path = folder.join(format!("diapositiva_{:03}.svg", i + 1));
             tokio::fs::write(&file_path, svg.as_bytes()).await?;
         }
-        super::report(
+        super::report_bytes(
             &progress,
             &progress_id,
             "done",
             pages as u64,
             Some(pages as u64),
             None,
+            fetched_bytes,
         );
         return Ok(GslidesDownloadResult {
             title: extracted.title,

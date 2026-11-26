@@ -260,8 +260,12 @@ pub async fn download_file(
                 if media.size > 0 {
                     let percent = (downloaded as f64 / media.size as f64) * 100.0;
                     let _ = progress_tx
-                        .send(gumballz_core::models::progress::ProgressUpdate::percent(
+                        .send(gumballz_core::models::progress::ProgressUpdate::rich(
                             percent.min(100.0),
+                            Some(downloaded),
+                            Some(media.size),
+                            None,
+                            None,
                         ))
                         .await;
                 }

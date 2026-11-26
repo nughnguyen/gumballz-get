@@ -573,7 +573,13 @@ impl RedditDownloader {
                         while let Some(p) = vrx.recv().await {
                             let scaled = p.percent * 0.6;
                             let _ = progress_video
-                                .send(ProgressUpdate::rich(scaled, None, None, p.speed_bps, None))
+                                .send(ProgressUpdate::rich(
+                                    scaled,
+                                    p.downloaded_bytes,
+                                    p.total_bytes,
+                                    p.speed_bps,
+                                    None,
+                                ))
                                 .await;
                         }
                     });
@@ -596,7 +602,13 @@ impl RedditDownloader {
                         while let Some(p) = arx.recv().await {
                             let scaled = 60.0 + p.percent * 0.25;
                             let _ = progress_audio
-                                .send(ProgressUpdate::rich(scaled, None, None, p.speed_bps, None))
+                                .send(ProgressUpdate::rich(
+                                    scaled,
+                                    p.downloaded_bytes,
+                                    p.total_bytes,
+                                    p.speed_bps,
+                                    None,
+                                ))
                                 .await;
                         }
                     });
@@ -754,7 +766,15 @@ impl RedditDownloader {
                     last_path = output;
 
                     let percent = ((i + 1) as f64 / count as f64) * 100.0;
-                    let _ = progress.send(ProgressUpdate::percent(percent)).await;
+                    let _ = progress
+                        .send(ProgressUpdate::rich(
+                            percent,
+                            Some(total_bytes),
+                            None,
+                            None,
+                            None,
+                        ))
+                        .await;
                 }
 
                 Ok(DownloadResult {

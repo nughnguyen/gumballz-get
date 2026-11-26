@@ -583,7 +583,15 @@ impl PlatformDownloader for ThreadsDownloader {
             last_path = output;
 
             let percent = ((i + 1) as f64 / count as f64) * 100.0;
-            let _ = progress.send(ProgressUpdate::percent(percent)).await;
+            let _ = progress
+                .send(ProgressUpdate::rich(
+                    percent,
+                    Some(total_bytes),
+                    None,
+                    None,
+                    None,
+                ))
+                .await;
         }
 
         Ok(DownloadResult {

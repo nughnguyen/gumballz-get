@@ -243,7 +243,15 @@ impl PlatformDownloader for MagnetDownloader {
 
                     if total > 0 {
                         let pct = (downloaded as f64 / total as f64) * 100.0;
-                        let _ = progress.send(ProgressUpdate::percent(pct)).await;
+                        let _ = progress
+                            .send(ProgressUpdate::rich(
+                                pct,
+                                Some(downloaded),
+                                Some(total),
+                                None,
+                                None,
+                            ))
+                            .await;
                         tracing::debug!(
                             "[magnet] progress: {:.1}% ({:.1} MB / {:.1} MB)",
                             pct,
