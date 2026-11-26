@@ -433,6 +433,8 @@ pub fn cleanup_legacy_native_messaging() {
                         "/f",
                     ])
                     .creation_flags(CREATE_NO_WINDOW)
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
                     .status();
             }
         }

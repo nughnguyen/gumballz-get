@@ -2025,15 +2025,6 @@
     line-height: 1.5;
   }
 
-  .dialog-hint code {
-    font-family: monospace;
-    background: var(--button-elevated);
-    padding: 1px 4px;
-    border-radius: 3px;
-    font-size: 11px;
-    color: var(--accent-text);
-  }
-
   .create-folder-dialog form {
     display: flex;
     flex-direction: column;

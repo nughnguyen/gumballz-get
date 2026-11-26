@@ -17,6 +17,7 @@
 -->
 
 <script lang="ts">
+  import { onMount } from "svelte";
   import { page } from "$app/state";
   import { t } from "$lib/i18n";
   import { openCommandPalette } from "$lib/stores/command-palette-store.svelte";
@@ -24,6 +25,40 @@
   import { shortcut } from "$lib/platform";
 
   let toolbar = $derived(getToolbar());
+
+  // Sliding active-tab pill (the "water droplet"): one accent pill glides
+  // from tab to tab instead of each button swapping its own background.
+  // Geometry comes from the active button, so the pill always matches the
+  // tab's real size — even when a count badge changes its width.
+  let segmentsEl: HTMLDivElement | null = $state(null);
+  let gliderX = $state(0);
+  let gliderW = $state(0);
+  let gliderReady = $state(false);
+
+  function measureGlider() {
+    if (!segmentsEl) return;
+    const active = segmentsEl.querySelector<HTMLElement>(".segmented-btn.active");
+    if (!active) {
+      gliderW = 0;
+      return;
+    }
+    gliderX = active.offsetLeft;
+    gliderW = active.offsetWidth;
+    gliderReady = true;
+  }
+
+  $effect(() => {
+    // Re-measure whenever the active tab or the segment list changes.
+    void toolbar.activeSegment;
+    void toolbar.segments;
+    measureGlider();
+  });
+
+  onMount(() => {
+    const onResize = () => measureGlider();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  });
 
   let pageTitle = $derived.by(() => {
     const path = page.url.pathname;
@@ -53,7 +88,8 @@
 
   <div class="mac-titlebar-center" data-tauri-drag-region>
     {#if toolbar.segments && toolbar.segments.length > 0}
-      <div class="segmented" role="tablist">
+      <div class="segmented" role="tablist" bind:this={segmentsEl}>
+        <span class="segmented-glider" class:ready={gliderReady} style="transform: translateX({gliderX}px); width: {gliderW}px;" aria-hidden="true"></span>
         {#each toolbar.segments as seg (seg.id)}
           <button
             type="button"

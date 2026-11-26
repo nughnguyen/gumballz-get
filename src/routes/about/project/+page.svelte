@@ -83,55 +83,12 @@
     justify-content: center;
   }
 
-  .star-button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: calc(var(--padding) / 2);
-    margin: 0 auto;
-    padding: calc(var(--padding) / 2) calc(var(--padding) * 1.5);
-    font-size: var(--text-base);
-    font-weight: 500;
-    color: var(--text);
-    background: var(--surface);
-    border: none;
-    border-radius: var(--radius-md);
-    cursor: pointer;
-    transition: background var(--duration-fast) var(--ease-out);
-  }
-
-  .star-button svg {
-    pointer-events: none;
-    flex-shrink: 0;
-    color: var(--warning);
-  }
-
-  @media (hover: hover) {
-    .star-button:hover {
-      background: var(--surface-hi);
-    }
-  }
-
-  .star-button:active {
-    background: var(--fill-2);
-  }
-
-  .star-button:focus-visible {
-    outline: var(--focus-ring);
-    outline-offset: var(--focus-ring-offset);
-  }
-
   .project-header {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: calc(var(--padding) / 2);
     text-align: center;
-  }
-
-  .project-logo {
-    border-radius: calc(var(--border-radius) + 4px);
-    pointer-events: none;
   }
 
   .project-description {

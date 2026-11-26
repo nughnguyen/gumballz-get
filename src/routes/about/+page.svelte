@@ -139,15 +139,6 @@
         padding: var(--space-2) 0;
     }
 
-    .about-app-icon {
-        width: 72px;
-        height: 72px;
-        border-radius: 17px;
-        object-fit: cover;
-        box-shadow: 0 8px 20px rgba(var(--shadow-ink), var(--elev-alpha-2)), 0 0 0 var(--hairline) var(--content-border);
-        flex-shrink: 0;
-    }
-
     .about-identity {
         display: flex;
         flex-direction: column;

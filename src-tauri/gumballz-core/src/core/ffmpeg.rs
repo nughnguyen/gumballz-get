@@ -444,6 +444,22 @@ pub async fn embed_metadata(
         return Err(anyhow!("ffmpeg not available"));
     }
 
+    // ffmpeg can only remux audio/video containers. Documents (PDF, DOCX,
+    // EPUB, ...) are not readable as media input, so embedding metadata
+    // into them always fails — skip silently instead of warning.
+    let ext_lower = file
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    const MEDIA_EXTS: &[&str] = &[
+        "mp3", "m4a", "aac", "ogg", "opus", "flac", "wav", "wma", "mp4", "mkv", "webm", "mov",
+        "avi", "m4v", "ts", "m2ts", "3gp", "flv", "wmv", "mpg", "mpeg",
+    ];
+    if !MEDIA_EXTS.contains(&ext_lower.as_str()) {
+        return Ok(());
+    }
+
     let temp_dir = file.parent().unwrap_or(Path::new("."));
     let ext = file.extension().and_then(|e| e.to_str()).unwrap_or("mp4");
     let temp_output = temp_dir.join(format!(".gumballz_get_meta_{}.{}", uuid::Uuid::new_v4(), ext));

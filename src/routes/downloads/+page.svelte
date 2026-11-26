@@ -455,6 +455,17 @@
     }
   }
 
+  // Clicking a finished download opens the file itself with the default
+  // app — no need to open its folder first and click the file there.
+  async function openFile(filePath: string) {
+    try {
+      await invoke("open_path_default", { path: filePath });
+    } catch (e: any) {
+      const msg = typeof e === "string" ? e : e.message ?? $t("common.error");
+      showToast("error", msg);
+    }
+  }
+
   async function loadHistory() {
     historyLoading = true;
     try {
@@ -748,7 +759,11 @@
                   {#if entry.kind}
                     <QueueKindBadge kind={entry.kind} size={14} />
                   {/if}
-                  <span class="history-title">{entry.title || entry.url}</span>
+                  {#if entry.success && entry.file_path}
+                    <button type="button" class="history-title is-openable" onclick={() => openFile(entry.file_path!)}>{entry.title || entry.url}</button>
+                  {:else}
+                    <span class="history-title">{entry.title || entry.url}</span>
+                  {/if}
                   <span class="history-time">{fmtHistoryTime(entry.completed_at)}</span>
                 </div>
                 <div class="history-item-meta">
@@ -865,7 +880,11 @@
       <div class="item-body">
         <div class="item-header">
           <div class="item-header-left">
-            <span class="item-name" title={item.name}>{item.name}</span>
+            {#if item.status === "complete" && item.filePath}
+              <button type="button" class="item-name is-openable" title={item.name} onclick={() => openFile(item.filePath!)}>{item.name}</button>
+            {:else}
+              <span class="item-name" title={item.name}>{item.name}</span>
+            {/if}
           </div>
           <div class="item-header-actions">
             {#if item.status === "downloading"}
@@ -1519,9 +1538,7 @@
   }
 
   .download-item + .download-item,
-  .queue-drop-zone + .queue-drop-zone .download-item,
-  .queue-drop-zone + .download-item,
-  .download-item + .queue-drop-zone .download-item {
+  .queue-drop-zone + .queue-drop-zone .download-item {
     margin-top: var(--space-2);
   }
 
@@ -1544,7 +1561,6 @@
     min-height: 24px;
   }
 
-  .item-detail + .item-detail::before,
   .item-detail + .item-stats::before,
   .item-stats + .item-detail::before {
     content: "·";
@@ -1598,6 +1614,29 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  /* A finished download's name is a button that opens the file itself. */
+  button.item-name,
+  button.history-title {
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    font-family: inherit;
+    text-align: left;
+  }
+
+  .item-name.is-openable,
+  .history-title.is-openable {
+    cursor: pointer;
+  }
+
+  .item-name.is-openable:hover,
+  .history-title.is-openable:hover {
+    color: var(--accent);
+    text-decoration: underline;
+    text-underline-offset: 2px;
   }
 
   .action-icon-btn {
@@ -1724,11 +1763,6 @@
 
   .stats-sep {
     color: var(--text-faint);
-  }
-
-  .phase-merging-badge {
-    color: var(--accent-hi);
-    font-weight: 500;
   }
 
   .eta-pill {

@@ -1233,7 +1233,7 @@ pub fn build_text_pdf(pages: &[ScribdPage]) -> anyhow::Result<Vec<u8>> {
     let total = first_page_id + page_count * 2;
     let mut out: Vec<u8> = Vec::new();
     let mut offsets: Vec<usize> = vec![0; total + 1];
-    let mut write_obj = |out: &mut Vec<u8>, offsets: &mut Vec<usize>, id: usize, body: &[u8]| {
+    let write_obj = |out: &mut Vec<u8>, offsets: &mut Vec<usize>, id: usize, body: &[u8]| {
         offsets[id] = out.len();
         out.extend_from_slice(format!("{} 0 obj\n", id).as_bytes());
         out.extend_from_slice(body);

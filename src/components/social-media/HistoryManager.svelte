@@ -356,14 +356,6 @@
     display: block;
   }
 
-  .hm-media-fallback {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
   .hm-media-icon[data-platform="instagram"] {
     color: #e1306c;
   }

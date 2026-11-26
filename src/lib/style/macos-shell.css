@@ -83,9 +83,39 @@
   min-width: 0;
 }
 
+.mac-titlebar-center .segmented {
+  position: relative;
+}
+
 .mac-titlebar-center .segmented-btn {
+  position: relative;
+  z-index: 1;
   height: 28px;
   min-width: 28px;
+}
+
+/* Sliding active-tab pill ("water droplet"): one accent pill glides from
+   tab to tab with a spring overshoot + width morph. The active button is
+   transparent — the pill behind it carries the fill, ink border and hard
+   shadow. Transition only after the first measure (`.ready`), so the pill
+   never animates in from the corner on page load. */
+.mac-titlebar-center .segmented-glider {
+  position: absolute;
+  top: 2px;
+  left: 0;
+  height: 28px;
+  background: var(--accent);
+  border: 2px solid var(--border-ink);
+  border-radius: 6px;
+  box-shadow: 2px 2px 0 var(--shadow-hard);
+  z-index: 0;
+  pointer-events: none;
+}
+
+.mac-titlebar-center .segmented-glider.ready {
+  transition:
+    transform var(--duration-slow) var(--ease-spring),
+    width var(--duration-slow) var(--ease-spring);
 }
 
 /* Titlebar segmented tab: the current tab is unmistakable — solid accent
@@ -94,10 +124,10 @@
    in primitives.css, which this file must not touch. */
 .mac-titlebar-center .segmented-btn.active,
 .mac-titlebar-center .segmented-btn[aria-selected="true"] {
-  background: var(--accent);
+  background: transparent;
   color: var(--on-accent);
-  border: 2px solid var(--border-ink);
-  box-shadow: 2px 2px 0 var(--shadow-hard);
+  border: 2px solid transparent;
+  box-shadow: none;
 }
 
 .mac-titlebar-center .segmented-btn:disabled {

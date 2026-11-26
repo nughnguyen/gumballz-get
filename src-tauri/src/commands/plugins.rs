@@ -540,7 +540,10 @@ pub async fn ensure_default_plugins(state: Arc<tokio::sync::RwLock<PluginManager
     let entries = match fetch_registry_entries().await {
         Ok(e) => e,
         Err(e) => {
-            tracing::warn!("ensure_default_plugins: registry unavailable: {}", e);
+            // The marketplace registry repo is not published yet and the
+            // built-in plugins already work — a missing registry is
+            // expected, not a warning.
+            tracing::debug!("ensure_default_plugins: registry unavailable: {}", e);
             return;
         }
     };
