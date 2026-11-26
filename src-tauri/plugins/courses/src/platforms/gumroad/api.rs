@@ -72,9 +72,10 @@ fn session_file_path() -> anyhow::Result<PathBuf> {
     crate::platforms::session_file("gumroad_session.json")
 }
 
-/// OAuth endpoints for the "Gumroad Mobile" application — the same client
-/// this code has always used (the mobile app's client id/secret and the
-/// `mobile_api creator_api` scopes).
+/// OAuth endpoints for the "mobile_api_app" custom OAuth application — the
+/// same client this code has always used (its client id/secret and the
+/// `mobile_api creator_api` scopes). The flow mirrors the official Gumroad
+/// mobile app's authorization-code + PKCE login.
 ///
 /// Gumroad removed the `password` grant (`unsupported_grant_type`, seen
 /// 2026-11-26), so email/password login now goes through the standard
@@ -88,12 +89,18 @@ fn session_file_path() -> anyhow::Result<PathBuf> {
 /// The app never sees the user's Gumroad password in this flow.
 const AUTHORIZE_URL: &str = "https://gumroad.com/oauth/mobile_pre_authorization/new";
 const TOKEN_URL: &str = "https://gumroad.com/oauth/token";
-/// Redirect URI registered for the "Gumroad Mobile" OAuth application, per
-/// Gumroad's own gumroad-mobile README:
-/// `OauthApplication.create!(name: "Gumroad Mobile", redirect_uri: "gumroadmobile://", scopes: ["mobile_api", "creator_api"])`.
-/// The desktop app has no custom-scheme handler; the login webview watches
-/// for a navigation to this scheme and reads the `code` off the URL instead.
-const REDIRECT_URI: &str = "gumroadmobile://";
+/// Redirect URI registered for this OAuth client: `http://127.0.0.1` — the
+/// loopback value Gumroad's own docs suggest for a personal app. Proven by a
+/// read-only probe (2026-11-27): the authorize endpoint with this redirect
+/// URI shows the "Connect mobile_api_app to Gumroad" login page with no
+/// redirect error. The gumroad-mobile README's `gumroadmobile://` seed is
+/// for locally-created dev apps, not this client — Gumroad rejects it with
+/// "The requested redirect uri is malformed or doesn't match client
+/// redirect URI." (seen on the user's machine 2026-11-27).
+/// Nothing listens on port 80, so the login webview watches for a
+/// navigation to this host and reads the `code` off the URL instead of
+/// letting the navigation load.
+const REDIRECT_URI: &str = "http://127.0.0.1";
 const OAUTH_SCOPE: &str = "mobile_api creator_api";
 /// How long the login window may stay open waiting for the authorization
 /// redirect (same as the generic in-app auth webview's timeout).
@@ -138,10 +145,10 @@ fn build_authorize_url(state: &str, code_challenge: &str) -> String {
 }
 
 /// Pulls the authorization `code` (and the echoed `state`) out of the
-/// redirect URL the login webview lands on (`gumroadmobile://?code=…&state=…`).
-/// `url::Url` cannot always parse a bare custom-scheme URL, so a plain
-/// query-string split is the fallback. Returns an error when Gumroad refused
-/// the authorization (`?error=access_denied`, …) or when no code is present.
+/// redirect URL the login webview lands on (`http://127.0.0.1/?code=…&state=…`).
+/// A plain query-string split is kept as a fallback if `Url::parse` ever
+/// fails. Returns an error when Gumroad refused the authorization
+/// (`?error=access_denied`, …) or when no code is present.
 fn parse_redirect_url(redirect_url: &str) -> anyhow::Result<(String, String)> {
     let query = url::Url::parse(redirect_url)
         .ok()
@@ -225,9 +232,9 @@ async fn exchange_code(
 
 /// Logs in through Gumroad's authorization page in an in-app browser window
 /// (same pattern as Hotmart's `authenticate`): the user signs in on
-/// Gumroad's own page, Gumroad redirects to the `gumroadmobile://` scheme
-/// with `?code=`, and the code is exchanged for an access token. The
-/// authorization code, PKCE verifier and `state` value are never logged.
+/// Gumroad's own page, Gumroad redirects to `http://127.0.0.1/?code=`, and
+/// the code is exchanged for an access token. The authorization code, PKCE
+/// verifier and `state` value are never logged.
 pub async fn authenticate_via_browser(
     app: &tauri::AppHandle,
     email: &str,
@@ -239,10 +246,10 @@ pub async fn authenticate_via_browser(
     let (code_verifier, code_challenge) = generate_pkce();
     let authorize_url = build_authorize_url(&oauth_state, &code_challenge);
 
-    // The redirect back from Gumroad lands on the `gumroadmobile://` scheme,
-    // which no browser on the machine handles. The webview watches for that
-    // navigation and reads the authorization code off the URL instead of
-    // letting the navigation load.
+    // The redirect back from Gumroad lands on `http://127.0.0.1`, where
+    // nothing listens on port 80. The webview watches for that navigation
+    // and reads the authorization code off the URL instead of letting the
+    // navigation load (the callback fires first; the load itself would fail).
     let redirect_seen = Arc::new(Mutex::new(Option::<String>::None));
     let redirect_nav = redirect_seen.clone();
 
@@ -263,7 +270,7 @@ pub async fn authenticate_via_browser(
     .title("Gumroad Login")
     .inner_size(500.0, 700.0)
     .on_navigation(move |url| {
-        if url.scheme() == "gumroadmobile" {
+        if url.scheme() == "http" && url.host_str() == Some("127.0.0.1") {
             // The URL carries the authorization code: never log it.
             tracing::info!("[gumroad] authorization redirect received");
             if let Ok(mut slot) = redirect_nav.lock() {
@@ -617,7 +624,7 @@ mod tests {
         let url = build_authorize_url("test-state", "test-challenge");
         assert!(url.starts_with("https://gumroad.com/oauth/mobile_pre_authorization/new?"));
         assert!(url.contains("response_type=code"));
-        assert!(url.contains("redirect_uri=gumroadmobile%3A%2F%2F"));
+        assert!(url.contains("redirect_uri=http%3A%2F%2F127.0.0.1"));
         assert!(url.contains("scope=mobile_api"));
         assert!(url.contains("creator_api"));
         assert!(url.contains("state=test-state"));
@@ -628,21 +635,22 @@ mod tests {
     #[test]
     fn redirect_url_parses_code_and_state() {
         let (code, state) =
-            parse_redirect_url("gumroadmobile://?code=abc123&state=xyz").unwrap();
+            parse_redirect_url("http://127.0.0.1/?code=abc123&state=xyz").unwrap();
         assert_eq!(code, "abc123");
         assert_eq!(state, "xyz");
     }
 
     #[test]
     fn redirect_url_rejects_denied_authorization() {
-        let result = parse_redirect_url("gumroadmobile://?error=access_denied&state=xyz");
+        let result = parse_redirect_url("http://127.0.0.1/?error=access_denied&state=xyz");
         let err = result.unwrap_err();
         assert!(err.to_string().contains("access_denied"));
     }
 
     #[test]
     fn redirect_url_rejects_missing_code() {
-        assert!(parse_redirect_url("gumroadmobile://?state=xyz").is_err());
-        assert!(parse_redirect_url("gumroadmobile://").is_err());
+        assert!(parse_redirect_url("http://127.0.0.1/?state=xyz").is_err());
+        assert!(parse_redirect_url("http://127.0.0.1/").is_err());
+        assert!(parse_redirect_url("http://127.0.0.1").is_err());
     }
 }

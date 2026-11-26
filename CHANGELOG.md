@@ -8,6 +8,7 @@ bản hiện tại trong cùng commit đó.
 ## [Unreleased]
 
 - Đăng nhập Gumroad bằng email/mật khẩu giờ mở cửa sổ trình duyệt trong app để đăng nhập trên trang Gumroad rồi đổi mã lấy token (Gumroad đã bỏ kiểu đăng nhập gửi thẳng mật khẩu nên trước đây báo lỗi 400 unsupported_grant_type); đăng nhập bằng token vẫn giữ nguyên.
+- Sửa đăng nhập Gumroad: địa chỉ redirect đúng là `http://127.0.0.1` (địa chỉ đã đăng ký cho app này), không phải `gumroadmobile://` nên trước đây Gumroad báo lỗi redirect không khớp.
 
 ## [1.0.2] - 2026-11-26
 
