@@ -1,0 +1,134 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "GumballZ Get",
+  "version": "1.0.0",
+  "identifier": "com.gumballz.get",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../build"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "create": false,
+        "title": "GumballZ Get",
+        "width": 1100,
+        "height": 720,
+        "minWidth": 800,
+        "minHeight": 560,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "backgroundColor": "#090D16"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self' ipc: http://ipc.localhost; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:47720 http://127.0.0.1:47721 http://127.0.0.1:47722 http://127.0.0.1:47723 http://127.0.0.1:47724 http://127.0.0.1:47725 http://127.0.0.1:47726 http://127.0.0.1:47727 http://127.0.0.1:47728 http://127.0.0.1:47729 https://api.github.com https://raw.githubusercontent.com https://github.com https://img.vietqr.io https://www.youtube.com https://*.youtube.com https://*.googlevideo.com https://*.googleapis.com https://*.gstatic.com https://*.instagram.com https://*.cdninstagram.com https://*.facebook.com https://*.fbcdn.net https://*.tiktok.com https://*.tiktokcdn.com https://*.reddit.com https://*.redd.it https://*.redditmedia.com https://*.x.com https://*.twimg.com https://*.telegram.org; img-src 'self' asset: http://asset.localhost data: blob: https://img.vietqr.io https://*.ytimg.com https://*.ggpht.com https://*.cdninstagram.com https://*.fbcdn.net https://*.tiktokcdn.com https://*.twimg.com https://*.redditmedia.com https://*.telegram.org; media-src 'self' asset: http://asset.localhost blob: http://127.0.0.1:47720 http://127.0.0.1:47721 http://127.0.0.1:47722 http://127.0.0.1:47723 http://127.0.0.1:47724 http://127.0.0.1:47725 http://127.0.0.1:47726 http://127.0.0.1:47727 http://127.0.0.1:47728 http://127.0.0.1:47729 https://*.googlevideo.com https://*.tiktokcdn.com https://*.fbcdn.net https://*.cdninstagram.com https://*.twimg.com; font-src 'self' asset: data:; object-src 'none'; base-uri 'self'; frame-src 'self';",
+      "assetProtocol": {
+        "enable": true,
+        "scope": {
+          "allow": [
+            "$APPDATA/**",
+            "$APPLOCALDATA/**",
+            "$DATA/**",
+            "$LOCALDATA/**",
+            "$DOWNLOAD/**",
+            "$TEMP/**"
+          ],
+          "deny": [
+            "**/.ssh/**",
+            "**/.aws/**",
+            "**/.git/**"
+          ],
+          "requireLiteralLeadingDot": true
+        }
+      }
+    },
+    "macOSPrivateApi": true
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "gumballzget"
+        ]
+      }
+    },
+    "updater": {
+      "endpoints": [
+        "https://github.com/nughnguyen/gumballz-get/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEU1NEU1MUM3QjU2QTBBRUUKUldUdUNtcTF4MUZPNWQ0V3NleXBqRG82MEZ4d1RMQUJhVnFFK25Ic25pZlY2WkhOdm1IOElocHYK"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "publisher": "Nguyen Quoc Hung (GumballZ)",
+    "createUpdaterArtifacts": true,
+    "resources": {
+      "../browser-extension/chrome/": "browser-extension/chrome/",
+      "../browser-extension/firefox/": "browser-extension/firefox/"
+    },
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "entitlements": "Entitlements.plist",
+      "minimumSystemVersion": "10.15"
+    },
+    "windows": {
+      "nsis": {
+        "installerHooks": "./nsis/installer-hooks.nsh"
+      },
+      "webviewInstallMode": {
+        "type": "embedBootstrapper",
+        "silent": true
+      }
+    },
+    "linux": {
+      "appimage": {
+        "bundleMediaFramework": true
+      },
+      "deb": {
+        "depends": [
+          "libasound2"
+        ],
+        "desktopTemplate": "./desktop.template",
+        "provides": [
+          "omni-get",
+          "omniget"
+        ],
+        "replaces": [
+          "omni-get",
+          "omniget"
+        ],
+        "conflicts": [
+          "omni-get",
+          "omniget"
+        ]
+      },
+      "rpm": {
+        "desktopTemplate": "./desktop.template",
+        "provides": [
+          "omni-get",
+          "omniget"
+        ],
+        "obsoletes": [
+          "omni-get",
+          "omniget"
+        ],
+        "conflicts": [
+          "omni-get",
+          "omniget"
+        ]
+      }
+    }
+  }
+}

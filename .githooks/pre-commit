@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -e
+
+# RULE (changed 2026-11-26): do NOT bump the version on every commit —
+# not every commit is a new version. Bump only when Nguyen explicitly
+# says to raise the version; push fixes to main first so he can pull
+# and test, tag + release only after he approves. When he does ask for
+# a bump, run `node scripts/bump-version.js patch` by hand in that
+# commit — this hook no longer bumps anything.
+# The version lives in package.json, Cargo.toml/lock, tauri.conf.json,
+# the extension manifests, the changelog store and the about page —
+# scripts/bump-version.js updates them all.
+
+# Detect staged Rust files
+STAGED_RS=$(git diff --cached --name-only --diff-filter=ACM | grep '\.rs$' || true)
+
+if [ -n "$STAGED_RS" ]; then
+    if command -v cargo >/dev/null 2>&1; then
+        echo "==> Auto-formatting staged Rust files with cargo fmt..."
+        cargo fmt --manifest-path src-tauri/Cargo.toml --all
+        for file in $STAGED_RS; do
+            if [ -f "$file" ]; then
+                git add "$file"
+            fi
+        done
+    else
+        echo "WARNING: cargo not found — skipping cargo fmt (install Rust or run: cargo fmt --manifest-path src-tauri/Cargo.toml --all)"
+    fi
+fi

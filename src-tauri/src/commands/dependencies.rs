@@ -1,0 +1,512 @@
+use std::path::PathBuf;
+
+use serde::Serialize;
+use tauri::Emitter;
+
+use crate::core::{dependencies, pdfium};
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DependencyStatus {
+    pub name: String,
+    pub installed: bool,
+    pub version: Option<String>,
+    /// Where the binary was found: "managed" (downloaded by GumballZ Get),
+    /// "system" (found on the user's PATH), "flatpak", or "missing".
+    pub source: String,
+    /// Resolved absolute path to the binary, if found.
+    pub path: Option<String>,
+    /// `true` when version was read and is below supported floor.
+    pub outdated: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DependencyVariantInfo {
+    pub id: String,
+    pub label: String,
+    pub recommended: bool,
+}
+
+#[tauri::command]
+pub async fn check_dependencies() -> Result<Vec<DependencyStatus>, String> {
+    let (ytdlp_result, ffmpeg_result, gallerydl_result) = tokio::join!(
+        dependencies::find_tool_with_source("yt-dlp"),
+        dependencies::find_tool_with_source("ffmpeg"),
+        dependencies::find_tool_with_source("gallery-dl"),
+    );
+
+    // Extract versions from the already-found paths — no second find required.
+    let (ytdlp_version, ffmpeg_version, gallerydl_version) = tokio::join!(
+        async {
+            match ytdlp_result.as_ref() {
+                Some((path, _)) => dependencies::check_version_at_path(path, "yt-dlp").await,
+                None => None,
+            }
+        },
+        async {
+            match ffmpeg_result.as_ref() {
+                Some((path, _)) => dependencies::check_version_at_path(path, "ffmpeg").await,
+                None => None,
+            }
+        },
+        async {
+            match gallerydl_result.as_ref() {
+                Some((path, _)) => dependencies::check_version_at_path(path, "gallery-dl").await,
+                None => None,
+            }
+        },
+    );
+
+    let pdfium_resolved = pdfium::resolve_with_source();
+    let pdfium_installed = pdfium_resolved.is_some();
+    let pdfium_version = if pdfium_installed {
+        Some(pdfium::read_version_marker().unwrap_or_else(|| "installed".to_string()))
+    } else {
+        None
+    };
+
+    let ytdlp_source = ytdlp_result
+        .as_ref()
+        .map(|(_, s)| s.to_string())
+        .unwrap_or_else(|| "missing".to_string());
+    let ytdlp_path = ytdlp_result.map(|(p, _)| p.to_string_lossy().to_string());
+
+    let ffmpeg_source = ffmpeg_result
+        .as_ref()
+        .map(|(_, s)| s.to_string())
+        .unwrap_or_else(|| "missing".to_string());
+    let ffmpeg_path = ffmpeg_result.map(|(p, _)| p.to_string_lossy().to_string());
+
+    let gallerydl_source = gallerydl_result
+        .as_ref()
+        .map(|(_, s)| s.to_string())
+        .unwrap_or_else(|| "missing".to_string());
+    let gallerydl_path = gallerydl_result.map(|(p, _)| p.to_string_lossy().to_string());
+
+    let ytdlp_outdated = ytdlp_version
+        .as_deref()
+        .and_then(crate::core::ytdlp::ytdlp_version_is_supported)
+        .map(|supported| !supported)
+        .unwrap_or(false);
+
+    Ok(vec![
+        DependencyStatus {
+            name: "yt-dlp".into(),
+            installed: ytdlp_version.is_some(),
+            version: ytdlp_version,
+            source: ytdlp_source,
+            path: ytdlp_path,
+            outdated: ytdlp_outdated,
+        },
+        DependencyStatus {
+            name: "FFmpeg".into(),
+            installed: ffmpeg_version.is_some(),
+            version: ffmpeg_version,
+            source: ffmpeg_source,
+            path: ffmpeg_path,
+            outdated: false,
+        },
+        DependencyStatus {
+            name: "PDFium".into(),
+            installed: pdfium_installed,
+            version: pdfium_version,
+            source: pdfium_resolved
+                .as_ref()
+                .map(|(_, s)| (*s).to_string())
+                .unwrap_or_else(|| "missing".to_string()),
+            // The resolved library, not the managed folder: with a custom
+            // path those are different places, and naming the folder there
+            // would point at something the app is not using.
+            path: pdfium_resolved
+                .as_ref()
+                .map(|(p, _)| p.to_string_lossy().to_string()),
+            outdated: false,
+        },
+        DependencyStatus {
+            name: "gallery-dl".into(),
+            installed: gallerydl_version.is_some(),
+            version: gallerydl_version,
+            source: gallerydl_source,
+            path: gallerydl_path,
+            outdated: false,
+        },
+    ])
+}
+
+#[tauri::command]
+pub async fn check_ytdlp_available() -> Result<bool, String> {
+    Ok(crate::core::ytdlp::find_ytdlp_cached().await.is_some())
+}
+
+#[tauri::command]
+pub async fn install_dependency(
+    name: String,
+    variant: Option<String>,
+    force: Option<bool>,
+) -> Result<String, String> {
+    let force = force.unwrap_or(false);
+    match name.as_str() {
+        "yt-dlp" => {
+            if force {
+                // B37: guardar o binario atual antes de sobrescrever. Uma versao
+                // nova do yt-dlp que quebra um site e o modo de falha mais comum
+                // deste app, e sem copia nao ha como voltar sem internet.
+                archive_before_update("yt-dlp").await;
+                crate::core::ytdlp::update_ytdlp()
+                    .await
+                    .map_err(|e| e.to_string())?;
+            } else {
+                crate::core::ytdlp::ensure_ytdlp()
+                    .await
+                    .map_err(|e| e.to_string())?;
+            }
+            crate::core::ytdlp::reset_ytdlp_cache();
+        }
+        "FFmpeg" => {
+            if force {
+                dependencies::update_ffmpeg()
+                    .await
+                    .map_err(|e| e.to_string())?;
+            } else {
+                dependencies::ensure_ffmpeg()
+                    .await
+                    .map_err(|e| e.to_string())?;
+            }
+            crate::core::ytdlp::reset_ffmpeg_location_cache();
+            crate::core::ffmpeg::reset_ffmpeg_available_cache();
+        }
+        "PDFium" => {
+            let _path: PathBuf = pdfium::ensure_pdfium_with_variant(variant)
+                .await
+                .map_err(|e| e.to_string())?;
+            return Ok(pdfium::read_version_marker().unwrap_or_else(|| "installed".to_string()));
+        }
+        "gallery-dl" => {
+            if force {
+                archive_before_update("gallery-dl").await;
+                dependencies::update_gallerydl()
+                    .await
+                    .map_err(|e| e.to_string())?;
+            } else {
+                dependencies::download_gallerydl()
+                    .await
+                    .map_err(|e| e.to_string())?;
+            }
+        }
+        _ => return Err(format!("Unknown dependency: {}", name)),
+    }
+
+    dependencies::check_version(match name.as_str() {
+        "FFmpeg" => "ffmpeg",
+        other => other,
+    })
+    .await
+    .ok_or_else(|| "Installed but version check failed".into())
+}
+
+/// Caminho do binario gerenciado de uma dependencia, quando ha um.
+/// Locates the managed binary without touching it. Previously this called
+/// `ensure_ytdlp`, which downloads a missing binary and spawns a freshness
+/// check plus a JS-runtime check (yt-dlp and deno processes) on every call.
+/// Listing archived versions is a read, and the Plugins tab does it on
+/// render, so that turned a UI refresh into a process storm (#281).
+async fn managed_binary_path(name: &str) -> Option<PathBuf> {
+    match name {
+        "yt-dlp" => gumballz_core::core::ytdlp::managed_ytdlp_path(),
+        "gallery-dl" => {
+            let bin_dir = gumballz_core::core::dependencies::managed_bin_dir()?;
+            let target = bin_dir.join(gumballz_core::core::dependencies::bin_name("gallery-dl"));
+            target.exists().then_some(target)
+        }
+        _ => None,
+    }
+}
+
+fn agora_ms() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0)
+}
+
+/// Arquiva a versao instalada e poda as antigas.
+///
+/// Falha em silencio de proposito: nao poder guardar copia e motivo para nao
+/// ter rollback, nao para impedir o update que o usuario pediu.
+async fn archive_before_update(name: &str) {
+    let Some(bin) = managed_binary_path(name).await else {
+        return;
+    };
+    match crate::core::binary_versions::archive_current(&bin, agora_ms()) {
+        Ok(Some(dest)) => {
+            tracing::info!("[deps] {} arquivado em {}", name, dest.display());
+            let arquivadas = crate::core::binary_versions::list_archived(&bin);
+            for velha in crate::core::binary_versions::prune_list(
+                &arquivadas,
+                crate::core::binary_versions::KEEP_VERSIONS,
+            ) {
+                let _ = std::fs::remove_file(&velha);
+            }
+        }
+        Ok(None) => {}
+        Err(e) => tracing::warn!("[deps] nao foi possivel arquivar {}: {}", name, e),
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ArchivedVersion {
+    pub stamp_ms: String,
+    pub path: String,
+}
+
+/// Versoes anteriores guardadas de uma dependencia, da mais nova para a mais velha.
+#[tauri::command]
+pub async fn dependency_archived_versions(name: String) -> Result<Vec<ArchivedVersion>, String> {
+    let Some(bin) = managed_binary_path(&name).await else {
+        return Ok(Vec::new());
+    };
+    let mut lista: Vec<ArchivedVersion> = crate::core::binary_versions::list_archived(&bin)
+        .into_iter()
+        .map(|(stamp, path)| ArchivedVersion {
+            // String porque u128 nao sobrevive ao JSON do JavaScript.
+            stamp_ms: stamp.to_string(),
+            path: path.to_string_lossy().to_string(),
+        })
+        .collect();
+    lista.reverse();
+    Ok(lista)
+}
+
+/// Volta uma dependencia para uma versao guardada.
+#[tauri::command]
+pub async fn rollback_dependency(name: String, stamp_ms: String) -> Result<String, String> {
+    let alvo: u128 = stamp_ms
+        .parse()
+        .map_err(|_| format!("stamp invalido: {stamp_ms}"))?;
+    let bin = managed_binary_path(&name)
+        .await
+        .ok_or_else(|| format!("{name} nao tem binario gerenciado"))?;
+
+    let arquivada = crate::core::binary_versions::list_archived(&bin)
+        .into_iter()
+        .find(|(s, _)| *s == alvo)
+        .map(|(_, p)| p)
+        .ok_or_else(|| "versao guardada nao encontrada".to_string())?;
+
+    crate::core::binary_versions::rollback_to(&bin, &arquivada).map_err(|e| e.to_string())?;
+
+    if name == "yt-dlp" {
+        crate::core::ytdlp::reset_ytdlp_cache();
+    }
+
+    crate::core::dependencies::check_version(&name)
+        .await
+        .ok_or_else(|| "voltou, mas a checagem de versao falhou".to_string())
+}
+
+#[tauri::command]
+pub fn dependency_variants(name: String) -> Result<Vec<DependencyVariantInfo>, String> {
+    match name.as_str() {
+        "PDFium" => Ok(pdfium::list_variants()
+            .into_iter()
+            .map(|v| DependencyVariantInfo {
+                id: v.id,
+                label: v.label,
+                recommended: v.recommended,
+            })
+            .collect()),
+        "yt-dlp" | "FFmpeg" | "gallery-dl" => Ok(Vec::new()),
+        _ => Err(format!("Unknown dependency: {}", name)),
+    }
+}
+
+#[tauri::command]
+pub fn dependency_install_dir(name: String) -> Result<String, String> {
+    let dir = match name.as_str() {
+        "PDFium" => pdfium::pdfium_target_dir()
+            .ok_or_else(|| "could not determine plugin data dir".to_string())?,
+        "yt-dlp" | "FFmpeg" | "gallery-dl" => crate::core::paths::app_data_dir()
+            .ok_or_else(|| "could not determine app data dir".to_string())?
+            .join("bin"),
+        _ => return Err(format!("Unknown dependency: {}", name)),
+    };
+    Ok(dir.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub async fn set_dependency_path(name: String, source_path: String) -> Result<String, String> {
+    let src = PathBuf::from(&source_path);
+
+    // Issue #222: referenciar no lugar, nao copiar. Uma copia dentro do
+    // diretorio do app envelhece sozinha — o usuario atualiza o binario dele e
+    // o GumballZ Get segue usando a versao velha sem avisar.
+    gumballz_core::core::binary_overrides::set(&name, &src)?;
+
+    if name == "yt-dlp" {
+        crate::core::ytdlp::reset_ytdlp_cache();
+    }
+    if name == "FFmpeg" {
+        crate::core::ytdlp::reset_ffmpeg_location_cache();
+        crate::core::ffmpeg::reset_ffmpeg_available_cache();
+    }
+
+    Ok(
+        crate::core::dependencies::check_version(match name.as_str() {
+            "FFmpeg" => "ffmpeg",
+            other => other,
+        })
+        .await
+        .unwrap_or_else(|| "custom".to_string()),
+    )
+}
+
+/// Volta a usar o binario gerenciado pelo GumballZ Get.
+///
+/// Existe porque escolher um caminho tem que ser reversivel com o mesmo esforco
+/// de escolher — sem isso, o usuario que apontou o arquivo errado fica preso.
+#[tauri::command]
+pub async fn clear_dependency_path(name: String) -> Result<(), String> {
+    gumballz_core::core::binary_overrides::clear(&name)?;
+    if name == "yt-dlp" {
+        crate::core::ytdlp::reset_ytdlp_cache();
+    }
+    if name == "FFmpeg" {
+        crate::core::ytdlp::reset_ffmpeg_location_cache();
+        crate::core::ffmpeg::reset_ffmpeg_available_cache();
+    }
+    Ok(())
+}
+
+/// Caminho customizado em uso, se houver.
+#[tauri::command]
+pub fn dependency_custom_path(name: String) -> Option<String> {
+    gumballz_core::core::binary_overrides::get(&name).map(|p| p.to_string_lossy().to_string())
+}
+
+/// One dependency's background auto-install result, sent to the frontend.
+#[derive(Debug, Clone, Serialize)]
+pub struct AutoInstallResult {
+    pub name: String,
+    pub installed: bool,
+    pub error: Option<String>,
+}
+
+/// Download every missing Settings → Plugins dependency in the background.
+///
+/// Called once from the startup thread, after yt-dlp and the JS runtime are
+/// ensured: it covers FFmpeg, gallery-dl and PDFium — the three rows that
+/// used to sit "Missing" until the user installed each by hand, because
+/// nothing ever called their `ensure_*` functions automatically. Binaries
+/// that are already present (managed, on PATH, Flatpak-provided, or a custom
+/// file the user picked) are skipped, so later launches are cheap no-ops and
+/// nothing is ever re-downloaded. The three downloads run concurrently.
+///
+/// Emits `dependencies-auto-install-started` with the names about to
+/// download, and `dependencies-auto-install-finished` with one
+/// [`AutoInstallResult`] per attempted dependency, so the Settings page can
+/// show the spinner on those rows and surface failures (the Install button
+/// in the row stays as the retry).
+pub async fn auto_install_missing_dependencies(app: &tauri::AppHandle) {
+    let (ffmpeg_found, gallerydl_found) = tokio::join!(
+        dependencies::find_tool_with_source("ffmpeg"),
+        dependencies::find_tool_with_source("gallery-dl"),
+    );
+    let ffmpeg_missing = ffmpeg_found.is_none();
+    let gallerydl_missing = gallerydl_found.is_none();
+    // ensure_pdfium always re-downloads, so PDFium is guarded by the
+    // resolver instead (managed file or the user's custom override).
+    let pdfium_missing = !pdfium::is_installed();
+
+    let mut missing: Vec<&'static str> = Vec::new();
+    if ffmpeg_missing {
+        missing.push("FFmpeg");
+    }
+    if gallerydl_missing {
+        missing.push("gallery-dl");
+    }
+    if pdfium_missing {
+        missing.push("PDFium");
+    }
+    if missing.is_empty() {
+        return;
+    }
+
+    let _ = app.emit("dependencies-auto-install-started", &missing);
+
+    let (ffmpeg_res, gallerydl_res, pdfium_res) = tokio::join!(
+        async {
+            if ffmpeg_missing {
+                Some(dependencies::ensure_ffmpeg().await)
+            } else {
+                None
+            }
+        },
+        async {
+            if gallerydl_missing {
+                // ensure_gallerydl swallows the error (it only logs it), so
+                // call the downloader directly to keep the real reason.
+                Some(dependencies::download_gallerydl().await)
+            } else {
+                None
+            }
+        },
+        async {
+            if pdfium_missing {
+                Some(pdfium::ensure_pdfium().await)
+            } else {
+                None
+            }
+        },
+    );
+
+    let mut results: Vec<AutoInstallResult> = Vec::new();
+    if let Some(outcome) = ffmpeg_res {
+        results.push(match outcome {
+            Ok(_) => AutoInstallResult {
+                name: "FFmpeg".into(),
+                installed: true,
+                error: None,
+            },
+            Err(e) => AutoInstallResult {
+                name: "FFmpeg".into(),
+                installed: false,
+                error: Some(e.to_string()),
+            },
+        });
+    }
+    if let Some(outcome) = gallerydl_res {
+        results.push(match outcome {
+            Ok(_) => AutoInstallResult {
+                name: "gallery-dl".into(),
+                installed: true,
+                error: None,
+            },
+            Err(e) => AutoInstallResult {
+                name: "gallery-dl".into(),
+                installed: false,
+                error: Some(e.to_string()),
+            },
+        });
+    }
+    if let Some(outcome) = pdfium_res {
+        results.push(match outcome {
+            Ok(_) => AutoInstallResult {
+                name: "PDFium".into(),
+                installed: true,
+                error: None,
+            },
+            Err(e) => AutoInstallResult {
+                name: "PDFium".into(),
+                installed: false,
+                error: Some(e.to_string()),
+            },
+        });
+    }
+
+    for result in &results {
+        match &result.error {
+            Some(e) => tracing::warn!("[deps] auto-install {} failed: {}", result.name, e),
+            None => tracing::info!("[deps] auto-installed {}", result.name),
+        }
+    }
+    let _ = app.emit("dependencies-auto-install-finished", &results);
+}

@@ -1,0 +1,382 @@
+<!--
+  GumballZ Get - Modern cross-platform download manager
+  Copyright (C) 2026 Nguyen Quoc Hung (GumballZ) <https://github.com/nughnguyen/gumballz-get>
+
+  This program is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with this program. If not, see <https://www.gnu.org/licenses/>.
+-->
+
+<script lang="ts">
+  import { page } from "$app/state";
+  import { goto } from "$app/navigation";
+  import { t } from "$lib/i18n";
+  import {
+    getDownloads,
+    getSpeedHistory,
+    type DownloadItem,
+  } from "$lib/stores/download-store.svelte";
+  import { formatBytes, formatSpeed, formatEta } from "$lib/download-format";
+
+  const downloadsMap = $derived(getDownloads());
+
+  const activeItems = $derived.by(() => {
+    const list: DownloadItem[] = [];
+    for (const item of downloadsMap.values()) {
+      if (item.status === "downloading" || item.status === "seeding") {
+        list.push(item);
+      }
+    }
+    return list;
+  });
+
+  const visible = $derived(
+    activeItems.length > 0 && page.url.pathname !== "/downloads",
+  );
+
+  const hasIndeterminate = $derived(
+    activeItems.some(
+      (item) =>
+        item.status === "downloading" &&
+        (item.percent <= 0 || item.queueKind === "image"),
+    ),
+  );
+
+  const avgPercent = $derived.by(() => {
+    if (activeItems.length === 0) return 0;
+    let sum = 0;
+    for (const item of activeItems) {
+      sum += Math.max(0, Math.min(100, item.percent || 0));
+    }
+    return sum / activeItems.length;
+  });
+
+  const totalSpeed = $derived.by(() => {
+    let bps = 0;
+    for (const item of activeItems) {
+      bps += item.speed || 0;
+    }
+    return bps;
+  });
+
+  const bytesSummary = $derived.by(() => {
+    let downloaded = 0;
+    let total = 0;
+    let allKnown = activeItems.length > 0;
+    for (const item of activeItems) {
+      if (item.kind === "generic") {
+        downloaded += item.downloadedBytes || 0;
+        if (item.totalBytes && item.totalBytes > 0) {
+          total += item.totalBytes;
+        } else {
+          allKnown = false;
+        }
+      } else {
+        downloaded += item.bytesDownloaded || 0;
+        allKnown = false;
+      }
+    }
+    if (allKnown && total > 0) {
+      return `${formatBytes(downloaded)} / ${formatBytes(total)}`;
+    }
+    return `${formatBytes(downloaded)}`;
+  });
+
+  const primaryEta = $derived.by(() => {
+    for (const item of activeItems) {
+      if (item.kind === "generic" && item.etaSeconds && item.etaSeconds > 0) {
+        return formatEta(item.etaSeconds);
+      }
+    }
+    return "";
+  });
+
+  const sparklinePaths = $derived.by(() => {
+    const primary = activeItems[0];
+    if (!primary) return { line: "", area: "" };
+    const pts = getSpeedHistory(primary.id);
+    const w = 64;
+    const h = 18;
+    if (pts.length < 2) {
+      const y = h - 2;
+      return {
+        line: `M0,${y} L${w},${y}`,
+        area: `M0,${h} L0,${y} L${w},${y} L${w},${h} Z`,
+      };
+    }
+    let maxBps = 1024;
+    for (const p of pts) {
+      if (p.bps > maxBps) maxBps = p.bps;
+    }
+    const coords = pts.map((p, idx) => {
+      const x = (idx / (pts.length - 1)) * w;
+      const ratio = Math.min(1, Math.max(0, p.bps / maxBps));
+      const y = h - 2 - ratio * (h - 4);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    });
+    const line = `M${coords.join(" L")}`;
+    const area = `M0,${h} L${coords.join(" L")} L${w},${h} Z`;
+    return { line, area };
+  });
+</script>
+
+{#if visible}
+  <div class="global-download-dock" role="status" aria-live="polite">
+    <div class="dock-progress-track" aria-hidden="true">
+      <div
+        class="dock-progress-fill"
+        class:indeterminate={hasIndeterminate && avgPercent <= 0}
+        style="width: {hasIndeterminate && avgPercent <= 0 ? '30%' : avgPercent.toFixed(1) + '%'}"
+      ></div>
+    </div>
+
+    <div class="dock-left">
+      <span class="dock-badge" aria-hidden="true">
+        <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M8 2.5v7.5M4.75 7.25 8 10.5l3.25-3.25M3 13h10" />
+        </svg>
+      </span>
+      <span class="dock-status-label">
+        {activeItems.length} {$t('downloads.phase_downloading').toLowerCase()}
+      </span>
+    </div>
+
+    <div class="dock-right">
+      <span class="dock-metrics">
+        {#if hasIndeterminate && avgPercent <= 0}
+          <strong>&hellip;</strong>
+        {:else}
+          <strong>{Math.round(avgPercent)}%</strong>
+        {/if}
+        <span class="dock-sep">&middot;</span>
+        <span>{bytesSummary}</span>
+        <span class="dock-speed">{formatSpeed(totalSpeed)}</span>
+        {#if primaryEta}
+          <span class="dock-eta">{$t('downloads.eta_left', { eta: primaryEta })}</span>
+        {/if}
+      </span>
+
+      <span class="dock-sparkline-box" aria-hidden="true">
+        <svg
+          class="dock-sparkline"
+          viewBox="0 0 64 18"
+          width="64"
+          height="18"
+          aria-hidden="true"
+        >
+          <path class="dock-sparkline-area" d={sparklinePaths.area} />
+          <path class="dock-sparkline-line" d={sparklinePaths.line} />
+        </svg>
+      </span>
+
+      <button
+        type="button"
+        class="dock-view-btn"
+        onclick={() => goto("/downloads")}
+      >
+        {$t('downloads.view_downloads')}
+      </button>
+    </div>
+  </div>
+{/if}
+
+<style>
+  .global-download-dock {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    height: 44px;
+    padding: 0 var(--space-4);
+    background: var(--surface);
+    border-top: var(--hairline) solid var(--separator);
+    flex-shrink: 0;
+    z-index: 25;
+  }
+
+  .dock-progress-track {
+    position: absolute;
+    top: -1px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: transparent;
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  .dock-progress-fill {
+    height: 100%;
+    background: var(--accent);
+    transition: width var(--duration-base) var(--ease-out);
+  }
+
+  .dock-progress-fill.indeterminate {
+    width: 30% !important;
+    animation: dock-indeterminate 1.4s ease-in-out infinite;
+  }
+
+  @keyframes dock-indeterminate {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(340%); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .dock-progress-fill.indeterminate {
+      animation: none;
+      width: 15% !important;
+    }
+  }
+
+  .dock-left {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+  }
+
+  .dock-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: var(--radius-sm);
+    background: var(--accent);
+    color: var(--on-accent);
+    border: 2px solid var(--border-ink);
+    flex-shrink: 0;
+  }
+
+  .dock-status-label {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .dock-right {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-width: 0;
+  }
+
+  .dock-metrics {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .dock-metrics strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .dock-sep {
+    color: var(--text-dim);
+  }
+
+  .dock-speed {
+    margin-left: var(--space-1);
+    color: var(--text-dim);
+  }
+
+  .dock-eta {
+    margin-left: var(--space-1);
+    color: var(--text-dim);
+  }
+
+  .dock-sparkline-box {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 24px;
+    padding: 0 6px;
+    border-radius: var(--radius-xs);
+    background: var(--fill-1);
+    box-shadow: inset 0 0 0 var(--hairline) var(--content-border);
+    flex-shrink: 0;
+  }
+
+  .dock-sparkline {
+    flex-shrink: 0;
+    overflow: visible;
+  }
+
+  .dock-sparkline-area {
+    fill: var(--accent-soft);
+  }
+
+  .dock-sparkline-line {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .dock-view-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: var(--control-h);
+    padding: 0 var(--space-3);
+    border: 2px solid var(--border-ink);
+    border-radius: var(--radius-sm);
+    background: var(--fill-1);
+    color: var(--text);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background var(--duration-fast) var(--ease-out);
+  }
+
+  @media (hover: hover) {
+    .dock-view-btn:hover {
+      background: var(--fill-2);
+    }
+  }
+
+  .dock-view-btn:focus-visible {
+    outline: var(--focus-ring);
+    outline-offset: var(--focus-ring-offset);
+  }
+
+  /* The dock is one nowrap flex row (~680px of metrics + sparkline + button)
+     inside a shell-body that clips horizontal overflow, so at narrow widths
+     the right side used to vanish. Shed the least important parts first and
+     keep % + bytes + the view button always visible. */
+  @media (max-width: 1100px) {
+    .dock-sparkline-box {
+      display: none;
+    }
+  }
+
+  @media (max-width: 900px) {
+    .dock-eta,
+    .dock-speed {
+      display: none;
+    }
+  }
+</style>

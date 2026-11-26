@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>GumballZ Get extension: pair with desktop app</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <div class="card" id="card">
+        <!-- Header: logo, name, theme switch -->
+        <div class="brand-row">
+          <div class="brand-main">
+            <img
+              src="../icons/active-48.png"
+              srcset="../icons/active-128.png 2x"
+              alt="GumballZ Get"
+              class="brand-logo"
+              width="32"
+              height="32"
+            />
+            <span class="brand-name">GumballZ Get</span>
+          </div>
+          <button id="theme-toggle" class="theme-toggle" type="button" title="Toggle color theme" aria-label="Toggle color theme">
+            <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+            </svg>
+            <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+            </svg>
+          </button>
+        </div>
+
+        <h1 class="card-title">Pair with the desktop app</h1>
+
+        <header id="welcome-header" hidden>
+          <p class="body">
+            We are looking for the desktop app now. This page connects as soon as it is found.
+          </p>
+        </header>
+
+        <header id="settings-header" hidden>
+          <p class="body">
+            In GumballZ Get, open <strong>Settings &gt; Network &gt; Browser extension</strong> and click <strong>Pair extension</strong>. This page picks up the token within a few seconds. You can also copy the token from there into the field below.
+          </p>
+        </header>
+
+        <p class="body default-desc">
+          Connect this browser to the GumballZ Get desktop app so it can capture downloads and streams for you.
+        </p>
+
+        <!-- Discovery status -->
+        <div id="discovery-status" class="discovery" role="status" aria-live="polite">
+          <span class="spinner" aria-hidden="true"></span>
+          <span id="discovery-message">Looking for the desktop app on this machine…</span>
+        </div>
+
+        <form id="pair-form" novalidate>
+          <!-- Desktop bridge endpoint -->
+          <div class="field" id="advanced">
+            <span class="label">Desktop endpoint</span>
+            <input
+              id="endpoint"
+              name="endpoint"
+              type="url"
+              placeholder="http://127.0.0.1:47720"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <span class="hint" id="endpoint-hint">Default: <code>http://127.0.0.1:47720</code></span>
+          </div>
+
+          <!-- Pairing token -->
+          <label class="field">
+            <span class="label">Pairing token</span>
+            <div class="token-wrap">
+              <input
+                id="token"
+                name="token"
+                type="password"
+                placeholder="Paste the token from GumballZ Get settings"
+                autocomplete="off"
+                spellcheck="false"
+                required
+              />
+              <button id="reveal" type="button" class="reveal" aria-pressed="false">Show</button>
+            </div>
+          </label>
+
+          <!-- Cookie sync -->
+          <label class="field checkbox-field">
+            <span class="label checkbox-label">
+              <input id="auto-capture-cookies" type="checkbox" checked />
+              Sync browser cookies to GumballZ Get automatically
+            </span>
+          </label>
+
+          <!-- Actions -->
+          <div class="actions">
+            <button id="pair-now" type="button" class="button primary">Pair now</button>
+            <button id="save" type="submit" class="button">Save</button>
+            <button id="test" type="button" class="button">Test connection</button>
+          </div>
+
+          <p id="status" class="status" role="status" aria-live="polite"></p>
+        </form>
+
+        <!-- Capture rules -->
+        <details id="capture-rules" class="install-help">
+          <summary>Advanced: capture rules</summary>
+          <p>
+            Three tables decide what the sniffer picks up: file extensions,
+            response content types, and regular expressions over the URL.
+            Changes save on their own a moment after you stop typing.
+          </p>
+
+          <section class="rules-block">
+            <div class="rules-head">
+              <h2>Extensions</h2>
+              <button id="ext-add" type="button" class="button small">Add extension</button>
+            </div>
+            <div class="rules-scroll">
+              <table class="rules-table">
+                <thead>
+                  <tr>
+                    <th class="col-on" scope="col">On</th>
+                    <th scope="col">Extension</th>
+                    <th scope="col">Size rule</th>
+                    <th class="col-remove" scope="col"><span class="sr-only">Remove</span></th>
+                  </tr>
+                </thead>
+                <tbody id="ext-rows"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="rules-block">
+            <div class="rules-head">
+              <h2>Content types</h2>
+              <button id="type-add" type="button" class="button small">Add content type</button>
+            </div>
+            <div class="rules-scroll">
+              <table class="rules-table">
+                <thead>
+                  <tr>
+                    <th class="col-on" scope="col">On</th>
+                    <th scope="col">Content type</th>
+                    <th scope="col">Size rule</th>
+                    <th class="col-remove" scope="col"><span class="sr-only">Remove</span></th>
+                  </tr>
+                </thead>
+                <tbody id="type-rows"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="rules-block">
+            <div class="rules-head">
+              <h2>Regex rules</h2>
+              <button id="regex-add" type="button" class="button small">Add rule</button>
+            </div>
+            <div class="rules-scroll">
+              <table class="rules-table">
+                <thead>
+                  <tr>
+                    <th class="col-on" scope="col">On</th>
+                    <th scope="col">Pattern</th>
+                    <th class="col-flags" scope="col">Flags</th>
+                    <th class="col-action" scope="col">Action</th>
+                    <th class="col-ext" scope="col">Save as</th>
+                    <th class="col-remove" scope="col"><span class="sr-only">Remove</span></th>
+                  </tr>
+                </thead>
+                <tbody id="regex-rows"></tbody>
+              </table>
+            </div>
+            <label class="field rules-test">
+              <span class="label">Try a URL against these rules</span>
+              <input
+                id="regex-test"
+                type="text"
+                placeholder="https://scontent.cdninstagram.com/v/clip.mp4?_nc_cat=1&amp;bytestart=0"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <span class="hint" id="regex-test-result" role="status" aria-live="polite"></span>
+            </label>
+          </section>
+
+          <div class="actions">
+            <button id="rules-reset" type="button" class="button">Restore defaults</button>
+          </div>
+          <p id="rules-status" class="status" role="status" aria-live="polite"></p>
+        </details>
+      </div>
+    </main>
+    <script type="module" src="options.js"></script>
+  </body>
+</html>
