@@ -4,9 +4,9 @@
   "version": "1.0.2",
   "identifier": "com.gumballz.get",
   "build": {
-    "beforeDevCommand": "pnpm plugins:build && pnpm dev",
+    "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "pnpm plugins:build:release && pnpm build",
+    "beforeBuildCommand": "pnpm build",
     "frontendDist": "../build"
   },
   "app": {
@@ -70,8 +70,7 @@
     "createUpdaterArtifacts": true,
     "resources": {
       "../browser-extension/chrome/": "browser-extension/chrome/",
-      "../browser-extension/firefox/": "browser-extension/firefox/",
-      "resources/bundled-plugins/": "bundled-plugins/"
+      "../browser-extension/firefox/": "browser-extension/firefox/"
     },
     "icon": [
       "icons/32x32.png",

@@ -20,12 +20,11 @@
   PluginManager — the single place where plugins are installed, browsed
   and managed. Used by the Tools page; reads live state from
   `list_plugins` (never the hardcoded registry) and refreshes on the
-  `plugins-changed` event. The 5 official tools ship as payloads bundled
-  inside the app, so installing one calls `install_plugin_from_bundle`
-  (no download, no repo needed); `list_bundled_plugins` reports which
-  of the 5 this build actually carries. Community entries still come
-  from the marketplace registry and install via
-  `install_plugin_from_registry`.
+  `plugins-changed` event. The 5 official tools install from the network
+  via `install_plugin_from_registry` (their `.zip` downloads live on the
+  rolling `plugins` release of this repo, listed in `plugins.json`);
+  nothing about them is bundled in the app. Community entries install
+  through the same registry command.
 -->
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
@@ -113,6 +112,10 @@
 
   const OFFICIAL_IDS = new Set(OFFICIAL_TOOLS.map((tool) => tool.id));
 
+  // The official tools ship from this repo's rolling `plugins` release;
+  // installing one downloads its `.zip` from the network (see `plugins.json`).
+  const OFFICIAL_REPO = "nughnguyen/gumballz-get";
+
   const CAP_LABELS: Record<string, string> = {
     "core:events": "cap_events",
     "core:toast": "cap_toast",
@@ -156,11 +159,6 @@
   let loadingBrowse = $state(false);
   let browseError = $state(false);
   let browseFetched = $state(false);
-
-  // Ids of the official tools whose payload is bundled in this build
-  // (from `list_bundled_plugins`). Empty until the first load finishes.
-  let bundledPlugins = $state<string[]>([]);
-  let bundledLoaded = $state(false);
 
   let communityRegistry = $derived(registry.filter((entry) => !OFFICIAL_IDS.has(entry.id)));
 
@@ -207,30 +205,6 @@
       browseError = true;
     }
     loadingBrowse = false;
-  }
-
-  async function refreshBundled() {
-    try {
-      bundledPlugins = await invoke<string[]>("list_bundled_plugins");
-    } catch {
-      bundledPlugins = [];
-    }
-    bundledLoaded = true;
-  }
-
-  // Official tools install from the payload bundled in the app — no
-  // download, no repo. Community entries keep using installPlugin
-  // (registry) below.
-  async function installPluginFromBundle(id: string) {
-    installingId = id;
-    try {
-      await invoke<string>("install_plugin_from_bundle", { pluginId: id });
-      await refreshPlugins();
-      await refreshUpdates();
-    } catch (e: unknown) {
-      showToast("error", errorMessage(e));
-    }
-    installingId = null;
   }
 
   async function installPlugin(id: string, repo: string) {
@@ -334,7 +308,6 @@
     (async () => {
       await refreshPlugins();
       loadingInstalled = false;
-      await refreshBundled();
       await refreshUpdates();
       if (!browseFetched) loadBrowse();
     })();
@@ -408,7 +381,6 @@
     <div class="plugin-list">
       {#each OFFICIAL_TOOLS as tool (tool.id)}
         {@const installed = installedPlugin(tool.id)}
-        {@const bundled = bundledPlugins.includes(tool.id)}
         <div class="plugin-card">
           <div class="plugin-header">
             <div class="plugin-icon-slot">
@@ -440,9 +412,8 @@
               {:else}
                 <button
                   class="btn btn-primary install-btn"
-                  disabled={installingId === tool.id || !bundledLoaded || !bundled}
-                  title={bundledLoaded && !bundled ? ($t("tools.hub.not_in_this_build") as string) : undefined}
-                  onclick={() => installPluginFromBundle(tool.id)}
+                  disabled={installingId === tool.id}
+                  onclick={() => installPlugin(tool.id, OFFICIAL_REPO)}
                 >
                   {#if installingId === tool.id}
                     {$t("marketplace.browse_loading")}
@@ -454,9 +425,6 @@
             </div>
           </div>
           <p class="plugin-desc">{$t(tool.descKey)}</p>
-          {#if !installed && bundledLoaded && !bundled}
-            <p class="not-bundled-note">{$t("tools.hub.not_in_this_build")}</p>
-          {/if}
         </div>
       {/each}
     </div>
@@ -970,12 +938,6 @@
     margin-left: calc(40px + var(--space-3));
     font-size: var(--text-sm);
     color: var(--accent-hi);
-  }
-
-  .not-bundled-note {
-    margin: 0 0 0 calc(40px + var(--space-3));
-    font-size: var(--text-sm);
-    color: var(--text-dim);
   }
 
   .load-error {

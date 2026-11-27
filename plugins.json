@@ -1,0 +1,133 @@
+{
+  "plugins": [
+    {
+      "artifacts": {
+        "windows-x86_64": {
+          "url": "https://github.com/nughnguyen/gumballz-get/releases/download/plugins/convert-windows-x86_64.zip"
+        }
+      },
+      "author": "GumballZ",
+      "capabilities": [
+        "core:events",
+        "core:toast",
+        "core:tools"
+      ],
+      "description": "Convert videos and audio between formats with FFmpeg and GPU hardware acceleration.",
+      "homepage": "https://github.com/nughnguyen/gumballz-get",
+      "id": "convert",
+      "name": "Media Converter",
+      "official": true,
+      "release_tag": "plugins",
+      "repo": "nughnguyen/gumballz-get",
+      "tags": [
+        "media",
+        "ffmpeg"
+      ],
+      "version": "1.0.3"
+    },
+    {
+      "artifacts": {
+        "windows-x86_64": {
+          "url": "https://github.com/nughnguyen/gumballz-get/releases/download/plugins/telegram-windows-x86_64.zip"
+        }
+      },
+      "author": "GumballZ",
+      "capabilities": [
+        "core:events",
+        "core:toast",
+        "core:settings",
+        "core:filesystem"
+      ],
+      "description": "Download photos, videos, files, and audio from Telegram channels and groups with QR code or phone login.",
+      "homepage": "https://github.com/nughnguyen/gumballz-get",
+      "id": "telegram",
+      "name": "Telegram Downloader",
+      "official": true,
+      "release_tag": "plugins",
+      "repo": "nughnguyen/gumballz-get",
+      "tags": [
+        "telegram",
+        "download"
+      ],
+      "version": "1.2.1"
+    },
+    {
+      "artifacts": {
+        "windows-x86_64": {
+          "url": "https://github.com/nughnguyen/gumballz-get/releases/download/plugins/courses-windows-x86_64.zip"
+        }
+      },
+      "author": "GumballZ",
+      "capabilities": [
+        "core:events",
+        "core:toast",
+        "core:settings",
+        "core:filesystem",
+        "core:proxy",
+        "core:tools",
+        "core:download-queue"
+      ],
+      "description": "Download full courses from 35+ education platforms including Hotmart, Udemy, Kiwify, Teachable, Kajabi, and more.",
+      "homepage": "https://github.com/nughnguyen/gumballz-get",
+      "id": "courses",
+      "name": "Course Downloader",
+      "official": true,
+      "release_tag": "plugins",
+      "repo": "nughnguyen/gumballz-get",
+      "tags": [
+        "courses",
+        "education"
+      ],
+      "version": "1.4.1"
+    },
+    {
+      "artifacts": {
+        "windows-x86_64": {
+          "url": "https://github.com/nughnguyen/gumballz-get/releases/download/plugins/listening-studio-windows-x86_64.zip"
+        }
+      },
+      "author": "Nguyen Quoc Hung (GumballZ)",
+      "capabilities": [
+        "core:tools",
+        "core:events"
+      ],
+      "description": "Split subtitle-timed clips, create cloze worksheets, and export Markdown or CSV.",
+      "homepage": "https://github.com/nughnguyen/gumballz-get",
+      "id": "listening-studio",
+      "name": "Listening & Vocab Studio",
+      "official": true,
+      "release_tag": "plugins",
+      "repo": "nughnguyen/gumballz-get",
+      "tags": [
+        "learning",
+        "subtitles"
+      ],
+      "version": "1.0.0"
+    },
+    {
+      "artifacts": {
+        "windows-x86_64": {
+          "url": "https://github.com/nughnguyen/gumballz-get/releases/download/plugins/asset-forge-windows-x86_64.zip"
+        }
+      },
+      "author": "Nguyen Quoc Hung (GumballZ)",
+      "capabilities": [
+        "core:tools",
+        "core:events"
+      ],
+      "description": "Convert folders of audio, video, and images in parallel with FFmpeg.",
+      "homepage": "https://github.com/nughnguyen/gumballz-get",
+      "id": "asset-forge",
+      "name": "Batch Media & Asset Forge",
+      "official": true,
+      "release_tag": "plugins",
+      "repo": "nughnguyen/gumballz-get",
+      "tags": [
+        "media",
+        "ffmpeg"
+      ],
+      "version": "1.0.0"
+    }
+  ],
+  "schema_version": 1
+}

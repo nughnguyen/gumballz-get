@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use futures::StreamExt;
-use gumballz_plugin_sdk::{PluginHost, PluginManifest, RegistryEntry};
+use gumballz_plugin_sdk::{PluginHost, PluginManifest, PluginRegistry, RegistryEntry};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use tauri::{Emitter, Manager};
+use tauri::Emitter;
 use tokio::io::AsyncWriteExt as _;
 
 use crate::plugin_host::PluginHostImpl;
@@ -16,24 +16,6 @@ const MAX_PLUGIN_ZIP_BYTES: u64 = 500 * 1024 * 1024;
 /// Hard cap for the total uncompressed bytes of an extracted plugin zip
 /// (zip-bomb guard). A plugin package is far smaller than this in practice.
 const MAX_PLUGIN_EXTRACTED_BYTES: u64 = 1024 * 1024 * 1024;
-/// The five official tools that ship inside the app bundle as installable
-/// payloads (staged by `src-tauri/build.rs` into
-/// `resources/bundled-plugins/<id>/` and shipped via `bundle.resources`).
-/// Only these ids may be installed from the bundle — the allowlist runs
-/// before any filesystem access, on top of `validate_plugin_id`, because
-/// the id becomes a resource path below. Must stay in sync with
-/// `BUNDLED_PLUGIN_IDS` in `src-tauri/build.rs`.
-const BUNDLED_PLUGIN_IDS: &[&str] = &[
-    "convert",
-    "telegram",
-    "courses",
-    "listening-studio",
-    "asset-forge",
-];
-/// Hard cap for the total bytes copied from a bundled plugin payload.
-/// A bundled payload is one cdylib (a few MB) + `plugin.json`; 100 MB is
-/// far above that and fails closed on anything unexpected.
-const MAX_BUNDLED_PLUGIN_BYTES: u64 = 100 * 1024 * 1024;
 
 fn emit_plugins_changed(app: &tauri::AppHandle) {
     let _ = app.emit("plugins-changed", ());
@@ -275,9 +257,13 @@ pub async fn plugin_command(
         })
 }
 
+/// The marketplace registry lives in the main repo (`plugins.json` at the
+/// repo root), so the official tools need no separate registry repo. The
+/// jsDelivr mirror is the fallback when raw.githubusercontent.com is
+/// unreachable.
 const REGISTRY_URLS: &[&str] = &[
-    "https://raw.githubusercontent.com/nughnguyen/gumballz-get-plugins/main/plugins.json",
-    "https://cdn.jsdelivr.net/gh/nughnguyen/gumballz-get-plugins@main/plugins.json",
+    "https://raw.githubusercontent.com/nughnguyen/gumballz-get/main/plugins.json",
+    "https://cdn.jsdelivr.net/gh/nughnguyen/gumballz-get@main/plugins.json",
 ];
 
 #[derive(Debug, Serialize)]
@@ -307,12 +293,7 @@ pub async fn fetch_marketplace_registry(
     .build()
     .map_err(|e| e.to_string())?;
 
-    #[derive(Deserialize)]
-    struct RegistryFile {
-        plugins: Vec<RegistryEntry>,
-    }
-
-    let mut registry: Option<RegistryFile> = None;
+    let mut registry: Option<PluginRegistry> = None;
     let mut last_err = String::from("Failed to fetch registry");
 
     for url in REGISTRY_URLS {
@@ -339,7 +320,7 @@ pub async fn fetch_marketplace_registry(
             }
         };
 
-        match serde_json::from_str::<RegistryFile>(&body) {
+        match serde_json::from_str::<PluginRegistry>(&body) {
             Ok(parsed) => {
                 registry = Some(parsed);
                 break;
@@ -416,8 +397,7 @@ struct GitHubAsset {
 /// removed once the new install is in place). Only then is the entry
 /// registered in `installed.json`. On ANY failure the staging dir is deleted
 /// and the previous install is left untouched (or restored). Shared by the
-/// zip installer and the bundled installer — the swap logic lives here
-/// exactly once.
+/// zip installers — the swap logic lives here exactly once.
 async fn swap_staged_into_place(
     staging: &std::path::Path,
     plugin_id: &str,
@@ -647,67 +627,43 @@ async fn stream_download_to_file(
     Ok(format!("{:x}", hasher.finalize()))
 }
 
-pub async fn install_plugin_zip_from_repo(
-    state: &Arc<tokio::sync::RwLock<PluginManager>>,
-    plugin_id: String,
-    repo: String,
-    expected_sha256: Option<String>,
-    expected_size: Option<u64>,
-) -> Result<String, String> {
-    validate_plugin_id(&plugin_id).map_err(|e| e.to_string())?;
-    let suffix = platform_artifact_suffix();
-    if suffix == "unknown" {
-        return Err("This platform is not supported".to_string());
-    }
-    // Fail closed on a malformed registry checksum: a checksum that is not
-    // 64 hex chars can never match a real download, so refuse upfront
-    // instead of downloading and then comparing against garbage.
-    let expected_sha256 = match expected_sha256.as_deref() {
+/// Normalize a registry checksum to lowercase hex, failing closed on
+/// anything that is not 64 hex chars — it can never match a real download,
+/// so refuse upfront instead of downloading and then comparing against
+/// garbage.
+fn normalize_expected_sha256(expected_sha256: Option<String>) -> Result<Option<String>, String> {
+    match expected_sha256.as_deref() {
         Some(raw) => {
             let normalized = raw.trim().trim_start_matches("sha256:").to_lowercase();
-            let is_hex = normalized.len() == 64
-                && normalized.chars().all(|c| c.is_ascii_hexdigit());
+            let is_hex =
+                normalized.len() == 64 && normalized.chars().all(|c| c.is_ascii_hexdigit());
             if !is_hex {
                 return Err("Invalid SHA-256 checksum in the registry".into());
             }
-            Some(normalized)
+            Ok(Some(normalized))
         }
-        None => None,
-    };
+        None => Ok(None),
+    }
+}
 
-    let client = crate::core::http_client::apply_global_proxy(
-        reqwest::Client::builder()
-            .user_agent("GumballZ Get")
-            .timeout(std::time::Duration::from_secs(60))
-            .connect_timeout(std::time::Duration::from_secs(15)),
-    )
-    .build()
-    .map_err(|e| e.to_string())?;
-
-    let api_url = format!("https://api.github.com/repos/{}/releases/latest", repo);
-    let release: GitHubRelease = client
-        .get(&api_url)
-        .send()
-        .await
-        .map_err(|e| format!("NetworkUnreachable|Failed to download the release information: {}", e))?
-        .error_for_status()
-        .map_err(|e| format!("Failed to download the release information: {}", e))?
-        .json()
-        .await
-        .map_err(|e| format!("Invalid release response: {}", e))?;
-
-    let asset = release
-        .assets
-        .iter()
-        .find(|a| a.name.contains(suffix) && a.name.ends_with(".zip"))
-        .ok_or_else(|| format!("No build available for {}", suffix))?;
-
-    // Size cap: the registry size when known (the download must not exceed
-    // it), the asset size GitHub reports as a fallback, else 500 MB.
-    let size_cap = expected_size
-        .or(asset.size)
-        .unwrap_or(MAX_PLUGIN_ZIP_BYTES);
-
+/// Download the plugin `.zip` at `url` to a temp file (streaming, hashed,
+/// capped at `size_cap`), verify its SHA-256 when `expected_sha256` is
+/// known, then install it through the shared zip pipeline. The temp file
+/// is always removed. `repo` / `source_release` are recorded on the
+/// installed entry for update checks. Shared by the direct-URL path and
+/// the repo-release path — the download-then-install tail lives here
+/// exactly once.
+async fn download_and_install_zip(
+    state: &Arc<tokio::sync::RwLock<PluginManager>>,
+    client: &reqwest::Client,
+    url: &str,
+    plugin_id: &str,
+    expected_sha256: Option<String>,
+    size_cap: u64,
+    repo: Option<String>,
+    source_release: Option<String>,
+) -> Result<String, String> {
+    let expected_sha256 = normalize_expected_sha256(expected_sha256)?;
     let plugins_dir = {
         let manager = state.read().await;
         manager.plugins_dir().to_path_buf()
@@ -719,16 +675,7 @@ pub async fn install_plugin_zip_from_repo(
         uuid::Uuid::new_v4().as_simple()
     ));
 
-    // Stream the download to a temp file (never whole-file into memory),
-    // hashing as we go and failing closed past the size cap. Returns the
-    // SHA-256 hex of the downloaded bytes.
-    let actual_sha256 = match stream_download_to_file(
-        &client,
-        &asset.browser_download_url,
-        &download_path,
-        size_cap,
-    )
-    .await
+    let actual_sha256 = match stream_download_to_file(client, url, &download_path, size_cap).await
     {
         Ok(hash) => hash,
         Err(e) => {
@@ -753,9 +700,9 @@ pub async fn install_plugin_zip_from_repo(
 
     let version = match install_from_zip_file(
         &download_path,
-        &plugin_id,
-        Some(repo),
-        Some(release.tag_name.clone()),
+        plugin_id,
+        repo,
+        source_release,
         state,
     )
     .await
@@ -770,6 +717,126 @@ pub async fn install_plugin_zip_from_repo(
     Ok(version)
 }
 
+/// Download a plugin `.zip` from a direct URL the registry publishes for
+/// this platform (the official plugins), with no GitHub API call and no
+/// asset matching. Falls back to the zip + manifest validation when the
+/// registry publishes no checksum.
+async fn install_plugin_zip_from_url(
+    state: &Arc<tokio::sync::RwLock<PluginManager>>,
+    plugin_id: String,
+    url: String,
+    expected_sha256: Option<String>,
+    expected_size: Option<u64>,
+    repo: Option<String>,
+    source_release: Option<String>,
+) -> Result<String, String> {
+    validate_plugin_id(&plugin_id).map_err(|e| e.to_string())?;
+    let client = crate::core::http_client::apply_global_proxy(
+        reqwest::Client::builder()
+            .user_agent("GumballZ Get")
+            .timeout(std::time::Duration::from_secs(60))
+            .connect_timeout(std::time::Duration::from_secs(15)),
+    )
+    .build()
+    .map_err(|e| e.to_string())?;
+    let size_cap = expected_size.unwrap_or(MAX_PLUGIN_ZIP_BYTES);
+    download_and_install_zip(
+        state,
+        &client,
+        &url,
+        &plugin_id,
+        expected_sha256,
+        size_cap,
+        repo,
+        source_release,
+    )
+    .await
+}
+
+pub async fn install_plugin_zip_from_repo(
+    state: &Arc<tokio::sync::RwLock<PluginManager>>,
+    plugin_id: String,
+    repo: String,
+    expected_sha256: Option<String>,
+    expected_size: Option<u64>,
+    release_tag: Option<String>,
+) -> Result<String, String> {
+    validate_plugin_id(&plugin_id).map_err(|e| e.to_string())?;
+    let suffix = platform_artifact_suffix();
+    if suffix == "unknown" {
+        return Err("This platform is not supported".to_string());
+    }
+
+    let client = crate::core::http_client::apply_global_proxy(
+        reqwest::Client::builder()
+            .user_agent("GumballZ Get")
+            .timeout(std::time::Duration::from_secs(60))
+            .connect_timeout(std::time::Duration::from_secs(15)),
+    )
+    .build()
+    .map_err(|e| e.to_string())?;
+
+    // A tagged release when the registry names one (the official plugins
+    // ship from the rolling `plugins` release), else the repo's latest
+    // release (community plugins).
+    let api_url = match &release_tag {
+        Some(tag) => format!(
+            "https://api.github.com/repos/{}/releases/tags/{}",
+            repo, tag
+        ),
+        None => format!("https://api.github.com/repos/{}/releases/latest", repo),
+    };
+    let release: GitHubRelease = client
+        .get(&api_url)
+        .send()
+        .await
+        .map_err(|e| format!("NetworkUnreachable|Failed to download the release information: {}", e))?
+        .error_for_status()
+        .map_err(|e| format!("Failed to download the release information: {}", e))?
+        .json()
+        .await
+        .map_err(|e| format!("Invalid release response: {}", e))?;
+
+    // Prefer the asset named for this plugin (`<id>-<platform>.zip`): a
+    // release holding several plugins would otherwise match the first
+    // `.zip` for the platform, which may be another plugin. Fall back to
+    // any `.zip` for the platform, for repos whose asset names do not
+    // carry the plugin id.
+    let asset = release
+        .assets
+        .iter()
+        .find(|a| {
+            a.name.contains(plugin_id.as_str())
+                && a.name.contains(suffix)
+                && a.name.ends_with(".zip")
+        })
+        .or_else(|| {
+            release
+                .assets
+                .iter()
+                .find(|a| a.name.contains(suffix) && a.name.ends_with(".zip"))
+        })
+        .ok_or_else(|| format!("No build available for {}", suffix))?;
+
+    // Size cap: the registry size when known (the download must not exceed
+    // it), the asset size GitHub reports as a fallback, else 500 MB.
+    let size_cap = expected_size
+        .or(asset.size)
+        .unwrap_or(MAX_PLUGIN_ZIP_BYTES);
+
+    download_and_install_zip(
+        state,
+        &client,
+        &asset.browser_download_url,
+        &plugin_id,
+        expected_sha256,
+        size_cap,
+        Some(repo),
+        Some(release.tag_name.clone()),
+    )
+    .await
+}
+
 #[tauri::command]
 pub async fn install_plugin_from_registry(
     app: tauri::AppHandle,
@@ -777,32 +844,69 @@ pub async fn install_plugin_from_registry(
     plugin_id: String,
     repo: String,
 ) -> Result<String, String> {
-    // Best-effort registry lookup for the checksum + expected size. If the
-    // registry is unreachable the install still proceeds, but without a
-    // checksum to verify against (zip + manifest validation + the loader's
-    // ABI/rustc handshake still apply).
-    let (expected_sha256, expected_size) = match fetch_registry_entries().await {
-        Ok(entries) => entries
-            .into_iter()
-            .find(|e| e.id == plugin_id)
-            .map(|e| (e.sha256, e.size))
-            .unwrap_or((None, None)),
+    // Best-effort registry lookup for the download URL, checksum, expected
+    // size, and release tag. If the registry is unreachable the install
+    // still proceeds via the repo's latest release, but without a checksum
+    // to verify against (zip + manifest validation + the loader's ABI/rustc
+    // handshake still apply).
+    let registry_entry = match fetch_registry_entries().await {
+        Ok(entries) => entries.into_iter().find(|e| e.id == plugin_id),
         Err(e) => {
             tracing::debug!(
                 "install_plugin_from_registry: registry unavailable, no checksum: {}",
                 e
             );
-            (None, None)
+            None
         }
     };
-    let version = install_plugin_zip_from_repo(
-        &state.inner().clone(),
-        plugin_id.clone(),
-        repo,
-        expected_sha256,
-        expected_size,
-    )
-    .await?;
+    let suffix = platform_artifact_suffix();
+    if suffix == "unknown" {
+        return Err("This platform is not supported".to_string());
+    }
+
+    let version = if let Some(artifact) = registry_entry
+        .as_ref()
+        .and_then(|entry| entry.artifacts.as_ref())
+        .and_then(|artifacts| artifacts.get(suffix))
+    {
+        // Direct download: the registry publishes the exact `.zip` URL
+        // for this platform, so no GitHub API call and no asset matching.
+        // The artifact checksum/size win; the entry-level ones are the
+        // fallback for registries that publish a single checksum.
+        let expected_sha256 = artifact
+            .sha256
+            .clone()
+            .or_else(|| registry_entry.as_ref().and_then(|e| e.sha256.clone()));
+        let expected_size = artifact
+            .size
+            .or_else(|| registry_entry.as_ref().and_then(|e| e.size));
+        let release_tag = registry_entry.as_ref().and_then(|e| e.release_tag.clone());
+        install_plugin_zip_from_url(
+            &state.inner().clone(),
+            plugin_id.clone(),
+            artifact.url.clone(),
+            expected_sha256,
+            expected_size,
+            Some(repo),
+            release_tag,
+        )
+        .await?
+    } else {
+        let (expected_sha256, expected_size) = registry_entry
+            .as_ref()
+            .map(|e| (e.sha256.clone(), e.size))
+            .unwrap_or((None, None));
+        let release_tag = registry_entry.as_ref().and_then(|e| e.release_tag.clone());
+        install_plugin_zip_from_repo(
+            &state.inner().clone(),
+            plugin_id.clone(),
+            repo,
+            expected_sha256,
+            expected_size,
+            release_tag,
+        )
+        .await?
+    };
     {
         let mut manager = state.write().await;
         if !manager.is_loaded(&plugin_id) {
@@ -865,217 +969,6 @@ pub async fn install_plugin_from_file(
     Ok(version)
 }
 
-/// File extension of the native plugin library on this platform — the same
-/// extension the loader's dir-scan (`find_native_lib`) looks for.
-fn native_lib_extension() -> &'static str {
-    if cfg!(target_os = "windows") {
-        "dll"
-    } else if cfg!(target_os = "macos") {
-        "dylib"
-    } else {
-        "so"
-    }
-}
-
-/// Resolve a bundled plugin payload dir, if this build ships one. The
-/// bundler copies `bundle.resources` into the resource dir (in dev,
-/// `tauri-build` copies them next to the binary in `target/<profile>/`);
-/// a build with no resources folder — e.g. the Windows portable .exe —
-/// resolves to a path that does not exist.
-fn bundled_plugin_dir(
-    app: &tauri::AppHandle,
-    plugin_id: &str,
-) -> Option<std::path::PathBuf> {
-    let dir = app
-        .path()
-        .resolve(
-            format!("bundled-plugins/{plugin_id}"),
-            tauri::path::BaseDirectory::Resource,
-        )
-        .ok()?;
-    if dir.is_dir() {
-        Some(dir)
-    } else {
-        None
-    }
-}
-
-/// Read + validate the `plugin.json` of a bundled payload: it must parse
-/// and its id must equal `plugin_id`.
-fn read_bundled_manifest(
-    bundled_dir: &std::path::Path,
-    plugin_id: &str,
-) -> Result<PluginManifest, String> {
-    let manifest_path = bundled_dir.join("plugin.json");
-    let manifest_str = std::fs::read_to_string(&manifest_path)
-        .map_err(|_| format!("The bundled plugin package '{plugin_id}' is missing plugin.json"))?;
-    let manifest: PluginManifest = serde_json::from_str(&manifest_str)
-        .map_err(|e| format!("Invalid plugin.json: {}", e))?;
-    if let Err(e) = validate_plugin_id(&manifest.id) {
-        return Err(format!("plugin.json has an invalid id: {}", e));
-    }
-    if manifest.id != plugin_id {
-        return Err(format!(
-            "plugin.json has id '{}' but installing '{}'",
-            manifest.id, plugin_id
-        ));
-    }
-    Ok(manifest)
-}
-
-/// The native libraries in a bundled payload dir. These manifests have no
-/// `rust_crate`, so the loader scans the installed dir for any single
-/// `.dll` / `.so` / `.dylib` — the payload must therefore contain exactly
-/// one. Zero or more than one is an error, never a guess.
-fn bundled_native_libs(
-    bundled_dir: &std::path::Path,
-) -> Result<Vec<std::path::PathBuf>, String> {
-    let ext = native_lib_extension();
-    let mut libs = Vec::new();
-    let entries = std::fs::read_dir(bundled_dir).map_err(|e| e.to_string())?;
-    for entry in entries {
-        let entry = entry.map_err(|e| e.to_string())?;
-        let path = entry.path();
-        let is_native = path.is_file()
-            && path
-                .extension()
-                .and_then(|e| e.to_str())
-                .map(|e| e == ext)
-                .unwrap_or(false);
-        if is_native {
-            libs.push(path);
-        }
-    }
-    Ok(libs)
-}
-
-/// Install one of the five official tools from the payload shipped inside
-/// the app bundle — no network, no registry, no file picker. The bundled
-/// payload (one cdylib + `plugin.json`, staged by `build.rs`) is copied
-/// into a fresh staging dir under the plugins dir, then goes through the
-/// SAME atomic swap + `register_installed` path as the zip installer, with
-/// `repo: None, source_release: None` so the update checks skip it (it is
-/// bundled, not from a repo). After a successful install the plugin is
-/// loaded and `plugins-changed` is emitted, exactly like install-from-file.
-#[tauri::command]
-pub async fn install_plugin_from_bundle(
-    app: tauri::AppHandle,
-    state: tauri::State<'_, Arc<tokio::sync::RwLock<PluginManager>>>,
-    plugin_id: String,
-) -> Result<String, String> {
-    // Allowlist first: only the five bundled ids, before touching the
-    // filesystem — the id becomes a resource path below.
-    if !BUNDLED_PLUGIN_IDS.contains(&plugin_id.as_str()) {
-        return Err(format!(
-            "Plugin '{plugin_id}' is not included in the app bundle"
-        ));
-    }
-    validate_plugin_id(&plugin_id).map_err(|e| e.to_string())?;
-    let bundled_dir = bundled_plugin_dir(&app, &plugin_id).ok_or_else(|| {
-        format!(
-            "This build does not include the bundled plugin package '{plugin_id}' (the portable .exe build has no resources folder). Install the plugin from the plugin registry or from a .zip file."
-        )
-    })?;
-    let manifest = read_bundled_manifest(&bundled_dir, &plugin_id)?;
-    let native_libs = bundled_native_libs(&bundled_dir)?;
-    let native_lib = match native_libs.len() {
-        0 => {
-            return Err(format!(
-                "The bundled plugin package '{plugin_id}' is missing the library for this platform"
-            ));
-        }
-        1 => native_libs.into_iter().next().expect("exactly one lib"),
-        _ => {
-            return Err(format!(
-                "The bundled plugin package '{plugin_id}' contains more than one library, rejected"
-            ));
-        }
-    };
-
-    let plugins_dir = {
-        let manager = state.read().await;
-        manager.plugins_dir().to_path_buf()
-    };
-    std::fs::create_dir_all(&plugins_dir).map_err(|e| e.to_string())?;
-
-    let staging = plugins_dir.join(format!(
-        ".tmp-{}-{}",
-        plugin_id,
-        uuid::Uuid::new_v4().as_simple()
-    ));
-    let cleanup = |staging: &std::path::Path| {
-        let _ = std::fs::remove_dir_all(staging);
-    };
-    if let Err(e) = std::fs::create_dir_all(&staging) {
-        return Err(format!("Failed to create the temporary directory: {}", e));
-    }
-
-    // Copy exactly the two payload files — plugin.json + the single native
-    // lib — with a size cap and symlink rejection. A resource dir should
-    // never contain a symlink; a symlink here could point the copy outside
-    // the staging dir.
-    let mut copied_bytes: u64 = 0;
-    for src in [bundled_dir.join("plugin.json"), native_lib] {
-        let metadata = std::fs::symlink_metadata(&src).map_err(|e| e.to_string())?;
-        if metadata.file_type().is_symlink() {
-            cleanup(&staging);
-            return Err(format!(
-                "The bundled plugin package '{plugin_id}' contains a symlink, rejected"
-            ));
-        }
-        copied_bytes = copied_bytes.saturating_add(metadata.len());
-        if copied_bytes > MAX_BUNDLED_PLUGIN_BYTES {
-            cleanup(&staging);
-            return Err("The bundled plugin package exceeds the allowed limit (100 MB)".into());
-        }
-        let file_name = src.file_name().ok_or_else(|| {
-            format!("The bundled plugin package '{plugin_id}' has an invalid file name")
-        })?;
-        if let Err(e) = std::fs::copy(&src, staging.join(file_name)) {
-            cleanup(&staging);
-            return Err(format!("Failed to copy the bundled plugin package: {}", e));
-        }
-    }
-
-    let version = swap_staged_into_place(
-        &staging,
-        &plugin_id,
-        manifest.version.clone(),
-        None,
-        None,
-        &state.inner().clone(),
-    )
-    .await?;
-
-    {
-        let mut manager = state.write().await;
-        if !manager.is_loaded(&plugin_id) {
-            let plugins_dir = manager.plugins_dir().to_path_buf();
-            let host = build_plugin_host(&app, plugins_dir);
-            let _ = manager.load_one(&plugin_id, host);
-        }
-    }
-    emit_plugins_changed(&app);
-    Ok(version)
-}
-
-/// Ids among the five bundled tools whose payload is present in this build,
-/// so the frontend can grey out Install when a build ships no bundle
-/// (e.g. the portable .exe, which carries no resources folder).
-#[tauri::command]
-pub fn list_bundled_plugins(app: tauri::AppHandle) -> Vec<String> {
-    let mut bundled = Vec::new();
-    for id in BUNDLED_PLUGIN_IDS {
-        let present = bundled_plugin_dir(&app, id)
-            .map(|dir| dir.join("plugin.json").is_file())
-            .unwrap_or(false);
-        if present {
-            bundled.push(id.to_string());
-        }
-    }
-    bundled
-}
-
 async fn fetch_registry_entries() -> Result<Vec<RegistryEntry>, String> {
     let client = crate::core::http_client::apply_global_proxy(
         reqwest::Client::builder()
@@ -1085,17 +978,12 @@ async fn fetch_registry_entries() -> Result<Vec<RegistryEntry>, String> {
     .build()
     .map_err(|e| e.to_string())?;
 
-    #[derive(Deserialize)]
-    struct RegistryFile {
-        plugins: Vec<RegistryEntry>,
-    }
-
     let mut last_err = String::from("Failed to fetch registry");
     for url in REGISTRY_URLS {
         match client.get(*url).send().await {
             Ok(resp) => match resp.error_for_status() {
                 Ok(resp) => match resp.text().await {
-                    Ok(body) => match serde_json::from_str::<RegistryFile>(&body) {
+                    Ok(body) => match serde_json::from_str::<PluginRegistry>(&body) {
                         Ok(parsed) => return Ok(parsed.plugins),
                         Err(e) => last_err = format!("Invalid registry: {}", e),
                     },
@@ -1107,6 +995,26 @@ async fn fetch_registry_entries() -> Result<Vec<RegistryEntry>, String> {
         }
     }
     Err(last_err)
+}
+
+/// Latest published versions of the official plugins, from the registry
+/// (`id` -> `(version, repo)`). The registry is the source of truth here:
+/// the official plugins ship from the main app repo, whose latest release
+/// tag is the app version, not the plugin version, so comparing against
+/// the repo's latest release would report a phantom update (or miss a real
+/// one) on every app release. Best-effort: an unreachable registry means
+/// an empty map and callers fall back to the repo check.
+async fn registry_official_versions() -> std::collections::HashMap<String, (String, String)> {
+    fetch_registry_entries()
+        .await
+        .map(|entries| {
+            entries
+                .into_iter()
+                .filter(|e| e.official)
+                .filter_map(|e| e.version.map(|v| (e.id, (v, e.repo))))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 pub async fn auto_update_plugins(state: Arc<tokio::sync::RwLock<PluginManager>>) {
@@ -1129,7 +1037,22 @@ pub async fn auto_update_plugins(state: Arc<tokio::sync::RwLock<PluginManager>>)
         }
     };
 
+    let official_versions = registry_official_versions().await;
+
     for plugin in installed {
+        // Official plugins: the registry version, not the repo's latest
+        // release tag (which is the app version for the main repo).
+        if let Some((latest, _)) = official_versions.get(&plugin.id) {
+            if !latest.is_empty() && *latest != plugin.version {
+                tracing::info!(
+                    "plugin update available for '{}': {} -> {} (silent auto-execution disabled for security)",
+                    plugin.id,
+                    plugin.version,
+                    latest
+                );
+            }
+            continue;
+        }
         let repo = match plugin.repo {
             Some(r) => r,
             None => continue,
@@ -1172,6 +1095,10 @@ pub async fn check_plugin_updates(
         manager.installed_plugins().to_vec()
     };
 
+    // Official plugins compare against the registry version (see
+    // `registry_official_versions`); the rest keep the repo check below.
+    let official_versions = registry_official_versions().await;
+
     let client = crate::core::http_client::apply_global_proxy(
         reqwest::Client::builder()
             .user_agent("GumballZ Get")
@@ -1183,6 +1110,16 @@ pub async fn check_plugin_updates(
     let mut updates = Vec::new();
 
     for plugin in &installed {
+        if let Some((latest, repo)) = official_versions.get(&plugin.id) {
+            updates.push(PluginUpdateInfo {
+                id: plugin.id.clone(),
+                installed_version: plugin.version.clone(),
+                latest_version: latest.clone(),
+                repo: repo.clone(),
+                has_update: *latest != plugin.version,
+            });
+            continue;
+        }
         let repo = match &plugin.repo {
             Some(r) => r.clone(),
             None => continue,

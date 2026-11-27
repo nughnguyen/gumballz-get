@@ -101,12 +101,45 @@ pub struct RegistryEntry {
     pub official: bool,
     #[serde(default)]
     pub capabilities: Vec<String>,
+    /// Latest published version of the plugin, when the registry knows it.
+    /// Update checks compare the installed version against this instead of
+    /// the repo's latest release tag — the official plugins ship from the
+    /// main app repo, whose latest release tag is the app version, not the
+    /// plugin version.
+    #[serde(default)]
+    pub version: Option<String>,
+    /// GitHub release tag holding this plugin's `.zip` assets, when the
+    /// plugin ships from a tagged release instead of the repo's latest
+    /// release. `None` means the repo's latest release.
+    #[serde(default)]
+    pub release_tag: Option<String>,
+    /// Per-platform downloads, keyed by the platform suffix
+    /// (`windows-x86_64`, `linux-x86_64`, `macos-aarch64`, `macos-x86_64`).
+    /// A platform with no entry here falls back to the repo-release
+    /// download path (latest release, or `release_tag` when set).
+    #[serde(default)]
+    pub artifacts: Option<HashMap<String, RegistryArtifact>>,
     /// SHA-256 hex of the platform `.zip` asset, when the registry knows it.
     /// `None` means the registry does not publish a checksum for this plugin
-    /// and the installer can only validate the zip + manifest.
+    /// and the installer can only validate the zip + manifest. Kept as a
+    /// fallback for registries that publish one checksum without the
+    /// per-platform `artifacts` map.
     #[serde(default)]
     pub sha256: Option<String>,
     /// Expected size in bytes of the platform `.zip` asset, when known.
+    #[serde(default)]
+    pub size: Option<u64>,
+}
+
+/// One downloadable build of a plugin for a single platform.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegistryArtifact {
+    /// Direct download URL of the platform `.zip` asset.
+    pub url: String,
+    /// SHA-256 hex of the `.zip` at `url`, when the registry knows it.
+    #[serde(default)]
+    pub sha256: Option<String>,
+    /// Expected size in bytes of the `.zip`, when known.
     #[serde(default)]
     pub size: Option<u64>,
 }

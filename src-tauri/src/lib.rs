@@ -1285,8 +1285,6 @@ pub fn run() {
             commands::plugins::fetch_marketplace_registry,
             commands::plugins::install_plugin_from_registry,
             commands::plugins::install_plugin_from_file,
-            commands::plugins::install_plugin_from_bundle,
-            commands::plugins::list_bundled_plugins,
             commands::plugins::get_plugin_i18n,
             commands::plugins::check_plugin_updates,
             commands::plugins::update_plugin,

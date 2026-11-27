@@ -2896,7 +2896,6 @@ export type TranslationKeys =
   | 'tools.hub.installed_hint'
   | 'tools.hub.no_plugins_desc'
   | 'tools.hub.no_plugins_title'
-  | 'tools.hub.not_in_this_build'
   | 'tools.hub.not_on_this_os'
   | 'tools.hub.official_asset_forge_desc'
   | 'tools.hub.official_asset_forge_name'

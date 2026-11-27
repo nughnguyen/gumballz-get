@@ -188,7 +188,6 @@
       "empty_title": "Không tìm thấy gì",
       "empty_desc": "Thử từ khác, hoặc đổi bộ lọc nền tảng.",
       "not_on_this_os": "Công cụ này không chạy trên hệ thống của bạn ({{os}}).",
-      "not_in_this_build": "Không có trong bản cài đặt này.",
       "soon_title": "Đang phát triển",
       "soon_desc": "Công cụ này đang nằm trong lộ trình của GumballZ Get và chưa dùng được. Nó được liệt kê để bạn biết sắp có gì.",
       "no_plugins_title": "Chưa cài plugin nào",
