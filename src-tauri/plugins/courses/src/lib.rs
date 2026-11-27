@@ -10,7 +10,7 @@ pub mod models {
     pub use gumballz_core::models::*;
 }
 
-use gumballz_plugin_sdk::{GumballzPlugin, PluginHost};
+use gumballz_plugin_sdk::{GumballzPlugin, PluginHost, PluginRuntime};
 use state::CoursesState;
 use std::sync::Arc;
 
@@ -50,6 +50,7 @@ pub struct CoursesPlugin {
     host: Option<Arc<dyn PluginHost>>,
     state: Arc<CoursesState>,
     pub app: Option<tauri::AppHandle>,
+    runtime: Option<Arc<PluginRuntime>>,
 }
 
 impl CoursesPlugin {
@@ -58,6 +59,7 @@ impl CoursesPlugin {
             host: None,
             state: Arc::new(CoursesState::default()),
             app: None,
+            runtime: None,
         }
     }
 
@@ -90,6 +92,7 @@ impl GumballzPlugin for CoursesPlugin {
 
     fn initialize(&mut self, host: Arc<dyn PluginHost>) -> anyhow::Result<()> {
         self.host = Some(host);
+        self.runtime = Some(Arc::new(PluginRuntime::new()?));
         Ok(())
     }
 
@@ -100,10 +103,15 @@ impl GumballzPlugin for CoursesPlugin {
     ) -> std::pin::Pin<
         Box<dyn std::future::Future<Output = Result<serde_json::Value, String>> + Send + 'static>,
     > {
+        let Some(runtime) = self.runtime.clone() else {
+            return Box::pin(async {
+                Err::<serde_json::Value, String>("Plugin runtime is not available".to_string())
+            });
+        };
         let _host = self.host.clone();
         let state = self.state.clone();
         let app = self.app.clone();
-        Box::pin(async move {
+        let dispatch = async move {
             macro_rules! dispatch_download {
                 ($cmd_fn:expr) => {{
                     let course_json = extract_payload(&args)?;
@@ -1998,7 +2006,8 @@ impl GumballzPlugin for CoursesPlugin {
 
                 _ => Err(format!("Unknown command: {}", command)),
             }
-        })
+        };
+        Box::pin(async move { runtime.run(dispatch).await })
     }
 
     fn commands(&self) -> Vec<String> {

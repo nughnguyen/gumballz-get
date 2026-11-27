@@ -3,13 +3,14 @@ pub mod platforms;
 pub mod settings_helper;
 pub mod state;
 
-use gumballz_plugin_sdk::{GumballzPlugin, PluginHost};
+use gumballz_plugin_sdk::{GumballzPlugin, PluginHost, PluginRuntime};
 use state::TelegramPluginState;
 use std::sync::Arc;
 
 pub struct TelegramPlugin {
     host: Option<Arc<dyn PluginHost>>,
     state: Arc<TelegramPluginState>,
+    runtime: Option<Arc<PluginRuntime>>,
 }
 
 impl Default for TelegramPlugin {
@@ -23,6 +24,7 @@ impl TelegramPlugin {
         Self {
             host: None,
             state: Arc::new(TelegramPluginState::default()),
+            runtime: None,
         }
     }
 }
@@ -46,6 +48,7 @@ impl GumballzPlugin for TelegramPlugin {
 
     fn initialize(&mut self, host: Arc<dyn PluginHost>) -> anyhow::Result<()> {
         self.host = Some(host);
+        self.runtime = Some(Arc::new(PluginRuntime::new()?));
         Ok(())
     }
 
@@ -56,9 +59,14 @@ impl GumballzPlugin for TelegramPlugin {
     ) -> std::pin::Pin<
         Box<dyn std::future::Future<Output = Result<serde_json::Value, String>> + Send + 'static>,
     > {
+        let Some(runtime) = self.runtime.clone() else {
+            return Box::pin(async {
+                Err::<serde_json::Value, String>("Plugin runtime is not available".to_string())
+            });
+        };
         let host = self.host.clone();
         let state = self.state.clone();
-        Box::pin(async move {
+        let dispatch = async move {
             match command.as_str() {
                 "telegram_check_session" => {
                     let res = commands::telegram::telegram_check_session(&state).await?;
@@ -1525,7 +1533,8 @@ impl GumballzPlugin for TelegramPlugin {
                 }
                 _ => Err(format!("Unknown command: {}", command)),
             }
-        })
+        };
+        Box::pin(async move { runtime.run(dispatch).await })
     }
 
     fn commands(&self) -> Vec<String> {

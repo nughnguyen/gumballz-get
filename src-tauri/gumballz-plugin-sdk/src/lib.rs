@@ -1,10 +1,12 @@
 mod host;
 mod manifest;
 mod plugin;
+mod runtime;
 
 pub use host::*;
 pub use manifest::*;
 pub use plugin::*;
+pub use runtime::*;
 
 /// Plugin ABI generation. The loader refuses to load any plugin whose
 /// `gumballz_get_plugin_abi_version` export does not return exactly this value.

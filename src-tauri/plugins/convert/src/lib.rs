@@ -1,4 +1,4 @@
-use gumballz_plugin_sdk::{GumballzPlugin, PluginHost};
+use gumballz_plugin_sdk::{GumballzPlugin, PluginHost, PluginRuntime};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -7,6 +7,7 @@ use tokio_util::sync::CancellationToken;
 pub struct ConvertPlugin {
     host: Option<Arc<dyn PluginHost>>,
     active_conversions: Arc<tokio::sync::Mutex<HashMap<u64, CancellationToken>>>,
+    runtime: Option<Arc<PluginRuntime>>,
 }
 
 impl ConvertPlugin {
@@ -14,6 +15,7 @@ impl ConvertPlugin {
         Self {
             host: None,
             active_conversions: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
+            runtime: None,
         }
     }
 }
@@ -35,6 +37,7 @@ impl GumballzPlugin for ConvertPlugin {
 
     fn initialize(&mut self, host: Arc<dyn PluginHost>) -> anyhow::Result<()> {
         self.host = Some(host);
+        self.runtime = Some(Arc::new(PluginRuntime::new()?));
         Ok(())
     }
 
@@ -45,9 +48,14 @@ impl GumballzPlugin for ConvertPlugin {
     ) -> std::pin::Pin<
         Box<dyn std::future::Future<Output = Result<serde_json::Value, String>> + Send + 'static>,
     > {
+        let Some(runtime) = self.runtime.clone() else {
+            return Box::pin(async {
+                Err::<serde_json::Value, String>("Plugin runtime is not available".to_string())
+            });
+        };
         let host = self.host.clone();
         let active = self.active_conversions.clone();
-        Box::pin(async move {
+        let dispatch = async move {
             match command.as_str() {
                 "probe_file" => {
                     let path: String =
@@ -155,7 +163,8 @@ impl GumballzPlugin for ConvertPlugin {
 
                 _ => Err(format!("Unknown command: {}", command)),
             }
-        })
+        };
+        Box::pin(async move { runtime.run(dispatch).await })
     }
 
     fn commands(&self) -> Vec<String> {
