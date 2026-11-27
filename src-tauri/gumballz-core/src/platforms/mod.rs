@@ -198,7 +198,7 @@ impl Platform {
             || (matches("open.spotify.com")
                 && parsed
                     .path_segments()
-                    .map(|s| s.any(|seg| seg == "track"))
+                    .map(|mut s| s.any(|seg| seg == "track"))
                     .unwrap_or(false))
         {
             // Only track links: albums / playlists / artists stay generic,

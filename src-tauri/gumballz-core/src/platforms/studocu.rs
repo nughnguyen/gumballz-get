@@ -41,13 +41,15 @@ impl PlatformDownloader for StudocuDownloader {
         let html = studocu::fetch_document_html(&client, &info.url).await?;
         let doc = studocu::extract_document(&html, &info.id)
             .ok_or_else(|| anyhow!("Không đọc được thông tin tài liệu Studocu"))?;
+        // Studocu's blurred preview of page 1 works as a thumbnail.
+        // Compute it before `doc.title` moves `doc` (E0382 otherwise).
+        let thumbnail_url = Some(doc.blurred_page_url(1)).filter(|u| !u.is_empty());
         Ok(MediaInfo {
             title: doc.title,
             author: "Studocu".to_string(),
             platform: "studocu".to_string(),
             duration_seconds: None,
-            // Studocu's blurred preview of page 1 works as a thumbnail.
-            thumbnail_url: Some(doc.blurred_page_url(1)).filter(|u| !u.is_empty()),
+            thumbnail_url,
             available_qualities: vec![
                 VideoQuality {
                     label: "PDF".to_string(),
