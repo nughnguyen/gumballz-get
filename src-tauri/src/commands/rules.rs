@@ -160,6 +160,6 @@ mod tests {
         let mut r = regra("  ", "youtube.com", "/a");
         r.name = "   ".to_string();
         let erro = save_rules(vec![r]).unwrap_err();
-        assert!(erro.contains("nome"));
+        assert!(erro.contains("name"));
     }
 }
