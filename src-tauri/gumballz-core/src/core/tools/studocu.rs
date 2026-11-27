@@ -14,7 +14,7 @@
 //! | Figure layer | `bg{n}.png` | hex (`bg12.png` is page 18) | Rules, table borders, coloured boxes. No text — except on scanned/image documents, where the background IS the page content. |
 //! | Text layer | `{objectKey}{n}.page` | decimal | Positioned `<span>`s, signed per page. Not used here. |
 //! | Blurred preview | `pages/blurred/page{n}.webp` | decimal | Small thumbnail with the blur baked in; served even for locked pages. |
-/// | Clear raster | `pages/page{n}.webp` | decimal | The whole page as one image; 403 on premium-locked pages. |
+//! | Clear raster | `pages/page{n}.webp` | decimal | The whole page as one image; 403 on premium-locked pages. |
 /// | Stylesheet | `{objectKey}.css` | | Fonts and layout. Not used here. |
 //!
 //! The signing keys live in `#__NEXT_DATA__` under
@@ -63,7 +63,6 @@ use std::io::{Cursor, Write};
 use std::path::PathBuf;
 
 use anyhow::{anyhow, Context};
-use image::ImageEncoder;
 
 use super::{report_bytes, ProgressFn};
 
