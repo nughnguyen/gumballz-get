@@ -7,7 +7,7 @@
 // before the app window opens.
 import { spawnSync } from "node:child_process";
 
-process.env.TAURI_CLI_NO_DEV_SERVER_WAIT = "1";
+process.env.TAURI_CLI_NO_DEV_SERVER_WAIT = "true";
 const result = spawnSync("tauri", process.argv.slice(2), {
   stdio: "inherit",
   shell: true,
