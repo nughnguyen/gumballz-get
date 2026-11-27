@@ -6,11 +6,12 @@ pub mod state;
 use gumballz_plugin_sdk::{GumballzPlugin, PluginHost, PluginRuntime};
 use state::TelegramPluginState;
 use std::sync::Arc;
+use std::sync::OnceLock;
 
 pub struct TelegramPlugin {
     host: Option<Arc<dyn PluginHost>>,
     state: Arc<TelegramPluginState>,
-    runtime: Option<Arc<PluginRuntime>>,
+    runtime: OnceLock<Option<Arc<PluginRuntime>>>,
 }
 
 impl Default for TelegramPlugin {
@@ -24,7 +25,7 @@ impl TelegramPlugin {
         Self {
             host: None,
             state: Arc::new(TelegramPluginState::default()),
-            runtime: None,
+            runtime: OnceLock::new(),
         }
     }
 }
@@ -48,7 +49,6 @@ impl GumballzPlugin for TelegramPlugin {
 
     fn initialize(&mut self, host: Arc<dyn PluginHost>) -> anyhow::Result<()> {
         self.host = Some(host);
-        self.runtime = Some(Arc::new(PluginRuntime::new()?));
         Ok(())
     }
 
@@ -59,7 +59,12 @@ impl GumballzPlugin for TelegramPlugin {
     ) -> std::pin::Pin<
         Box<dyn std::future::Future<Output = Result<serde_json::Value, String>> + Send + 'static>,
     > {
-        let Some(runtime) = self.runtime.clone() else {
+        // Lazily built on the first command, not in initialize: unit tests
+        // (and any direct caller) construct the plugin with new() and call
+        // handle_command without initialize, and the runtime must exist for
+        // them too. Creation failure stays an error, never a panic.
+        let runtime = self.runtime.get_or_init(|| PluginRuntime::new().ok().map(Arc::new));
+        let Some(runtime) = runtime.clone() else {
             return Box::pin(async {
                 Err::<serde_json::Value, String>("Plugin runtime is not available".to_string())
             });

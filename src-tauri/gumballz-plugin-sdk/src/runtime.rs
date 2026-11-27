@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 /// A Tokio runtime owned by the plugin crate itself.
 ///
 /// A dynamically loaded plugin (.dll/.so) links its own copy of tokio,
@@ -7,8 +5,11 @@ use std::sync::Arc;
 /// invisible to tokio calls made from plugin code: the first `tokio::spawn`
 /// or `tokio::time::timeout` panics with "there is no reactor running".
 /// Every plugin command must therefore run on a runtime built inside the
-/// plugin crate. This struct owns that runtime: create one per plugin
-/// (in `initialize`) and run every command through [`PluginRuntime::run`].
+/// plugin crate. This struct owns that runtime: keep one per plugin and
+/// run every command through [`PluginRuntime::run`]. Build it lazily on the
+/// first command, not in `initialize`, so direct callers (unit tests) that
+/// construct the plugin with `new()` and call `handle_command` without
+/// `initialize` still get a runtime.
 pub struct PluginRuntime {
     runtime: tokio::runtime::Runtime,
 }

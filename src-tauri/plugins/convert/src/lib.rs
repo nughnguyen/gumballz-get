@@ -1,13 +1,14 @@
 use gumballz_plugin_sdk::{GumballzPlugin, PluginHost, PluginRuntime};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::OnceLock;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 pub struct ConvertPlugin {
     host: Option<Arc<dyn PluginHost>>,
     active_conversions: Arc<tokio::sync::Mutex<HashMap<u64, CancellationToken>>>,
-    runtime: Option<Arc<PluginRuntime>>,
+    runtime: OnceLock<Option<Arc<PluginRuntime>>>,
 }
 
 impl ConvertPlugin {
@@ -15,7 +16,7 @@ impl ConvertPlugin {
         Self {
             host: None,
             active_conversions: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
-            runtime: None,
+            runtime: OnceLock::new(),
         }
     }
 }
@@ -37,7 +38,6 @@ impl GumballzPlugin for ConvertPlugin {
 
     fn initialize(&mut self, host: Arc<dyn PluginHost>) -> anyhow::Result<()> {
         self.host = Some(host);
-        self.runtime = Some(Arc::new(PluginRuntime::new()?));
         Ok(())
     }
 
@@ -48,7 +48,12 @@ impl GumballzPlugin for ConvertPlugin {
     ) -> std::pin::Pin<
         Box<dyn std::future::Future<Output = Result<serde_json::Value, String>> + Send + 'static>,
     > {
-        let Some(runtime) = self.runtime.clone() else {
+        // Lazily built on the first command, not in initialize: unit tests
+        // (and any direct caller) construct the plugin with new() and call
+        // handle_command without initialize, and the runtime must exist for
+        // them too. Creation failure stays an error, never a panic.
+        let runtime = self.runtime.get_or_init(|| PluginRuntime::new().ok().map(Arc::new));
+        let Some(runtime) = runtime.clone() else {
             return Box::pin(async {
                 Err::<serde_json::Value, String>("Plugin runtime is not available".to_string())
             });

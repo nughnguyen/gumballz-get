@@ -13,6 +13,7 @@ pub mod models {
 use gumballz_plugin_sdk::{GumballzPlugin, PluginHost, PluginRuntime};
 use state::CoursesState;
 use std::sync::Arc;
+use std::sync::OnceLock;
 
 #[inline]
 fn wrap_state<'a>(state: &'a CoursesState) -> tauri::State<'a, CoursesState> {
@@ -50,7 +51,7 @@ pub struct CoursesPlugin {
     host: Option<Arc<dyn PluginHost>>,
     state: Arc<CoursesState>,
     pub app: Option<tauri::AppHandle>,
-    runtime: Option<Arc<PluginRuntime>>,
+    runtime: OnceLock<Option<Arc<PluginRuntime>>>,
 }
 
 impl CoursesPlugin {
@@ -59,7 +60,7 @@ impl CoursesPlugin {
             host: None,
             state: Arc::new(CoursesState::default()),
             app: None,
-            runtime: None,
+            runtime: OnceLock::new(),
         }
     }
 
@@ -92,7 +93,6 @@ impl GumballzPlugin for CoursesPlugin {
 
     fn initialize(&mut self, host: Arc<dyn PluginHost>) -> anyhow::Result<()> {
         self.host = Some(host);
-        self.runtime = Some(Arc::new(PluginRuntime::new()?));
         Ok(())
     }
 
@@ -103,7 +103,12 @@ impl GumballzPlugin for CoursesPlugin {
     ) -> std::pin::Pin<
         Box<dyn std::future::Future<Output = Result<serde_json::Value, String>> + Send + 'static>,
     > {
-        let Some(runtime) = self.runtime.clone() else {
+        // Lazily built on the first command, not in initialize: unit tests
+        // (and any direct caller) construct the plugin with new() and call
+        // handle_command without initialize, and the runtime must exist for
+        // them too. Creation failure stays an error, never a panic.
+        let runtime = self.runtime.get_or_init(|| PluginRuntime::new().ok().map(Arc::new));
+        let Some(runtime) = runtime.clone() else {
             return Box::pin(async {
                 Err::<serde_json::Value, String>("Plugin runtime is not available".to_string())
             });
