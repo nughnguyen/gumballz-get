@@ -172,29 +172,29 @@ fn s(v: &str) -> String {
 
 // Deterministic, known-safe operations. These never go through the validator
 // because they are constructed here, but they also pass it (covered by tests).
-/// Alvo EBU R128 de -16 LUFS com teto de -1.5 dBTP: o mesmo que apps de
-/// podcast usam para fala. `LRA=11` mantem alguma dinamica em vez de achatar.
+/// EBU R128 target of -16 LUFS with a -1.5 dBTP ceiling: the same one podcast
+/// apps use for speech. `LRA=11` keeps some dynamics instead of flattening.
 pub const VOICE_BOOST_FILTER: &str = "loudnorm=I=-16:TP=-1.5:LRA=11";
 
-/// Remove silencio em qualquer ponto (`stop_periods=-1`), a partir de 0.35 s
-/// abaixo de -38 dB. Abaixo disso a fala fica picotada entre palavras.
+/// Removes silence anywhere (`stop_periods=-1`), from 0.35 s
+/// below -38 dB. Below that, speech gets chopped between words.
 pub const SMART_SPEED_FILTER: &str =
     "silenceremove=stop_periods=-1:stop_duration=0.35:stop_threshold=-38dB";
 
-/// O `stop_duration` de `SMART_SPEED_FILTER`, em segundos.
+/// The `stop_duration` of `SMART_SPEED_FILTER`, in seconds.
 ///
-/// `silenceremove` nao remove o silencio inteiro: ele preserva `stop_duration`
-/// de cada trecho. Sem descontar isso, a estimativa promete mais corte do que
-/// entrega — medido contra midia real, previa 20,0% e o corte foi 18,5%, e a
-/// diferenca era exatamente 12 silencios x 0,35 s.
+/// `silenceremove` does not remove the whole silence: it preserves `stop_duration`
+/// of each stretch. Without discounting that, the estimate promises more cut than it
+/// delivers — measured against real media, forecast 20.0% and the cut was 18.5%, and the
+/// difference was exactly 12 silences x 0.35 s.
 pub const SMART_SPEED_KEEP_SECS: f64 = 0.35;
 
-/// Argumentos que medem o silencio sem escrever arquivo, para estimar o ganho
-/// de duracao antes de o usuario aplicar.
+/// Arguments that measure silence without writing a file, to estimate the
+/// duration gain before the user applies it.
 ///
-/// Nao passa por `validate_transform_args`: usa `-f null`, e `-f` fica fora da
-/// allowlist de proposito. Sao argumentos constantes montados pelo app, sem
-/// nenhuma entrada de usuario ou de modelo.
+/// Does not go through `validate_transform_args`: it uses `-f null`, and `-f` stays off the
+/// allowlist on purpose. They are constant arguments built by the app, with
+/// no user or model input.
 pub fn silence_probe_args() -> Vec<String> {
     vec![
         s("-vn"),
@@ -205,17 +205,17 @@ pub fn silence_probe_args() -> Vec<String> {
     ]
 }
 
-/// Total de silencio detectado, em segundos, a partir do stderr do ffmpeg.
+/// Total detected silence, in seconds, from ffmpeg's stderr.
 ///
-/// O ffmpeg emite `silence_start` e `silence_end` em linhas separadas; um
-/// `silence_start` sem `silence_end` significa que o arquivo terminou em
-/// silencio e e ignorado, porque nao da para saber a duracao sem a duracao
-/// total do arquivo.
+/// ffmpeg emits `silence_start` and `silence_end` on separate lines; a
+/// `silence_start` without `silence_end` means the file ended in
+/// silence and is ignored, because the duration cannot be known without the
+/// file's total duration.
 pub fn parse_silence_total_secs(stderr: &str) -> f64 {
     parse_silence_intervals(stderr).iter().sum()
 }
 
-/// Cada trecho de silencio detectado, em segundos.
+/// Each detected silence stretch, in seconds.
 pub fn parse_silence_intervals(stderr: &str) -> Vec<f64> {
     let mut out = Vec::new();
     for line in stderr.lines() {
@@ -234,12 +234,12 @@ pub fn parse_silence_intervals(stderr: &str) -> Vec<f64> {
     out
 }
 
-/// Quanto o Smart Speed vai *de fato* remover, descontando o `stop_duration`
-/// que `silenceremove` preserva em cada trecho.
+/// How much Smart Speed will *actually* remove, discounting the `stop_duration`
+/// that `silenceremove` preserves in each stretch.
 ///
-/// Validado contra midia real: 12 silencios de 5 s em 300 s. A soma crua dava
-/// 60 s (20,0%) e o corte real foi 55,5 s (18,5%) — os 4,2 s de diferenca sao
-/// 12 x 0,35 s. Esta funcao devolve os 55,5 s.
+/// Validated against real media: 12 silences of 5 s in 300 s. The raw sum gave
+/// 60 s (20.0%) and the real cut was 55.5 s (18.5%) — the 4.2 s difference is
+/// 12 x 0.35 s. This function returns the 55.5 s.
 pub fn estimate_removable_secs(stderr: &str) -> f64 {
     parse_silence_intervals(stderr)
         .iter()
@@ -272,8 +272,8 @@ pub fn preset(action: &str, start: Option<&str>, end: Option<&str>) -> Result<Pr
             ],
             out_ext: "mp4",
         }),
-        // Voice Boost: normaliza volume para EBU R128 (-16 LUFS, o alvo usado
-        // por apps de podcast) sem tocar no video.
+        // Voice Boost: normalizes volume to EBU R128 (-16 LUFS, the target used
+        // by podcast apps) without touching the video.
         "voice_boost" => Ok(Preset {
             args: vec![
                 s("-af"),
@@ -287,16 +287,16 @@ pub fn preset(action: &str, start: Option<&str>, end: Option<&str>) -> Result<Pr
             ],
             out_ext: "mp4",
         }),
-        // Smart Speed: corta o silencio de aula gravada.
+        // Smart Speed: cuts the silence of a recorded lecture.
         //
-        // Saida e AUDIO, nao video, e isso e uma restricao real e nao uma
-        // simplificacao: `silenceremove` descarta amostras de audio sem mexer no
-        // PTS do video, entao aplicar sobre um mp4 dessincronizaria imagem e som.
-        // Cortar as duas streams nos mesmos pontos exigiria `select`/`aselect`
-        // com expressoes, que e outra ordem de grandeza de trabalho — e o caso de
-        // uso que originou a feature (Overcast) consome aula como audio de
-        // qualquer forma. Vem com loudnorm junto porque quem precisa de um
-        // costuma precisar do outro.
+        // Output is AUDIO, not video, and that is a real constraint, not a
+        // simplification: `silenceremove` drops audio samples without touching the
+        // video PTS, so applying it over an mp4 would desync picture and sound.
+        // Cutting both streams at the same points would require `select`/`aselect`
+        // with expressions, which is another order of magnitude of work — and the use case
+        // that originated the feature (Overcast) consumes lectures as audio
+        // anyway. It ships with loudnorm because whoever needs one
+        // usually needs the other.
         "smart_speed" => Ok(Preset {
             args: vec![
                 s("-vn"),
@@ -559,17 +559,17 @@ mod tests {
 size=N/A time=00:10:00.00 bitrate=N/A speed= 412x\n";
 
     #[test]
-    fn estimativa_de_silencio_soma_so_os_intervalos_fechados() {
+    fn silence_estimate_sums_only_closed_intervals() {
         let total = parse_silence_total_secs(SILENCEDETECT_STDERR);
-        // 2.58076 + 3.5; o terceiro silence_start nao tem end e e ignorado.
-        assert!((total - 6.08076).abs() < 1e-6, "somou {total}");
+        // 2.58076 + 3.5; the third silence_start has no end and is ignored.
+        assert!((total - 6.08076).abs() < 1e-6, "summed {total}");
     }
 
     #[test]
-    fn estimativa_ignora_log_sem_silencio() {
+    fn estimate_ignores_a_log_without_silence() {
         assert_eq!(parse_silence_total_secs(""), 0.0);
         assert_eq!(parse_silence_total_secs("size=N/A time=00:10:00.00"), 0.0);
-        // Valor ilegivel nao pode virar NaN e contaminar a soma.
+        // An unreadable value must not become NaN and contaminate the sum.
         assert_eq!(
             parse_silence_total_secs("silence_duration: nao-e-numero"),
             0.0
@@ -577,44 +577,44 @@ size=N/A time=00:10:00.00 bitrate=N/A speed= 412x\n";
     }
 
     #[test]
-    fn smart_speed_sai_como_audio_e_nao_como_video() {
-        // Restricao real, nao escolha estetica: silenceremove descarta amostras
-        // de audio sem mexer no PTS do video, entao saida em mp4
-        // dessincronizaria. O teste trava essa decisao.
-        let p = preset("smart_speed", None, None).expect("preset existe");
+    fn smart_speed_comes_out_as_audio_not_video() {
+        // Real constraint, not an aesthetic choice: silenceremove drops audio
+        // samples without touching the video PTS, so mp4 output
+        // would desync. The test pins that decision.
+        let p = preset("smart_speed", None, None).expect("preset exists");
         assert_eq!(p.out_ext, "m4a");
         assert!(p.args.contains(&"-vn".to_string()), "{:?}", p.args);
         assert!(!p.args.iter().any(|a| a == "-c:v"), "{:?}", p.args);
     }
 
     #[test]
-    fn voice_boost_preserva_o_video() {
-        let p = preset("voice_boost", None, None).expect("preset existe");
+    fn voice_boost_preserves_the_video() {
+        let p = preset("voice_boost", None, None).expect("preset exists");
         assert_eq!(p.out_ext, "mp4");
-        let idx = p.args.iter().position(|a| a == "-c:v").expect("tem -c:v");
+        let idx = p.args.iter().position(|a| a == "-c:v").expect("has -c:v");
         assert_eq!(p.args[idx + 1], "copy");
         assert!(!p.args.contains(&"-vn".to_string()));
     }
 
     #[test]
-    fn os_presets_novos_passam_pela_allowlist_de_seguranca() {
-        // Defesa em profundidade: video_op_preset revalida os args do preset
-        // antes de executar, entao um preset que nao passe aqui quebraria em
-        // runtime em vez de na compilacao.
+    fn new_presets_pass_the_security_allowlist() {
+        // Defense in depth: video_op_preset revalidates the preset's args
+        // before running, so a preset that fails here would break at
+        // runtime instead of at compile time.
         for action in ["smart_speed", "voice_boost"] {
-            let p = preset(action, None, None).expect("preset existe");
+            let p = preset(action, None, None).expect("preset exists");
             validate_transform_args(&p.args)
-                .unwrap_or_else(|e| panic!("preset {action} reprovado na allowlist: {e}"));
+                .unwrap_or_else(|e| panic!("preset {action} failed the allowlist: {e}"));
         }
     }
 
     #[test]
-    fn a_sonda_de_silencio_nao_passa_pela_allowlist_de_proposito() {
-        // Ela usa `-f null`, e `-f` NAO esta na allowlist — de proposito. Liberar
-        // `-f` deixaria o caminho de IA escolher muxer arbitrario, o que amplia
-        // superficie de seguranca para ganhar nada. A sonda e montada so pelo app,
-        // com argumentos constantes e sem entrada do usuario, entao nao precisa
-        // passar por la. Este teste trava as duas metades dessa decisao.
+    fn the_silence_probe_skips_the_allowlist_on_purpose() {
+        // It uses `-f null`, and `-f` is NOT on the allowlist — on purpose. Allowing
+        // `-f` would let the AI path pick an arbitrary muxer, which widens the
+        // security surface for no gain. The probe is built only by the app,
+        // with constant arguments and no user input, so it does not need to
+        // go through there. This test pins both halves of that decision.
         let args = silence_probe_args();
         assert!(validate_transform_args(&args).is_err());
         assert!(args.iter().all(|a| !a.contains(';')
@@ -624,39 +624,39 @@ size=N/A time=00:10:00.00 bitrate=N/A speed= 412x\n";
         assert_eq!(
             args,
             silence_probe_args(),
-            "argumentos precisam ser constantes"
+            "arguments must be constants"
         );
     }
 
     #[test]
-    fn filtros_usam_os_alvos_ebu_r128() {
+    fn filters_use_the_ebu_r128_targets() {
         assert!(VOICE_BOOST_FILTER.contains("I=-16"));
         assert!(VOICE_BOOST_FILTER.contains("TP=-1.5"));
         assert!(SMART_SPEED_FILTER.contains("stop_periods=-1"));
     }
 
     #[test]
-    fn estimativa_desconta_o_silencio_que_o_filtro_preserva() {
-        // Medido contra midia real, nao deduzido: 12 silencios de 5 s em 300 s.
-        // A soma crua da 60 s (20,0%), mas silenceremove preserva 0,35 s de cada
-        // trecho, entao o corte real foi 55,5 s (18,5%). A estimativa antiga
-        // prometia mais do que entregava.
+    fn estimate_discounts_the_silence_the_filter_preserves() {
+        // Measured against real media, not deduced: 12 silences of 5 s in 300 s.
+        // The raw sum gives 60 s (20.0%), but silenceremove preserves 0.35 s of each
+        // stretch, so the real cut was 55.5 s (18.5%). The old estimate
+        // promised more than it delivered.
         let stderr: String = (0..12)
             .map(|_| "[silencedetect] silence_end: 25 | silence_duration: 5.0\n")
             .collect();
 
         assert!((parse_silence_total_secs(&stderr) - 60.0).abs() < 1e-9);
 
-        let removivel = estimate_removable_secs(&stderr);
+        let removable = estimate_removable_secs(&stderr);
         assert!(
-            (removivel - 55.8).abs() < 0.5,
-            "esperava ~55.8 s removiveis, obtive {removivel}"
+            (removable - 55.8).abs() < 0.5,
+            "expected ~55.8 s removable, got {removable}"
         );
-        assert!(removivel < parse_silence_total_secs(&stderr));
+        assert!(removable < parse_silence_total_secs(&stderr));
     }
 
     #[test]
-    fn trecho_menor_que_o_stop_duration_nao_vira_corte_negativo() {
+    fn a_stretch_shorter_than_stop_duration_does_not_become_a_negative_cut() {
         let stderr = "silence_duration: 0.1\nsilence_duration: 0.2\n";
         assert_eq!(estimate_removable_secs(stderr), 0.0);
     }

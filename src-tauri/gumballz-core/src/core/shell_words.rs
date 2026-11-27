@@ -1,10 +1,10 @@
-//! Tokenização e citação no estilo POSIX para o comando do yt-dlp.
+//! POSIX-style tokenizing and quoting for the yt-dlp command.
 //!
-//! Existe porque a tela mostra o comando exato de cada tentativa e deixa o
-//! usuário editá-lo e rodar de novo. O caminho de ida (argv → texto) precisa
-//! ser reversível pelo caminho de volta (texto → argv); manter os dois aqui,
-//! com testes de ida-e-volta, é o que garante isso. Não usamos `sh -c`: o
-//! texto vira argv e vai direto ao processo, sem shell no meio.
+//! It exists because the screen shows the exact command of each attempt and lets the
+//! user edit it and run it again. The outbound path (argv → text) must
+//! be reversible by the inbound path (text → argv); keeping both here,
+//! with round-trip tests, is what guarantees that. We do not use `sh -c`: the
+//! text becomes argv and goes straight to the process, with no shell in between.
 
 use std::fmt;
 
@@ -25,10 +25,10 @@ impl fmt::Display for ParseError {
 
 impl std::error::Error for ParseError {}
 
-/// Divide `input` em argumentos: aspas simples literais, aspas duplas com
-/// `\"` e `\\`, barra invertida fora de aspas escapa o próximo caractere,
-/// espaço em branco separa. Quebra de linha conta como espaço, para o usuário
-/// poder formatar o comando em várias linhas na caixa de edição.
+/// Splits `input` into arguments: literal single quotes, double quotes with
+/// `\"` and `\\`, a backslash outside quotes escapes the next character,
+/// whitespace separates. A line break counts as a space, so the user
+/// can format the command across several lines in the edit box.
 pub fn split(input: &str) -> Result<Vec<String>, ParseError> {
     let mut out = Vec::new();
     let mut cur = String::new();
@@ -66,7 +66,7 @@ pub fn split(input: &str) -> Result<Vec<String>, ParseError> {
                 }
             }
             '\\' => match chars.next() {
-                Some('\n') => {} // continuação de linha: não abre token
+                Some('\n') => {} // line continuation: does not open a token
                 Some(ch) => {
                     in_token = true;
                     cur.push(ch);
@@ -121,8 +121,8 @@ fn needs_quoting(arg: &str) -> bool {
         })
 }
 
-/// Cita um argumento para exibição/edição. Prefere aspas simples (sem escapes
-/// internos); só cai para aspas duplas quando o texto contém aspas simples.
+/// Quotes an argument for display/editing. Prefers single quotes (no escapes
+/// inside); only falls back to double quotes when the text contains single quotes.
 pub fn quote(arg: &str) -> String {
     if !needs_quoting(arg) {
         return arg.to_string();
@@ -153,9 +153,9 @@ where
         .join(" ")
 }
 
-/// Flags cujo valor é segredo. O valor é trocado por `<redacted>` antes de ir
-/// para o log e para a tela; a lista é curta de propósito (mostrar demais é
-/// menos perigoso do que esconder o que o usuário precisa editar).
+/// Flags whose value is a secret. The value is swapped for `<redacted>` before going
+/// to the log and the screen; the list is short on purpose (showing too much is
+/// less dangerous than hiding what the user needs to edit).
 const SECRET_VALUE_FLAGS: &[&str] = &[
     "--password",
     "--video-password",
@@ -165,8 +165,8 @@ const SECRET_VALUE_FLAGS: &[&str] = &[
     "--all-proxy",
 ];
 
-/// Devolve uma cópia do argv com segredos redigidos: cabeçalho `Cookie:`,
-/// senhas, proxy com credenciais e `po_token=` dentro de `--extractor-args`.
+/// Returns a copy of the argv with secrets redacted: `Cookie:` header,
+/// passwords, proxy with credentials, and `po_token=` inside `--extractor-args`.
 pub fn redact(args: &[String]) -> Vec<String> {
     let mut out = Vec::with_capacity(args.len());
     let mut redact_next = false;
@@ -235,7 +235,7 @@ fn redact_header_value(v: &str) -> String {
 }
 
 fn redact_proxy_or_secret(v: &str) -> String {
-    // proxy só é segredo quando carrega usuário:senha
+    // a proxy is only a secret when it carries user:password
     if let Ok(mut url) = url::Url::parse(v) {
         if url.username().is_empty() && url.password().is_none() {
             return v.to_string();
@@ -268,7 +268,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn divide_espacos_e_aspas() {
+    fn splits_spaces_and_quotes() {
         let v = split(r#"yt-dlp -f 'bv*+ba' --add-headers "Referer: https://x/" url"#).unwrap();
         assert_eq!(
             v,
@@ -284,22 +284,22 @@ mod tests {
     }
 
     #[test]
-    fn barra_invertida_escapa_e_continua_linha() {
+    fn backslash_escapes_and_continues_line() {
         let v = split("a\\ b \\\n c").unwrap();
         assert_eq!(v, vec!["a b", "c"]);
     }
 
     #[test]
-    fn erro_em_aspas_abertas() {
+    fn error_on_open_quotes() {
         assert_eq!(split("a 'b"), Err(ParseError::UnclosedQuote('\'')));
         assert_eq!(split("a \"b"), Err(ParseError::UnclosedQuote('"')));
         assert_eq!(split("a\\"), Err(ParseError::TrailingBackslash));
     }
 
     #[test]
-    fn ida_e_volta_preserva_argv() {
-        // O comando mostrado precisa voltar idêntico quando o usuário só aperta
-        // "rodar assim"; qualquer diferença aqui viraria bug silencioso.
+    fn round_trip_preserves_argv() {
+        // The displayed command must come back identical when the user just hits
+        // "run as-is"; any difference here would become a silent bug.
         let argv: Vec<String> = [
             "yt-dlp",
             "-f",
@@ -322,7 +322,7 @@ mod tests {
     }
 
     #[test]
-    fn redige_cookie_senha_proxy_e_po_token() {
+    fn redacts_cookie_password_proxy_and_po_token() {
         let argv: Vec<String> = [
             "--add-headers",
             "Cookie:SID=abc",

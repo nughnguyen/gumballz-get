@@ -18,8 +18,8 @@
 
 <script lang="ts">
   /**
-   * Lista de contas (seguidores, fãs, fantasmas…) com filtro, seleção,
-   * export CSV e ações em massa que o pai executa.
+   * Account list (followers, fans, ghosts…) with filter, selection,
+   * CSV export and bulk actions run by the parent.
    */
   import { t } from "$lib/i18n";
   import { showToast } from "$lib/stores/toast-store.svelte";

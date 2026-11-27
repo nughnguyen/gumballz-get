@@ -1,8 +1,8 @@
-//! Cliente do GraphQL interno do X (estudo 67). Headers como o site: bearer
-//! publico, `x-csrf-token` = cookie `ct0`, `x-twitter-auth-type` quando ha
-//! `auth_token`, guest token quando nao ha sessao, `x-client-transaction-id`
-//! quando da para gerar. 404 "Query not found" recarrega os query IDs dos
-//! bundles e tenta de novo; 429 devolve `X_RATE_LIMIT:<segundos>`.
+//! Internal X GraphQL client (study 67). Headers as the site sends them: public
+//! bearer, `x-csrf-token` = `ct0` cookie, `x-twitter-auth-type` when there is
+//! an `auth_token`, guest token when there is no session, `x-client-transaction-id`
+//! when one can be generated. 404 "Query not found" reloads the query IDs from the
+//! bundles and tries again; 429 returns `X_RATE_LIMIT:<seconds>`.
 
 use std::time::{Duration, Instant};
 
@@ -96,7 +96,7 @@ const BASE_FEATURES: &[(&str, bool)] = &[
     ),
 ];
 
-/// Flags que o site manda em toda chamada (twscrape, 2026-08).
+/// Flags the site sends on every call (twscrape, 2026-08).
 pub fn base_features() -> Value {
     let mut m = serde_json::Map::new();
     for (k, v) in BASE_FEATURES {
@@ -170,7 +170,7 @@ impl XClient {
         }
     }
 
-    /// Id numerico do usuario logado (cookie `twid=u%3D<id>`).
+    /// Numeric id of the logged-in user (cookie `twid=u%3D<id>`).
     pub fn user_id(&self) -> Option<String> {
         let raw = cookie_value(self.cookie.as_deref()?, "twid")?;
         let dec = urlencoding::decode(&raw)
@@ -203,7 +203,7 @@ impl XClient {
             .await?;
         if !resp.status().is_success() {
             return Err(anyhow!(
-                "X nao entregou guest token: HTTP {}",
+                "X did not return a guest token: HTTP {}",
                 resp.status()
             ));
         }
@@ -231,7 +231,7 @@ impl XClient {
             let gen = match TxIdGen::create(&self.http, self.cookie.as_deref()).await {
                 Ok(g) => Some(g),
                 Err(e) => {
-                    tracing::debug!("[x] sem x-client-transaction-id: {}", e);
+                    tracing::debug!("[x] no x-client-transaction-id: {}", e);
                     None
                 }
             };
@@ -319,7 +319,7 @@ impl XClient {
             ));
         }
         let v: Value = serde_json::from_str(&text)
-            .map_err(|e| anyhow!("X {}: resposta invalida ({})", op, e))?;
+            .map_err(|e| anyhow!("X {}: invalid response ({})", op, e))?;
         if v.get("data")
             .map(|d| d.is_null() || d.as_object().map(|o| o.is_empty()).unwrap_or(false))
             .unwrap_or(true)
@@ -390,7 +390,7 @@ impl XClient {
                         self.guest_token(true).await?;
                     } else {
                         return Err(anyhow!(
-                            "X {}: HTTP {} (sessao expirada? entre de novo no X)",
+                            "X {}: HTTP {} (session expired? sign in to X again)",
                             op,
                             kind.trim_start_matches("auth:")
                         ));
@@ -434,7 +434,7 @@ impl XClient {
         }
     }
 
-    /// REST v1.1 (ex.: `friendships/destroy.json`), corpo em formulario.
+    /// REST v1.1 (e.g. `friendships/destroy.json`), body as a form.
     pub async fn rest_post_form(&self, path: &str, form: &[(&str, &str)]) -> anyhow::Result<Value> {
         self.require_login()?;
         let full = format!("/i/api/1.1/{}", path.trim_start_matches('/'));
@@ -457,8 +457,8 @@ impl XClient {
         }
     }
 
-    /// POST JSON cru (Grok `add_response.json`); devolve a resposta para o
-    /// chamador ler o stream.
+    /// Raw JSON POST (Grok `add_response.json`); returns the response for the
+    /// caller to read the stream from.
     pub async fn post_json_raw(
         &self,
         url: &str,
@@ -501,9 +501,9 @@ impl XClient {
         Ok(resp)
     }
 
-    /// Pagina uma timeline: `on_page` recebe a resposta e devolve quantos
-    /// itens novos extraiu. Para no fim, no limite, em 3 paginas vazias, em
-    /// cursor repetido ou quando `job` for cancelado.
+    /// Pages a timeline: `on_page` receives the response and returns how many
+    /// new items it extracted. Stops at the end, at the limit, after 3 empty pages, on a
+    /// repeated cursor, or when `job` is cancelled.
     pub async fn paginate<F>(
         &self,
         op: &str,

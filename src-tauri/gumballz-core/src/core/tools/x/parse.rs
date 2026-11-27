@@ -1,6 +1,6 @@
-//! Parser das respostas GraphQL do X (estudo 67). Segue o formato que o
-//! twscrape (MIT) e o XActions (Apache-2) leem: `instructions[].entries[]`,
-//! `itemContent.tweet_results.result` / `user_results.result`, cursores
+//! Parser for X's GraphQL responses (study 67). Follows the format that
+//! twscrape (MIT) and XActions (Apache-2) read: `instructions[].entries[]`,
+//! `itemContent.tweet_results.result` / `user_results.result`, cursors
 //! `cursorType: "Bottom"`, `TweetWithVisibilityResults`, note tweets.
 
 use serde_json::Value;
@@ -205,8 +205,8 @@ fn media_from_legacy(legacy: &Value) -> Vec<XMedia> {
     out
 }
 
-/// `tweet_results.result` → post. Reposts viram o post original com
-/// `reposted_by`; `TweetWithVisibilityResults` e desembrulhado.
+/// `tweet_results.result` → post. Reposts become the original post with
+/// `reposted_by`; `TweetWithVisibilityResults` is unwrapped.
 pub fn parse_tweet(result: &Value) -> Option<XPost> {
     let typename = s(result, "__typename");
     if typename == "TweetTombstone" || typename == "TweetUnavailable" {
@@ -270,7 +270,7 @@ pub fn parse_tweet(result: &Value) -> Option<XPost> {
             links.push(long);
         }
     }
-    // remove o t.co da midia no fim do texto
+    // removes the t.co link from media at the end of the text
     for m in legacy
         .get("extended_entities")
         .and_then(|e| e.get("media"))
@@ -345,8 +345,8 @@ fn html_unescape(t: &str) -> String {
         .replace("&#39;", "'")
 }
 
-/// Todos os `itemContent` de uma resposta de timeline, na ordem do documento
-/// (entries diretas e items de modulos).
+/// All `itemContent` of a timeline response, in document order
+/// (direct entries and module items).
 fn item_contents(v: &Value) -> Vec<Value> {
     let mut out = Vec::new();
     fn walk(v: &Value, out: &mut Vec<Value>) {
@@ -381,7 +381,7 @@ pub fn tweets_from(v: &Value) -> Vec<XPost> {
         })
         .collect();
     if out.is_empty() {
-        // respostas de um unico post (`data.tweetResult.result`)
+        // replies to a single post (`data.tweetResult.result`)
         if let Some(r) = v.pointer("/data/tweetResult/result").and_then(parse_tweet) {
             out.push(r);
         }
@@ -408,7 +408,7 @@ pub fn users_from(v: &Value) -> Vec<XUser> {
     out
 }
 
-/// Cursor de "mais" (`cursorType: Bottom`); as comunidades usam `next_cursor`.
+/// "more" cursor (`cursorType: Bottom`); communities use `next_cursor`.
 pub fn bottom_cursor(v: &Value) -> Option<String> {
     fn walk(v: &Value) -> Option<String> {
         match v {
@@ -435,8 +435,8 @@ pub fn bottom_cursor(v: &Value) -> Option<String> {
     walk(v).filter(|c| !c.is_empty())
 }
 
-/// Ids dos `entries` com conteudo (sem cursores e modulos vazios), para
-/// detectar pagina repetida.
+/// Ids of the `entries` with content (no cursors and no empty modules), to
+/// detect a repeated page.
 pub fn entry_ids(v: &Value) -> Vec<String> {
     let mut out = Vec::new();
     fn walk(v: &Value, out: &mut Vec<String>) {

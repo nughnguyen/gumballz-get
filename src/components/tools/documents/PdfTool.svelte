@@ -18,10 +18,10 @@
 
 <script lang="ts">
   /**
-   * Ferramentas de PDF (estudo 3, Stirling-PDF; 35, Dangerzone). Um componente
-   * para seis tools: `mode` decide qual formulário aparece. Tudo roda no
-   * PDFium gerido pelo app; Ghostscript, LibreOffice e Tesseract só entram
-   * quando já existem na máquina.
+   * PDF tools (study 3, Stirling-PDF; 35, Dangerzone). One component
+   * for six tools: `mode` picks which form shows. Everything runs on the
+   * app-managed PDFium; Ghostscript, LibreOffice and Tesseract only come in
+   * when they already exist on the machine.
    */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
@@ -94,7 +94,7 @@
     const picked = await pickFiles(filters);
     files = [...files, ...picked.filter((p) => !files.includes(p))];
     for (const p of picked) if (p.toLowerCase().endsWith(".pdf") && !infos[p]) {
-      try { infos = { ...infos, [p]: await invoke<Info>("tool_pdf_info", { path: p }) }; } catch { /* sem PDFium ou arquivo ruim: a tool avisa ao rodar */ }
+      try { infos = { ...infos, [p]: await invoke<Info>("tool_pdf_info", { path: p }) }; } catch { /* no PDFium or bad file: the tool warns when it runs */ }
     }
   }
   function move(i: number, d: number) {

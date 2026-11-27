@@ -1,9 +1,9 @@
-//! Arquivar canal, playlist ou Watch Later — e continuar de onde parou.
+//! Archive a channel, playlist or Watch Later — and resume where it stopped.
 //!
-//! O `--download-archive` do yt-dlp já evita rebaixar o que existe, mas ele é
-//! só uma lista de IDs: não sabe dizer o que falhou nem por quê. Aqui mora um
-//! estado próprio ao lado do destino (`.gumballz-get-archive.json`), com um status
-//! por item, para a UI mostrar a fila e para o app poder ser fechado no meio.
+//! yt-dlp's `--download-archive` already avoids re-downloading what exists, but it is
+//! only a list of IDs: it cannot say what failed or why. Here lives its own
+//! state next to the destination (`.gumballz-get-archive.json`), with one status
+//! per item, so the UI can show the queue and the app can be closed mid-way.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -16,12 +16,12 @@ pub const STATE_FILE: &str = ".gumballz-get-archive.json";
 pub const ARCHIVE_FILE: &str = ".gumballz-get-archive.txt";
 const STATE_VERSION: u32 = 1;
 const ID: &str = "yt-archive";
-/// Prefixo do `--print` para separar o caminho final das linhas de progresso.
+/// Prefix of `--print` to separate the final path from the progress lines.
 const FILE_MARK: &str = "__gumballz_get_file__";
 
 // ── yt-dlp como processo ───────────────────────────────────────────────
 
-/// Cookies da sessão em arquivo Netscape temporário, apagado no fim.
+/// Session cookies in a temporary Netscape file, deleted at the end.
 pub struct CookieFile {
     path: Option<PathBuf>,
 }
@@ -55,10 +55,10 @@ impl Drop for CookieFile {
 async fn ytdlp_path() -> anyhow::Result<PathBuf> {
     crate::core::dependencies::find_tool("yt-dlp")
         .await
-        .ok_or_else(|| anyhow!("o yt-dlp não está instalado"))
+        .ok_or_else(|| anyhow!("yt-dlp is not installed"))
 }
 
-/// Roda o yt-dlp e devolve a saída padrão. Erro traz o fim do stderr.
+/// Runs yt-dlp and returns stdout. An error carries the end of stderr.
 pub async fn run_ytdlp(args: &[String]) -> anyhow::Result<String> {
     let bin = ytdlp_path().await?;
     let out = crate::core::ytdlp::ytdlp_command(&bin)
@@ -66,7 +66,7 @@ pub async fn run_ytdlp(args: &[String]) -> anyhow::Result<String> {
         .stdin(std::process::Stdio::null())
         .output()
         .await
-        .map_err(|e| anyhow!("o yt-dlp não iniciou: {}", e))?;
+        .map_err(|e| anyhow!("yt-dlp did not start: {}", e))?;
     if !out.status.success() {
         let err = String::from_utf8_lossy(&out.stderr);
         let tail: Vec<&str> = err.lines().rev().take(3).collect();
@@ -83,13 +83,13 @@ pub async fn run_ytdlp(args: &[String]) -> anyhow::Result<String> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ItemStatus {
-    /// Ainda na fila.
+    /// Still in the queue.
     Pending,
-    /// Baixado (ou já presente no `--download-archive`).
+    /// Downloaded (or already present in `--download-archive`).
     Ok,
-    /// Tentou e deu erro; o motivo fica no item.
+    /// Tried and errored; the reason stays on the item.
     Failed,
-    /// Privado, removido ou fora do recorte pedido — não adianta tentar.
+    /// Private, removed or outside the requested cut — no point trying.
     Skipped,
 }
 
@@ -161,9 +161,9 @@ impl ArchiveState {
         c
     }
 
-    /// Junta o que a enumeração trouxe sem perder o que já foi feito:
-    /// item conhecido mantém o status, item novo entra pendente. Devolve
-    /// quantos entraram agora.
+    /// Merges what the enumeration brought without losing what was already done:
+    /// a known item keeps its status, a new item enters pending. Returns
+    /// how many entered just now.
     pub fn merge(&mut self, title: &str, fresh: Vec<ArchiveItem>, retry_failed: bool) -> usize {
         if !title.trim().is_empty() {
             self.title = title.trim().to_string();
@@ -181,8 +181,8 @@ impl ArchiveState {
                     if f.duration_seconds > 0.0 {
                         old.duration_seconds = f.duration_seconds;
                     }
-                    // Vídeo que virou privado desde a última varredura sai da
-                    // fila; o que voltou a existir volta para ela.
+                    // A video that went private since the last scan leaves the
+                    // queue; one that came back exists returns to it.
                     if f.status == ItemStatus::Skipped && old.status == ItemStatus::Pending {
                         old.status = ItemStatus::Skipped;
                         old.error.clone_from(&f.error);
@@ -239,8 +239,8 @@ pub fn load_state(dest: &Path) -> Option<ArchiveState> {
     serde_json::from_str::<ArchiveState>(&text).ok()
 }
 
-/// Grava no `.tmp` e renomeia: fechar o app no meio da escrita não deixa um
-/// estado pela metade.
+/// Writes to `.tmp` and renames: closing the app mid-write does not leave a
+/// half-written state.
 pub fn save_state(dest: &Path, state: &mut ArchiveState) -> anyhow::Result<PathBuf> {
     std::fs::create_dir_all(dest)?;
     state.version = STATE_VERSION;
@@ -257,13 +257,13 @@ pub fn save_state(dest: &Path, state: &mut ArchiveState) -> anyhow::Result<PathB
 fn unavailable_reason(title: &str) -> Option<&'static str> {
     let t = title.trim().to_lowercase();
     if t.contains("[private video]") || t == "private video" {
-        return Some("vídeo privado");
+        return Some("private video");
     }
     if t.contains("[deleted video]") || t == "deleted video" {
-        return Some("vídeo apagado");
+        return Some("deleted video");
     }
     if t.contains("[unavailable video]") {
-        return Some("vídeo indisponível");
+        return Some("unavailable video");
     }
     None
 }
@@ -311,8 +311,8 @@ fn collect_entries(v: &serde_json::Value, out: &mut Vec<ArchiveItem>) {
     });
 }
 
-/// Lê o `-J --flat-playlist`: devolve o título da coleção e os itens, sem
-/// repetição, na ordem em que o YouTube devolveu.
+/// Reads `-J --flat-playlist`: returns the collection title and the items, without
+/// repetition, in the order YouTube returned them.
 pub fn parse_flat_playlist(json: &str) -> anyhow::Result<(String, Vec<ArchiveItem>)> {
     let v: serde_json::Value = serde_json::from_str(json)?;
     let title = v
@@ -323,7 +323,7 @@ pub fn parse_flat_playlist(json: &str) -> anyhow::Result<(String, Vec<ArchiveIte
         .to_string();
     let mut items = Vec::new();
     collect_entries(&v, &mut items);
-    // Uma URL de vídeo único também vale como arquivo de um item só.
+    // A single-video URL also counts as a one-item file.
     if items.is_empty() {
         collect_entries(
             &serde_json::json!({ "_type": "video", "id": v.get("id"), "title": v.get("title"),
@@ -345,7 +345,7 @@ pub fn parse_percent(line: &str) -> Option<f64> {
     token.strip_suffix('%')?.parse::<f64>().ok()
 }
 
-/// Linha do `--print` com o arquivo final.
+/// The `--print` line with the final file.
 pub fn parse_printed_file(line: &str) -> Option<String> {
     if let Some(idx) = line.find(FILE_MARK) {
         let path = line[idx + FILE_MARK.len()..].trim();
@@ -360,9 +360,9 @@ pub fn parse_printed_file(line: &str) -> Option<String> {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Options {
-    /// Canal, playlist, `WL` (Watch Later) ou vídeo solto.
+    /// Channel, playlist, `WL` (Watch Later) or a single video.
     pub url: String,
-    /// Pasta do arquivo; o estado mora nela.
+    /// Archive folder; the state lives in it.
     pub dest: String,
     /// "best" | "1080" | "720" | "480" | "audio"
     #[serde(default = "default_quality")]
@@ -373,26 +373,26 @@ pub struct Options {
     pub write_thumbnail: bool,
     #[serde(default)]
     pub write_info_json: bool,
-    /// Teto de itens por rodada (0 = tudo o que estiver pendente).
+    /// Cap of items per round (0 = everything pending).
     #[serde(default)]
     pub max_items: u32,
-    /// Reenumerar a coleção mesmo já tendo estado gravado.
+    /// Re-enumerate the collection even with saved state already there.
     #[serde(default)]
     pub refresh: bool,
-    /// Devolver à fila o que falhou antes.
+    /// Return what failed before to the queue.
     #[serde(default)]
     pub retry_failed: bool,
     #[serde(default)]
     pub account_slug: Option<String>,
     #[serde(default)]
     pub session_netscape: Option<String>,
-    /// Idiomas de legenda no formato do `--sub-langs` (padrão "pt.*,en.*").
+    /// Subtitle languages in `--sub-langs` format (default "pt.*,en.*").
     #[serde(default)]
     pub sub_langs: Option<String>,
-    /// Para antes do próximo item quando a pasta passar disso (0 = sem teto).
+    /// Stops before the next item when the folder passes this (0 = no cap).
     #[serde(default)]
     pub max_bytes: u64,
-    /// Pausa antes de cada download, contra o limite de taxa do YouTube.
+    /// Pause before each download, against YouTube's rate limit.
     #[serde(default)]
     pub sleep_seconds: u32,
 }
@@ -401,9 +401,9 @@ fn default_quality() -> String {
     "best".to_string()
 }
 
-/// Tradução da qualidade escolhida para o seletor do yt-dlp. Qualquer altura
-/// numérica vale (360, 240...); entre formatos da mesma altura o H.264/AAC
-/// ganha, porque o MP4 final toca em qualquer lugar e decodifica rápido.
+/// Translation of the chosen quality into the yt-dlp selector. Any numeric height
+/// counts (360, 240...); among formats of the same height H.264/AAC
+/// wins, because the final MP4 plays anywhere and decodes fast.
 pub fn format_args(quality: &str) -> Vec<String> {
     let height = quality.parse::<u32>().ok().filter(|h| *h > 0);
     match (quality, height) {
@@ -414,9 +414,9 @@ pub fn format_args(quality: &str) -> Vec<String> {
             "--audio-format".into(),
             "mp3".into(),
         ],
-        // `bv` (só vídeo) e não `bv*`: com `bv*` o sort elege o progressivo
-        // 18 (360p h264+aac num arquivo só), que o YouTube estrangula por IP
-        // após um volume grande (500 KB em 75 s contra 2,5 MiB/s do DASH 134).
+        // `bv` (video-only) and not `bv*`: with `bv*` the sort picks the progressive
+        // 18 (360p h264+aac in a single file), which YouTube throttles per IP
+        // after a large volume (500 KB in 75 s against 2.5 MiB/s for DASH 134).
         (_, Some(h)) => vec![
             "-f".into(),
             format!("bv[height<={h}]+ba/b[height<={h}]/bv*+ba/b"),
@@ -448,10 +448,10 @@ pub struct ArchiveResult {
     pub items: Vec<ArchiveItem>,
     pub used_session: bool,
     pub cancelled: bool,
-    /// A rodada parou porque a pasta atingiu `max_bytes`.
+    /// The round stopped because the folder reached `max_bytes`.
     pub cap_reached: bool,
-    /// A rodada parou porque o YouTube seguiu barrando o IP como robô depois
-    /// de todas as pausas; os itens continuam pendentes.
+    /// The round stopped because YouTube kept blocking the IP as a bot after
+    /// all the pauses; the items stay pending.
     pub blocked: bool,
 }
 
@@ -482,7 +482,7 @@ fn result_of(
 
 static CANCEL: AtomicBool = AtomicBool::new(false);
 
-/// Pede parada depois do item que estiver rodando.
+/// Asks to stop after the item that is running.
 pub fn cancel() {
     CANCEL.store(true, Ordering::SeqCst);
 }
@@ -497,15 +497,15 @@ fn has_session(opts: &Options) -> bool {
 /// Lê o estado gravado sem tocar na rede — é o que a tela mostra ao abrir.
 pub fn state(dest: &str) -> anyhow::Result<ArchiveResult> {
     let dir = PathBuf::from(dest.trim());
-    let st = load_state(&dir).ok_or_else(|| anyhow!("não há arquivo em andamento nessa pasta"))?;
+    let st = load_state(&dir).ok_or_else(|| anyhow!("no in-progress file in this folder"))?;
     Ok(result_of(&dir, &st, false, false))
 }
 
-/// Enumera a coleção e funde com o estado, sem baixar nada.
+/// Enumerates the collection and merges with the state, without downloading anything.
 pub async fn scan(opts: &Options, progress: &super::ProgressFn) -> anyhow::Result<ArchiveResult> {
     let dest = PathBuf::from(opts.dest.trim());
     if opts.dest.trim().is_empty() {
-        return Err(anyhow!("escolha a pasta do arquivo"));
+        return Err(anyhow!("choose the archive folder"));
     }
     std::fs::create_dir_all(&dest)?;
     let mut st = enumerate(opts, &dest, progress).await?;
@@ -524,7 +524,7 @@ async fn enumerate(
         "progress",
         0,
         None,
-        Some("lendo a coleção".into()),
+        Some("reading the collection".into()),
     );
     let mut args = vec![
         "-J".to_string(),
@@ -539,7 +539,7 @@ async fn enumerate(
     let (title, items) = parse_flat_playlist(&json)?;
     if items.is_empty() {
         return Err(anyhow!(
-            "não achei nenhum vídeo nessa URL (Watch Later precisa da sessão do YouTube)"
+            "found no video at this URL (Watch Later needs the YouTube session)"
         ));
     }
     let mut st = load_state(dest).unwrap_or_else(|| ArchiveState::new(opts.url.trim(), &title));
@@ -550,7 +550,7 @@ async fn enumerate(
 
 pub async fn run(opts: Options, progress: super::ProgressFn) -> anyhow::Result<ArchiveResult> {
     if opts.dest.trim().is_empty() {
-        return Err(anyhow!("escolha a pasta do arquivo"));
+        return Err(anyhow!("choose the archive folder"));
     }
     let dest = PathBuf::from(opts.dest.trim());
     std::fs::create_dir_all(&dest)?;
@@ -593,8 +593,8 @@ pub async fn run(opts: Options, progress: super::ProgressFn) -> anyhow::Result<A
         );
         match download_one(&bin, &opts, &cookie, &archive_txt, &dest, &item, &progress).await {
             Ok(file) => st.mark(&item.id, ItemStatus::Ok, file, None),
-            // Cancelado no meio (o yt-dlp é encerrado em `wait_or_cancel`): o
-            // item foi interrompido, não falhou, e continua na fila.
+            // Cancelled mid-way (yt-dlp is killed in `wait_or_cancel`): the
+            // item was interrupted, not failed, and stays in the queue.
             Err(_) if CANCEL.load(Ordering::SeqCst) => {
                 cancelled = true;
                 break;
@@ -639,7 +639,7 @@ pub async fn run(opts: Options, progress: super::ProgressFn) -> anyhow::Result<A
     Ok(result)
 }
 
-/// O que a rodada faz com o item depois de um erro do yt-dlp.
+/// What the round does with the item after a yt-dlp error.
 #[derive(Debug, PartialEq)]
 enum OnError {
     Retry,
@@ -648,10 +648,10 @@ enum OnError {
     Blocked,
 }
 
-/// Erros da máquina ou do IP (sem rede; YouTube barrando o IP como robô) não
-/// são do vídeo: todo item falharia em segundos e a fila inteira seria
-/// queimada. O item fica pendente e a rodada espera antes de repeti-lo.
-/// `waits` conta as pausas seguidas no mesmo item.
+/// Machine or IP errors (no network; YouTube blocking the IP as a bot) are not
+/// the video's fault: every item would fail in seconds and the whole queue would be
+/// burned. The item stays pending and the round waits before retrying it.
+/// `waits` counts the consecutive pauses on the same item.
 async fn on_error(
     msg: &str,
     waits: &mut u32,
@@ -678,7 +678,7 @@ async fn on_error(
     }
 }
 
-/// Fila salva (com as falhas devolvidas, se pedido) ou enumerada do zero.
+/// Saved queue (with the failures returned, if asked) or enumerated from scratch.
 async fn open_state(
     opts: &Options,
     dest: &Path,
@@ -697,13 +697,13 @@ async fn open_state(
     Ok(st)
 }
 
-/// Esperas seguidas pela rede no mesmo item antes de tratá-lo como falha
-/// comum; evita laço infinito se um item der erro de DNS com a rede de pé.
+/// Consecutive network waits on the same item before treating it as an ordinary
+/// failure; avoids an infinite loop if one item gives a DNS error with the network up.
 const MAX_OFFLINE_WAITS: u32 = 5;
 const ONLINE_PROBE: &str = "www.youtube.com:443";
 const OFFLINE_POLL_SECS: u64 = 30;
 
-/// Erros da rede da máquina (DNS, rota), não do vídeo, em macOS, Linux e
+/// Machine-network errors (DNS, route), not the video's, on macOS, Linux and
 /// Windows.
 fn is_offline_error(msg: &str) -> bool {
     const SINAIS: [&str; 6] = [
@@ -717,20 +717,20 @@ fn is_offline_error(msg: &str) -> bool {
     SINAIS.iter().any(|s| msg.contains(s))
 }
 
-/// Pausas, em minutos, antes de repetir um item barrado como robô. O bloqueio
-/// é do IP e costuma durar horas; somadas dão ~12 h, depois a rodada para.
+/// Pauses, in minutes, before retrying an item blocked as a bot. The block
+/// is on the IP and usually lasts hours; summed they give ~12 h, then the round stops.
 const BLOCK_WAIT_MINS: [u64; 6] = [15, 30, 60, 120, 240, 240];
 
-/// O YouTube pediu login "para confirmar que você não é um robô": vale para
-/// o IP inteiro, não para o vídeo (o pedido de idade é outro erro, do vídeo).
+/// YouTube asked for a login "to confirm you are not a bot": it counts for
+/// the whole IP, not for the video (the age check is another error, the video's).
 fn is_blocked_error(msg: &str) -> bool {
     msg.contains("confirm you") && msg.contains("not a bot")
 }
 
-/// Espera o DNS do YouTube voltar a resolver. Devolve `false` se a rodada foi
-/// cancelada durante a espera.
+/// Waits for YouTube's DNS to resolve again. Returns `false` if the round was
+/// cancelled during the wait.
 async fn wait_online(progress: &super::ProgressFn, done: u64, total: u64) -> bool {
-    let msg = "sem conexão: aguardando a rede voltar".to_string();
+    let msg = "no connection: waiting for the network to come back".to_string();
     super::report(progress, ID, "progress", done, Some(total), Some(msg));
     loop {
         if !sleep_or_cancel(OFFLINE_POLL_SECS).await {
@@ -742,10 +742,10 @@ async fn wait_online(progress: &super::ProgressFn, done: u64, total: u64) -> boo
     }
 }
 
-/// Pausa antes de repetir um item barrado como robô. Devolve `false` se a
-/// rodada foi cancelada durante a pausa.
+/// Pause before retrying an item blocked as a bot. Returns `false` if the
+/// round was cancelled during the pause.
 async fn wait_unblocked(mins: u64, progress: &super::ProgressFn, done: u64, total: u64) -> bool {
-    let msg = format!("YouTube barrou o IP como robô: nova tentativa em {mins} min");
+    let msg = format!("YouTube blocked the IP as a bot: retry in {mins} min");
     super::report(progress, ID, "progress", done, Some(total), Some(msg));
     sleep_or_cancel(mins * 60).await
 }
@@ -765,7 +765,7 @@ fn over_cap(dest: &Path, max_bytes: u64) -> bool {
     max_bytes > 0 && super::yt_dataset::dir_size(dest) >= max_bytes
 }
 
-/// Legendas e pausa entre downloads, conforme as opções.
+/// Subtitles and the pause between downloads, per the options.
 fn extra_args(opts: &Options) -> Vec<String> {
     let mut args = Vec::new();
     if opts.write_subs {
@@ -775,9 +775,9 @@ fn extra_args(opts: &Options) -> Vec<String> {
             .map(str::trim)
             .filter(|l| !l.is_empty())
             .unwrap_or("pt.*,en.*");
-        // `--ignore-errors` rebaixa erro de legenda (o 429 do YouTube é
-        // comum) a aviso: o vídeo é o que importa. Erro no vídeo continua
-        // saindo com código 1 e o item fica como falha.
+        // `--ignore-errors` downgrades a subtitle error (YouTube's 429 is
+        // common) to a warning: the video is what matters. An error on the video still
+        // exits with code 1 and the item stays failed.
         args.extend(
             [
                 "--write-subs",
@@ -844,7 +844,7 @@ async fn download_one(
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
-        .map_err(|e| anyhow!("o yt-dlp não iniciou: {}", e))?;
+        .map_err(|e| anyhow!("yt-dlp did not start: {}", e))?;
 
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
@@ -892,7 +892,7 @@ async fn download_one(
         return Err(anyhow!(
             "{}",
             if tail.trim().is_empty() {
-                "o yt-dlp saiu com erro".to_string()
+                "yt-dlp exited with an error".to_string()
             } else {
                 tail
             }
@@ -901,9 +901,9 @@ async fn download_one(
     Ok(file)
 }
 
-/// Espera o yt-dlp, mas o encerra se a rodada for cancelada. Sem isso um
-/// `cancel()` (botão do app ou SIGINT só no processo da CLI) esperava o vídeo
-/// inteiro terminar. O `.part` fica e o yt-dlp retoma dele na próxima rodada.
+/// Waits for yt-dlp, but kills it if the round is cancelled. Without this a
+/// `cancel()` (app button or SIGINT only in the CLI process) would wait for the whole
+/// video to finish. The `.part` stays and yt-dlp resumes from it next round.
 async fn wait_or_cancel(
     child: &mut tokio::process::Child,
 ) -> anyhow::Result<std::process::ExitStatus> {
@@ -950,7 +950,7 @@ mod tests {
 
     #[test]
     fn reads_the_flat_playlist() {
-        let (title, items) = parse_flat_playlist(FLAT).expect("json válido");
+        let (title, items) = parse_flat_playlist(FLAT).expect("valid json");
         assert_eq!(title, "Minha playlist");
         assert_eq!(items.len(), 3);
         assert_eq!(items[0].id, "aaaaaaaaaaa");
@@ -958,18 +958,18 @@ mod tests {
         assert_eq!(
             items[1].status,
             ItemStatus::Skipped,
-            "privado não entra na fila"
+            "private does not enter the queue"
         );
-        assert_eq!(items[1].error.as_deref(), Some("vídeo privado"));
+        assert_eq!(items[1].error.as_deref(), Some("private video"));
         assert_eq!(
             items[2].url, "https://www.youtube.com/watch?v=ccccccccccc",
-            "item sem url ganha uma montada pelo id"
+            "an item without a url gets one built from the id"
         );
     }
 
     #[test]
     fn flattens_channel_tabs_and_drops_repeats() {
-        let (title, items) = parse_flat_playlist(NESTED).expect("json válido");
+        let (title, items) = parse_flat_playlist(NESTED).expect("valid json");
         assert_eq!(title, "Canal do Fulano");
         let ids: Vec<&str> = items.iter().map(|i| i.id.as_str()).collect();
         assert_eq!(ids, vec!["aaaaaaaaaaa", "ddddddddddd"]);
@@ -979,13 +979,13 @@ mod tests {
     fn a_single_video_is_an_archive_of_one() {
         let json = r#"{"id":"aaaaaaaaaaa","title":"Solo","duration":10.0,
                        "webpage_url":"https://youtu.be/aaaaaaaaaaa"}"#;
-        let (_, items) = parse_flat_playlist(json).expect("json válido");
+        let (_, items) = parse_flat_playlist(json).expect("valid json");
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].url, "https://youtu.be/aaaaaaaaaaa");
     }
 
     fn estado_com_progresso() -> ArchiveState {
-        let (title, items) = parse_flat_playlist(FLAT).expect("json válido");
+        let (title, items) = parse_flat_playlist(FLAT).expect("valid json");
         let mut st = ArchiveState::new("https://exemplo", &title);
         st.merge(&title, items, false);
         st.mark(
@@ -1028,9 +1028,9 @@ mod tests {
             {"_type":"url","id":"ccccccccccc","title":"Terceiro"},
             {"_type":"url","id":"eeeeeeeeeee","title":"Recém-postado"}
         ]}"#;
-        let (title, items) = parse_flat_playlist(novos).expect("json válido");
+        let (title, items) = parse_flat_playlist(novos).expect("valid json");
         let added = st.merge(&title, items, false);
-        assert_eq!(added, 1, "só o vídeo novo entra");
+        assert_eq!(added, 1, "only the new video enters");
         assert_eq!(st.items.len(), 4);
         assert_eq!(
             st.items[0].status,
@@ -1041,7 +1041,7 @@ mod tests {
         assert_eq!(
             st.items[2].status,
             ItemStatus::Failed,
-            "falha não vira pendente sozinha"
+            "a failure does not become pending on its own"
         );
         assert_eq!(st.next_pending(), Some(3));
     }
@@ -1052,11 +1052,11 @@ mod tests {
         st.merge("", Vec::new(), true);
         assert_eq!(st.items[2].status, ItemStatus::Pending);
         assert!(st.items[2].error.is_none());
-        assert_eq!(st.items[0].status, ItemStatus::Ok, "o que deu certo fica");
+        assert_eq!(st.items[0].status, ItemStatus::Ok, "what worked stays");
         assert_eq!(
             st.items[1].status,
             ItemStatus::Skipped,
-            "privado segue fora"
+            "private stays out"
         );
     }
 
@@ -1065,15 +1065,15 @@ mod tests {
         let mut st = estado_com_progresso();
         let novos = r#"{"_type":"playlist","entries":[
             {"_type":"url","id":"eeeeeeeeeee","title":"Novo"}]}"#;
-        let (_, items) = parse_flat_playlist(novos).expect("json válido");
+        let (_, items) = parse_flat_playlist(novos).expect("valid json");
         st.merge("", items, false);
         assert_eq!(st.next_pending(), Some(3));
         let sumiu = r#"{"_type":"playlist","entries":[
             {"_type":"url","id":"eeeeeeeeeee","title":"[Deleted video]"}]}"#;
-        let (_, items) = parse_flat_playlist(sumiu).expect("json válido");
+        let (_, items) = parse_flat_playlist(sumiu).expect("valid json");
         st.merge("", items, false);
         assert_eq!(st.next_pending(), None);
-        assert_eq!(st.items[3].error.as_deref(), Some("vídeo apagado"));
+        assert_eq!(st.items[3].error.as_deref(), Some("deleted video"));
     }
 
     #[test]
@@ -1089,7 +1089,7 @@ mod tests {
         assert!(!lido.updated.is_empty());
         assert!(
             !dir.join(format!("{}.tmp", STATE_FILE)).exists(),
-            "o temporário não pode sobrar"
+            "the temp file must not remain"
         );
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -1129,13 +1129,13 @@ mod tests {
 
     fn opts_for(dest: &str) -> Options {
         serde_json::from_value(serde_json::json!({ "url": "", "dest": dest }))
-            .expect("opções mínimas")
+            .expect("minimal options")
     }
 
     #[test]
     fn extra_args_follow_subs_and_sleep_options() {
         let mut o = opts_for("x");
-        assert!(extra_args(&o).is_empty(), "sem legenda nem pausa");
+        assert!(extra_args(&o).is_empty(), "no subtitles or pause");
         o.write_subs = true;
         assert!(extra_args(&o).contains(&"pt.*,en.*".to_string()));
         o.sub_langs = Some(".*-orig,en".into());
@@ -1150,8 +1150,8 @@ mod tests {
         assert_eq!(a[i + 1], "10");
     }
 
-    /// Mensagens reais do yt-dlp: as de rede caída pausam a rodada, as do
-    /// servidor ou do vídeo continuam virando falha do item.
+    /// Real yt-dlp messages: the network-down ones pause the round, the server
+    /// or video ones keep becoming item failures.
     #[test]
     fn offline_errors_are_told_apart_from_item_errors() {
         let mac = "ERROR: [youtube] Ye9xvMX9qs8: Unable to download API page: \
@@ -1188,8 +1188,8 @@ mod tests {
         }
     }
 
-    /// Erro do vídeo falha o item na hora; bot check depois de todas as pausas
-    /// para a rodada sem marcar falha (os dois caminhos não dormem).
+    /// A video error fails the item at once; a bot check after all the pauses
+    /// stops the round without marking a failure (neither path sleeps).
     #[tokio::test]
     async fn on_error_fails_the_item_or_stops_the_run() {
         let p = super::super::noop_progress();
@@ -1200,15 +1200,15 @@ mod tests {
         assert_eq!(on_error(BOT, &mut waits, &p, 0, 1).await, OnError::Blocked);
     }
 
-    /// Com o teto já estourado a rodada nem chama o yt-dlp: sai antes do
-    /// primeiro item, com a fila intacta.
+    /// With the cap already blown the round does not even call yt-dlp: it leaves before the
+    /// first item, with the queue intact.
     #[tokio::test]
     async fn run_stops_before_downloading_when_folder_is_over_cap() {
         let dir = super::super::temp_dir().join(format!("yt-archive-cap-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir_all(&dir).expect("pasta");
-        std::fs::write(dir.join("big.bin"), vec![0u8; 2048]).expect("arquivo");
+        std::fs::create_dir_all(&dir).expect("folder");
+        std::fs::write(dir.join("big.bin"), vec![0u8; 2048]).expect("file");
         let items = super::super::yt_dataset::parse_seed("{\"id\":\"a1\"}\n{\"id\":\"b2\"}");
-        super::super::yt_dataset::seed(&dir, "cap", items).expect("semeia");
+        super::super::yt_dataset::seed(&dir, "cap", items).expect("seeds");
 
         let mut o = opts_for(&dir.to_string_lossy());
         o.max_bytes = 1024;
@@ -1216,7 +1216,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         let r = match r {
             Ok(r) => r,
-            // Máquina sem yt-dlp: o teto não chegou a ser testado aqui.
+            // Machine without yt-dlp: the cap never got tested here.
             Err(e) if e.to_string().contains("yt-dlp") => return,
             Err(e) => panic!("{e}"),
         };
@@ -1227,28 +1227,28 @@ mod tests {
     #[test]
     fn cookies_only_show_up_when_there_is_a_session() {
         let mut args: Vec<String> = Vec::new();
-        let vazio = CookieFile::new(None).expect("sem sessão");
+        let vazio = CookieFile::new(None).expect("no session");
         vazio.push_args(&mut args);
         assert!(args.is_empty());
-        let branco = CookieFile::new(Some("   ")).expect("sessão em branco");
+        let branco = CookieFile::new(Some("   ")).expect("blank session");
         branco.push_args(&mut args);
-        assert!(args.is_empty(), "espaço em branco não é sessão");
+        assert!(args.is_empty(), "blank space is not a session");
 
-        let c = CookieFile::new(Some("# Netscape HTTP Cookie File\n")).expect("com sessão");
+        let c = CookieFile::new(Some("# Netscape HTTP Cookie File\n")).expect("with session");
         c.push_args(&mut args);
         assert_eq!(args.len(), 2);
         assert_eq!(args[0], "--cookies");
         let path = PathBuf::from(&args[1]);
         assert!(
             path.exists(),
-            "o arquivo de cookies devia existir enquanto vive"
+            "the cookies file should exist while it lives"
         );
         drop(c);
-        assert!(!path.exists(), "e sumir quando sai de cena");
+        assert!(!path.exists(), "and disappear when it leaves the scene");
     }
 
-    /// Baixa um vídeo curto de verdade, confere o estado gravado e roda de
-    /// novo para provar que a retomada não rebaixa nada.
+    /// Downloads a real short video, checks the saved state and runs again
+    /// to prove the resume does not re-download anything.
     /// `cargo test -p gumballz-core --lib -- --ignored live_yt_archive_resumes`
     #[tokio::test]
     #[ignore]
@@ -1273,29 +1273,29 @@ mod tests {
         };
         let r = run(opts.clone(), super::super::noop_progress())
             .await
-            .expect("primeira rodada");
+            .expect("first round");
         assert_eq!(r.total, 1);
-        assert_eq!(r.done, 1, "falhou: {:?}", r.items[0].error);
-        let arquivo = r.items[0].file.clone().expect("o caminho final do vídeo");
+        assert_eq!(r.done, 1, "failed: {:?}", r.items[0].error);
+        let arquivo = r.items[0].file.clone().expect("the video's final path");
         assert!(std::path::Path::new(&arquivo).exists(), "{}", arquivo);
-        assert!(load_state(&dir).is_some(), "o estado tem de ficar na pasta");
+        assert!(load_state(&dir).is_some(), "the state has to stay in the folder");
 
         let mtime = std::fs::metadata(&arquivo).and_then(|m| m.modified()).ok();
         let r2 = run(opts, super::super::noop_progress())
             .await
-            .expect("segunda rodada");
-        assert_eq!(r2.pending, 0, "não sobrou nada para baixar");
+            .expect("second round");
+        assert_eq!(r2.pending, 0, "nothing left to download");
         assert_eq!(r2.done, 1);
-        assert_eq!(r2.items[0].attempts, 1, "não podia ter tentado de novo");
+        assert_eq!(r2.items[0].attempts, 1, "must not have retried");
         assert_eq!(
             std::fs::metadata(&arquivo).and_then(|m| m.modified()).ok(),
             mtime,
-            "o arquivo foi reescrito"
+            "the file was rewritten"
         );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// Precisa de rede e do yt-dlp.
+    /// Needs network and yt-dlp.
     /// `cargo test -p gumballz-core --lib -- --ignored live_yt_archive`
     #[tokio::test]
     #[ignore]

@@ -1,14 +1,14 @@
-//! Letterboxd — o export oficial, automatizado.
+//! Letterboxd — the official export, automated.
 //!
-//! O site já tem um botão "Export your data" em `/settings/data/` que devolve
-//! um ZIP com um CSV por assunto (diário, notas, reviews, watchlist, listas,
-//! curtidas). Não existe API pública, e raspar o perfil página a página seria
-//! lento e frágil: com a sessão do usuário a gente baixa o mesmo ZIP que o
-//! navegador dele baixaria e só normaliza o conteúdo.
+//! The site already has an "Export your data" button at `/settings/data/` that returns
+//! a ZIP with one CSV per subject (diary, notes, reviews, watchlist, lists,
+//! likes). There is no public API, and scraping the profile page by page would be
+//! slow and fragile: with the user's session we download the same ZIP that their
+//! browser would download and just normalize the contents.
 //!
-//! O único scraping que sobra é o ID do TMDB, que o export não traz: ele está
-//! na página do filme, e só é buscado para os títulos que o usuário pedir,
-//! com freio entre requisições.
+//! The only scraping left is the TMDB ID, which the export does not bring: it is
+//! on the film's page, and is only fetched for the titles the user asks for,
+//! with a brake between requests.
 
 use std::collections::HashMap;
 use std::io::Read;
@@ -22,14 +22,14 @@ use crate::core::tools::{report, ProgressFn};
 
 const TOOL_ID: &str = "lb-export";
 pub const DOMAIN: &str = "letterboxd.com";
-/// O mesmo endereço que o botão da página de dados aponta.
+/// The same address the button on the data page points to.
 pub const EXPORT_URL: &str = "https://letterboxd.com/data/export/";
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Options {
-    /// Pasta onde gravar os arquivos normalizados.
+    /// Folder to write the normalized files into.
     pub dest: String,
-    /// ZIP já baixado à mão. Vazio = baixa de `/data/export/` com a sessão.
+    /// ZIP already downloaded by hand. Empty = downloads from `/data/export/` with the session.
     #[serde(default)]
     pub zip_path: Option<String>,
     #[serde(default)]
@@ -37,21 +37,21 @@ pub struct Options {
     #[serde(default)]
     pub session_netscape: Option<String>,
     /// `diary`, `ratings`, `reviews`, `watched`, `watchlist`, `lists`,
-    /// `likes`. Vazio = tudo.
+    /// `likes`. Empty = all.
     #[serde(default)]
     pub parts: Vec<String>,
     /// `json`, `csv`, `md`.
     #[serde(default)]
     pub formats: Vec<String>,
-    /// Buscar o ID do TMDB na página de cada filme.
+    /// Look up the TMDB ID on each film's page.
     #[serde(default)]
     pub tmdb: bool,
-    /// Teto de páginas de filme visitadas quando `tmdb` está ligado.
+    /// Cap on film pages visited when `tmdb` is on.
     #[serde(default = "default_tmdb_limit")]
     pub tmdb_limit: usize,
     #[serde(default = "default_delay")]
     pub delay_ms: u64,
-    /// Guardar também o ZIP cru na pasta de destino.
+    /// Also save the raw ZIP in the destination folder.
     #[serde(default)]
     pub keep_zip: bool,
 }
@@ -72,7 +72,7 @@ pub struct PartCount {
 #[derive(Debug, Clone, Serialize)]
 pub struct ExportResult {
     pub used_session: bool,
-    /// De onde veio o ZIP: o endereço do export ou o caminho local.
+    /// Where the ZIP came from: the export address or the local path.
     pub source: String,
     pub entries: usize,
     pub by_part: Vec<PartCount>,
@@ -80,18 +80,18 @@ pub struct ExportResult {
     pub requests: u32,
     pub files: Vec<String>,
     pub dest: String,
-    /// As primeiras linhas, para a UI mostrar sem carregar tudo.
+    /// The first rows, so the UI can show them without loading everything.
     pub sample: Vec<Entry>,
 }
 
-// ── Leitura dos CSVs ────────────────────────────────────────────────────
+// ── Reading the CSVs ────────────────────────────────────────────────────
 
 fn rating_10(s: &str) -> Option<f32> {
     let v = s.trim().parse::<f32>().ok()?;
     if v <= 0.0 {
         return None;
     }
-    // O export do Letterboxd grava de 0,5 a 5,0.
+    // The Letterboxd export writes from 0.5 to 5.0.
     Some((v * 2.0).clamp(0.0, 10.0))
 }
 
@@ -102,8 +102,8 @@ fn tags_of(s: &str) -> Vec<String> {
         .collect()
 }
 
-/// Uma linha de filme dos CSVs "planos": `Date,Name,Year,Letterboxd URI` mais
-/// as colunas extras que cada arquivo acrescenta.
+/// A film row from the "flat" CSVs: `Date,Name,Year,Letterboxd URI` plus
+/// the extra columns each file adds.
 fn film_entry(row: &[String], idx: &HashMap<String, usize>, list: &str) -> Option<Entry> {
     let name = cell(row, idx, &["name", "title", "film"]);
     if name.is_empty() {
@@ -113,7 +113,7 @@ fn film_entry(row: &[String], idx: &HashMap<String, usize>, list: &str) -> Optio
     e.list = list.to_string();
     e.url = cell(row, idx, &["letterboxd uri", "uri", "url"]).to_string();
     e.year = parse_year(cell(row, idx, &["year"]));
-    // No diário a data que importa é a de assistir, não a de registrar.
+    // In the diary the date that matters is the watch date, not the log date.
     let watched = cell(row, idx, &["watched date"]);
     let date = if watched.is_empty() {
         cell(row, idx, &["date"])
@@ -144,14 +144,14 @@ pub fn parse_films_csv(text: &str, list: &str) -> Vec<Entry> {
         .collect()
 }
 
-/// As listas do usuário vêm em `lists/<slug>.csv`, com dois blocos: o
-/// cabeçalho da lista (data, nome, tags, endereço, descrição), uma linha em
-/// branco e só então a tabela dos filmes. Devolve `(nome da lista, filmes)`.
+/// The user's lists come in `lists/<slug>.csv`, with two blocks: the
+/// list header (date, name, tags, address, description), a blank line
+/// and only then the films table. Returns `(list name, films)`.
 pub fn parse_list_csv(text: &str, fallback_name: &str) -> (String, Vec<Entry>) {
     let rows = parse_csv(text);
     let mut name = fallback_name.to_string();
     let mut list_url = String::new();
-    // Bloco 1: cabeçalho com "Name" e sem "Position".
+    // Block 1: header with "Name" and without "Position".
     let mut start = 0usize;
     for (i, row) in rows.iter().enumerate() {
         let low: Vec<String> = row.iter().map(|c| c.trim().to_lowercase()).collect();
@@ -183,7 +183,7 @@ pub fn parse_list_csv(text: &str, fallback_name: &str) -> (String, Vec<Entry>) {
         if e.url.is_empty() {
             e.url = list_url.clone();
         }
-        // A descrição da linha da lista é a nota do usuário sobre o filme.
+        // The list row's description is the user's note about the film.
         let desc = cell(row, &idx, &["description"]);
         if !desc.is_empty() {
             e.review = desc.to_string();
@@ -193,11 +193,11 @@ pub fn parse_list_csv(text: &str, fallback_name: &str) -> (String, Vec<Entry>) {
     (name, out)
 }
 
-/// A que parte do export um arquivo do ZIP pertence. `None` = ignorar.
+/// Which part of the export a file in the ZIP belongs to. `None` = ignore.
 ///
-/// O ZIP traz `deleted/` e `orphaned/` com os mesmos nomes de arquivo da
-/// raiz: são o que o usuário apagou e o que perdeu o filme de origem. Nada
-/// disso entra no diário, senão o que foi apagado volta do túmulo.
+/// The ZIP brings `deleted/` and `orphaned/` with the same file names as the
+/// root: they are what the user deleted and what lost its source film. None
+/// of that enters the diary, otherwise what was deleted comes back from the grave.
 pub fn part_of(path: &str) -> Option<(&'static str, String)> {
     let p = path.replace('\\', "/").to_lowercase();
     if p.starts_with("deleted/")
@@ -228,11 +228,11 @@ pub fn part_of(path: &str) -> Option<(&'static str, String)> {
     }
 }
 
-/// Lê o ZIP inteiro e devolve as linhas por parte.
+/// Reads the whole ZIP and returns the rows per part.
 pub fn parse_zip(bytes: &[u8], parts: &[String]) -> Result<Vec<(String, Vec<Entry>)>> {
     let cursor = std::io::Cursor::new(bytes);
     let mut zip = zip::ZipArchive::new(cursor)
-        .context("o arquivo baixado não é um ZIP — a sessão do Letterboxd pode ter expirado")?;
+        .context("the downloaded file is not a ZIP — the Letterboxd session may have expired")?;
     let want = |p: &str| parts.is_empty() || parts.iter().any(|x| x.eq_ignore_ascii_case(p));
     let mut out: Vec<(String, Vec<Entry>)> = Vec::new();
     for i in 0..zip.len() {
@@ -266,14 +266,14 @@ pub fn parse_zip(bytes: &[u8], parts: &[String]) -> Result<Vec<(String, Vec<Entr
     Ok(out)
 }
 
-// ── TMDB pela página do filme ───────────────────────────────────────────
+// ── TMDB via the film's page ───────────────────────────────────────────
 
-/// O ID do TMDB na página do filme.
+/// The TMDB ID on the film's page.
 ///
-/// A ordem importa: o botão "TMDB" do rodapé (`themoviedb.org/movie/<id>/`
-/// ou `/tv/<id>/`) é o que sempre está certo. O `data-tmdb-id` do `<body>`
-/// vem **vazio em série** — e ainda por cima com `data-tmdb-type="movie"` —,
-/// então ele fica só como reserva para filme.
+/// Order matters: the "TMDB" button in the footer (`themoviedb.org/movie/<id>/`
+/// or `/tv/<id>/`) is the one that is always right. The `<body>`'s `data-tmdb-id`
+/// comes **empty for series** — and on top of that with `data-tmdb-type="movie"` —,
+/// so it stays only as a backup for films.
 pub fn tmdb_from_html(html: &str) -> Option<u64> {
     for marker in ["themoviedb.org/movie/", "themoviedb.org/tv/"] {
         if let Some(at) = html.find(marker) {
@@ -290,12 +290,12 @@ pub fn tmdb_from_html(html: &str) -> Option<u64> {
     v.trim().parse::<u64>().ok().filter(|n| *n > 0)
 }
 
-/// O caminho canônico do filme dentro de uma página que não é a dele.
+/// The film's canonical path inside a page that is not its own.
 ///
-/// As URIs de `diary.csv` e `reviews.csv` são links longos do `boxd.it` que
-/// levam à página **da entrada do diário** (`/<usuário>/film/<slug>/`), e
-/// essa página não tem TMDB nenhum. Ela tem, porém, o link para a página
-/// canônica do filme — é dele que a segunda visita sai.
+/// The `diary.csv` and `reviews.csv` URIs are long `boxd.it` links that
+/// lead to the **diary entry's page** (`/<user>/film/<slug>/`), and
+/// that page has no TMDB at all. It does, however, have the link to the film's
+/// canonical page — that is where the second visit starts.
 pub fn canonical_film_path(html: &str) -> Option<String> {
     let at = html.find("href=\"/film/")? + "href=\"".len();
     let rest = &html[at..];
@@ -308,9 +308,9 @@ pub fn canonical_film_path(html: &str) -> Option<String> {
     Some(format!("https://letterboxd.com/film/{}/", slug))
 }
 
-/// O Cloudflare do Letterboxd responde com uma página de desafio em vez do
-/// conteúdo quando não reconhece o cliente. Sem os cookies do navegador do
-/// usuário (o `cf_clearance` entre eles) não há o que fazer daqui.
+/// Letterboxd's Cloudflare answers with a challenge page instead of the
+/// content when it does not recognize the client. Without the user's browser cookies
+/// (`cf_clearance` among them) there is nothing to do from here.
 pub fn is_cloudflare_wall(body: &str) -> bool {
     let low = body.to_lowercase();
     low.contains("just a moment")
@@ -319,7 +319,7 @@ pub fn is_cloudflare_wall(body: &str) -> bool {
         || low.contains("enable javascript and cookies to continue")
 }
 
-/// O IMDb também aparece no mesmo rodapé; sai de graça na mesma página.
+/// IMDb also shows up in the same footer; it comes for free on the same page.
 pub fn imdb_from_html(html: &str) -> Option<String> {
     let at = html.find("imdb.com/title/")? + "imdb.com/title/".len();
     let id: String = html[at..]
@@ -333,9 +333,9 @@ pub fn imdb_from_html(html: &str) -> Option<String> {
     }
 }
 
-// ── Execução ────────────────────────────────────────────────────────────
+// ── Execution ────────────────────────────────────────────────────────────
 
-/// Junta as partes numa lista só, sem perder de que parte cada linha veio.
+/// Joins the parts into a single list, without losing which part each line came from.
 fn flatten(parts: Vec<(String, Vec<Entry>)>) -> (Vec<Entry>, Vec<PartCount>) {
     let mut counts = Vec::new();
     let mut all = Vec::new();
@@ -353,24 +353,24 @@ fn flatten(parts: Vec<(String, Vec<Entry>)>) -> (Vec<Entry>, Vec<PartCount>) {
 pub async fn run(opts: &Options, p: ProgressFn) -> Result<ExportResult> {
     let dest = PathBuf::from(opts.dest.trim());
     if opts.dest.trim().is_empty() {
-        return Err(anyhow!("escolha a pasta de destino"));
+        return Err(anyhow!("choose the destination folder"));
     }
     std::fs::create_dir_all(&dest)?;
     let f = Fetcher::new(opts.delay_ms, opts.session_netscape.as_deref(), DOMAIN)?;
 
-    // 1. O ZIP: local ou baixado com a sessão.
+    // 1. The ZIP: local or downloaded with the session.
     let (bytes, source) = match opts.zip_path.as_deref().map(str::trim) {
         Some(path) if !path.is_empty() => {
             report(&p, TOOL_ID, "progress", 0, Some(3), Some(path.to_string()));
             (
-                std::fs::read(path).with_context(|| format!("não consegui ler {}", path))?,
+                std::fs::read(path).with_context(|| format!("could not read {}", path))?,
                 path.to_string(),
             )
         }
         _ => {
             if !f.has_session() {
                 return Err(anyhow!(
-                    "sem sessão do Letterboxd: capture os cookies de letterboxd.com na extensão, ou aponte um ZIP já baixado de letterboxd.com/settings/data/"
+                    "no Letterboxd session: capture the letterboxd.com cookies in the extension, or point to a ZIP already downloaded from letterboxd.com/settings/data/"
                 ));
             }
             report(
@@ -386,11 +386,11 @@ pub async fn run(opts: &Options, p: ProgressFn) -> Result<ExportResult> {
                 let body = String::from_utf8_lossy(&b);
                 if is_cloudflare_wall(&body) {
                     return Err(anyhow!(
-                        "o Cloudflare do Letterboxd barrou o download. Abra letterboxd.com no navegador, passe pelo \"Just a moment\" e capture os cookies de novo na extensão — o cf_clearance precisa vir junto"
+                        "Letterboxd's Cloudflare blocked the download. Open letterboxd.com in the browser, get past \"Just a moment\" and capture the cookies again in the extension — cf_clearance must come along"
                     ));
                 }
                 return Err(anyhow!(
-                    "o Letterboxd devolveu uma página em vez do ZIP — a sessão salva expirou; capture os cookies de novo"
+                    "Letterboxd returned a page instead of the ZIP — the saved session expired; capture the cookies again"
                 ));
             }
             (b, EXPORT_URL.to_string())
@@ -400,7 +400,7 @@ pub async fn run(opts: &Options, p: ProgressFn) -> Result<ExportResult> {
         let _ = std::fs::write(dest.join("letterboxd-export.zip"), &bytes);
     }
 
-    // 2. Normalização.
+    // 2. Normalization.
     report(
         &p,
         TOOL_ID,
@@ -412,10 +412,10 @@ pub async fn run(opts: &Options, p: ProgressFn) -> Result<ExportResult> {
     let parts = parse_zip(&bytes, &opts.parts)?;
     let (mut entries, by_part) = flatten(parts);
     if entries.is_empty() {
-        return Err(anyhow!("o export veio sem nenhuma linha que eu saiba ler"));
+        return Err(anyhow!("the export came with no line I can read"));
     }
 
-    // 3. TMDB, só para quem pediu e só até o teto.
+    // 3. TMDB, only for those who asked and only up to the cap.
     let mut tmdb_found = 0usize;
     if opts.tmdb {
         let mut cache: HashMap<String, (Option<u64>, Option<String>)> = HashMap::new();
@@ -439,8 +439,8 @@ pub async fn run(opts: &Options, p: ProgressFn) -> Result<ExportResult> {
                 let mut found = match f.get_text(&key).await {
                     Ok(html) => {
                         let ids = (tmdb_from_html(&html), imdb_from_html(&html));
-                        // Diário e reviews apontam para a página da entrada,
-                        // que não tem os ids: de lá se chega à página do filme.
+                        // Diary and reviews point to the entry's page,
+                        // which does not have the ids: from there you reach the film's page.
                         if ids.0.is_none() {
                             match canonical_film_path(&html) {
                                 Some(canon) if canon != key => (canon, ids),
@@ -529,7 +529,7 @@ Position,Name,Year,URL,Description\n\
         assert_eq!(e.len(), 2);
         assert_eq!(e[0].title, "Dune: Part Two");
         assert_eq!(e[0].year, Some(2024));
-        // A data que vale é a de assistir, não a de registrar no diário.
+        // The date that counts is the watch date, not the diary log date.
         assert_eq!(e[0].date, "2024-03-07");
         assert_eq!(e[0].rating, Some(9.0));
         assert_eq!(e[0].tags, vec!["imax", "cinema"]);
@@ -590,7 +590,7 @@ Position,Name,Year,URL,Description\n\
             Some("ratings")
         );
         assert_eq!(part_of("likes/films.csv").map(|x| x.0), Some("likes"));
-        // likes/reviews.csv e likes/lists.csv são "Date,Content": só link.
+        // likes/reviews.csv and likes/lists.csv are "Date,Content": just a link.
         assert_eq!(part_of("likes/reviews.csv"), None);
         assert_eq!(part_of("likes/lists.csv"), None);
         assert_eq!(part_of("profile.csv"), None);
@@ -616,7 +616,7 @@ Position,Name,Year,URL,Description\n\
             canonical_film_path(entrada),
             Some("https://letterboxd.com/film/past-lives/".into())
         );
-        // Um caminho mais fundo (/film/x/reviews/) não serve de canônico.
+        // A deeper path (/film/x/reviews/) does not work as canonical.
         assert_eq!(
             canonical_film_path(r#"<a href="/film/x/reviews/">r</a>"#),
             None
@@ -655,9 +655,9 @@ Position,Name,Year,URL,Description\n\
     }
 
     #[test]
-    fn serie_tem_o_body_mentindo_e_o_rodape_certo() {
-        // Verificado ao vivo: em série o Letterboxd manda data-tmdb-id vazio
-        // e data-tmdb-type="movie". Quem vale é o botão do rodapé.
+    fn series_has_a_lying_body_and_a_correct_footer() {
+        // Verified live: for series Letterboxd sends an empty data-tmdb-id
+        // and data-tmdb-type="movie". The footer button is what counts.
         let html = r#"<body class="film" data-tmdb-type="movie" data-tmdb-id="">
             <a href="https://www.themoviedb.org/tv/89905/" data-track-action="TMDB">TMDB</a></body>"#;
         assert_eq!(tmdb_from_html(html), Some(89905));
@@ -678,8 +678,8 @@ Position,Name,Year,URL,Description\n\
     }
 
     #[test]
-    #[ignore = "rede + sessão real: baixa o ZIP de letterboxd.com/data/export/ com os cookies do gerenciador"]
-    fn baixa_o_export_de_verdade() {
-        // Exercitado à mão com uma conta logada; o CI não tem cookie.
+    #[ignore = "network + real session: downloads the ZIP from letterboxd.com/data/export/ with the manager cookies"]
+    fn downloads_the_real_export() {
+        // Exercised by hand with a logged-in account; the CI has no cookie.
     }
 }

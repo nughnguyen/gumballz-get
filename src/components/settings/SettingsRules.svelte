@@ -103,8 +103,8 @@
     void persist();
   }
 
-  // A ordem é a prioridade: a primeira regra que casa vence. Sem poder mover,
-  // a única saída seria apagar e recriar na ordem certa.
+  // Order is priority: the first matching rule wins. Without a way to move,
+  // the only way out would be deleting and recreating in the right order.
   function move(i: number, delta: number) {
     const j = i + delta;
     if (j < 0 || j >= rules.length) return;
@@ -145,7 +145,7 @@
     {#if loading}
       <div class="rules-empty">{$t("common.loading")}</div>
     {:else if rules.length === 0}
-      <!-- Empty state que direciona a primeira ação de valor, em vez de card vazio. -->
+      <!-- Empty state that points at the first valuable action, instead of an empty card. -->
       <div class="rules-empty">
         <p>{$t("settings.rules.empty_title")}</p>
         <p class="muted small">{$t("settings.rules.empty_hint")}</p>
@@ -256,8 +256,8 @@
     </button>
   </div>
 
-  <!-- Responder "esta regra pega o que eu espero?" antes de descobrir no
-       download errado. -->
+  <!-- Answer "does this rule catch what I expect?" before finding out on
+       the wrong download. -->
   <div class="card rules-test">
     <span class="rule-label">{$t("settings.rules.test_title")}</span>
     <input

@@ -18,9 +18,9 @@
 
 <script lang="ts">
   /**
-   * Busca sem IA e sem anúncio / pins parecidos (estudo 67): a mesma API que
-   * o site usa, com os filtros que o Pinterest não dá (anúncio, IA em três
-   * níveis, só vídeo/imagem/GIF, largura mínima). Seleciona e baixa.
+   * Search without AI and without ads / similar pins (study 67): the same API
+   * the site uses, with the filters Pinterest doesn't offer (ads, AI in three
+   * levels, video/image/GIF only, minimum width). Select and download.
    */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";

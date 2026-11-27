@@ -18,8 +18,8 @@
 
 <script lang="ts">
   /**
-   * Legenda: converter formato, ressincronizar e queimar no vídeo. `mode`
-   * decide qual formulário abre — o de converter também tem a queima.
+   * Subtitles: convert format, resync and burn into the video. `mode`
+   * picks which form opens — the converter also has the burn.
    */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
@@ -66,7 +66,7 @@
   });
   onDestroy(() => unlisten?.());
 
-  /** "1:02.500", "62.5" ou "62500" → milissegundos. */
+  /** "1:02.500", "62.5" or "62500" → milliseconds. */
   function toMs(v: string): number | null {
     const s = v.trim();
     if (!s) return null;

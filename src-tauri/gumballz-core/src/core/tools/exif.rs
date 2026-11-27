@@ -1,9 +1,9 @@
-//! Ver e limpar metadados de imagem (EXIF/XMP/IPTC), com foco no que vaza:
-//! GPS, número de série da câmera, nome do dono, data e software.
+//! View and clean image metadata (EXIF/XMP/IPTC), focusing on what leaks:
+//! GPS, camera serial number, owner name, date and software.
 //!
-//! A leitura usa o `kamadak-exif` (Rust puro). A limpeza NÃO reencoda nada:
-//! reescreve o contêiner sem os segmentos de metadado, então o pixel sai
-//! byte a byte igual ao original — o oposto do que um "salvar como" faz.
+//! Reading uses `kamadak-exif` (pure Rust). Cleaning does NOT re-encode anything:
+//! it rewrites the container without the metadata segments, so the pixels come out
+//! byte-for-byte identical to the original — the opposite of what a "save as" does.
 
 use std::path::{Path, PathBuf};
 
@@ -16,7 +16,7 @@ pub struct ExifField {
     pub label: String,
     pub group: String,
     pub value: String,
-    /// Campo que identifica pessoa, lugar ou equipamento.
+    /// Field that identifies a person, place or piece of equipment.
     pub sensitive: bool,
 }
 
@@ -26,12 +26,12 @@ pub struct ExifReport {
     pub bytes: u64,
     pub has_exif: bool,
     pub fields: Vec<ExifField>,
-    /// (latitude, longitude) em graus decimais, quando existe GPS.
+    /// (latitude, longitude) in decimal degrees, when GPS exists.
     pub gps: Option<(f64, f64)>,
     pub camera: Option<String>,
     pub taken: Option<String>,
     pub software: Option<String>,
-    /// Quantos campos sensíveis foram achados (GPS conta como um).
+    /// How many sensitive fields were found (GPS counts as one).
     pub sensitive_count: usize,
     pub error: Option<String>,
 }
@@ -52,7 +52,7 @@ fn is_sensitive(tag: &str) -> bool {
     SENSITIVE_PREFIXES.iter().any(|p| tag.starts_with(p)) || SENSITIVE_TAGS.contains(&tag)
 }
 
-/// Graus/minutos/segundos + hemisfério → graus decimais.
+/// Degrees/minutes/seconds + hemisphere → decimal degrees.
 pub fn dms_to_deg(dms: &[f64], reference: &str) -> Option<f64> {
     if dms.is_empty() {
         return None;
@@ -112,7 +112,7 @@ pub fn read(path: &str) -> ExifReport {
     let exif = match exif::Reader::new().read_from_container(&mut reader) {
         Ok(e) => e,
         Err(e) => {
-            // "sem EXIF" é resposta legítima, não falha.
+            // "no EXIF" is a legitimate answer, not a failure.
             if !matches!(e, exif::Error::NotFound(_)) {
                 report.error = Some(e.to_string());
             }
@@ -172,7 +172,7 @@ pub fn read_many(inputs: &[String]) -> Vec<ExifReport> {
     inputs.iter().map(|p| read(p)).collect()
 }
 
-// ── Limpeza ────────────────────────────────────────────────────────────
+// ── Cleaning ────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
@@ -193,16 +193,16 @@ pub fn kind_of(data: &[u8]) -> Option<Kind> {
     }
 }
 
-/// Marcadores JPEG jogados fora: APP1 (EXIF e XMP), APP13 (IPTC/Photoshop) e
-/// o comentário. APP0 (JFIF), APP2 (perfil ICC) e APP14 (Adobe) ficam — são
-/// o que mantém a cor certa.
+/// JPEG markers thrown away: APP1 (EXIF and XMP), APP13 (IPTC/Photoshop) and
+/// the comment. APP0 (JFIF), APP2 (ICC profile) and APP14 (Adobe) stay — they are
+/// what keeps the colour right.
 fn strip_jpeg(data: &[u8]) -> anyhow::Result<Vec<u8>> {
     let mut out = Vec::with_capacity(data.len());
     out.extend_from_slice(&data[0..2]);
     let mut i = 2usize;
     while i + 1 < data.len() {
         if data[i] != 0xFF {
-            // Fora de sincronia: copia o resto como está em vez de corromper.
+            // Out of sync: copy the rest as-is instead of corrupting it.
             out.extend_from_slice(&data[i..]);
             return Ok(out);
         }
@@ -243,9 +243,9 @@ fn strip_png(data: &[u8]) -> anyhow::Result<Vec<u8>> {
         let end = i
             .checked_add(12)
             .and_then(|v| v.checked_add(len))
-            .ok_or_else(|| anyhow!("PNG com tamanho de chunk inválido"))?;
+            .ok_or_else(|| anyhow!("PNG with invalid chunk size"))?;
         if end > data.len() {
-            return Err(anyhow!("PNG truncado"));
+            return Err(anyhow!("truncated PNG"));
         }
         if !PNG_DROP.iter().any(|d| d.as_slice() == ctype) {
             out.extend_from_slice(&data[i..end]);
@@ -271,8 +271,8 @@ fn strip_webp(data: &[u8]) -> anyhow::Result<Vec<u8>> {
         if !drop {
             let start = body.len();
             body.extend_from_slice(&data[i..end]);
-            // VP8X guarda em flags quais chunks existem; sem limpar os bits o
-            // decodificador procura um EXIF que não está mais lá.
+            // VP8X stores in flags which chunks exist; without clearing the bits the
+            // decoder looks for an EXIF that is no longer there.
             if &fourcc == b"VP8X" && body.len() > start + 8 {
                 body[start + 8] &= !(0x08 | 0x04);
             }
@@ -292,7 +292,7 @@ pub fn strip_bytes(data: &[u8]) -> anyhow::Result<Vec<u8>> {
         Some(Kind::Png) => strip_png(data),
         Some(Kind::Webp) => strip_webp(data),
         None => Err(anyhow!(
-            "formato sem limpeza sem perda aqui — só JPEG, PNG e WebP"
+            "no lossless cleanup for this format here — only JPEG, PNG and WebP"
         )),
     }
 }
@@ -300,7 +300,7 @@ pub fn strip_bytes(data: &[u8]) -> anyhow::Result<Vec<u8>> {
 #[derive(Debug, Clone, Deserialize)]
 pub struct StripOptions {
     pub inputs: Vec<String>,
-    /// Sobrescreve o arquivo original em vez de criar uma cópia limpa.
+    /// Overwrites the original file instead of creating a clean copy.
     #[serde(default)]
     pub in_place: bool,
     #[serde(default)]
@@ -421,14 +421,14 @@ mod tests {
 
     fn jpeg_with_exif() -> Vec<u8> {
         let mut v = vec![0xFF, 0xD8];
-        // APP0 (JFIF) fica.
+        // APP0 (JFIF) stays.
         v.extend_from_slice(&[0xFF, 0xE0, 0x00, 0x04, 0x00, 0x00]);
-        // APP1 (Exif) sai.
+        // APP1 (Exif) goes.
         v.extend_from_slice(&[0xFF, 0xE1, 0x00, 0x08]);
         v.extend_from_slice(b"Exif\0\0");
-        // Comentário sai.
+        // Comment goes.
         v.extend_from_slice(&[0xFF, 0xFE, 0x00, 0x05, b'o', b'i', b'!']);
-        // SOS e "dados".
+        // SOS and "data".
         v.extend_from_slice(&[0xFF, 0xDA, 0x00, 0x03, 0x00, 0xAA, 0xBB, 0xFF, 0xD9]);
         v
     }
@@ -440,10 +440,10 @@ mod tests {
         assert_eq!(kind_of(&out), Some(Kind::Jpeg));
         assert!(!out.windows(4).any(|w| w == b"Exif"));
         assert!(!out.windows(2).any(|w| w == [0xFF, 0xFE]));
-        // APP0 preservado e o scan intacto até o EOI.
+        // APP0 preserved and the scan intact up to the EOI.
         assert!(out.windows(2).any(|w| w == [0xFF, 0xE0]));
         assert!(out.ends_with(&[0xAA, 0xBB, 0xFF, 0xD9]));
-        // Rodar de novo não muda mais nada.
+        // Running it again changes nothing more.
         assert_eq!(strip_bytes(&out).unwrap(), out);
     }
 
@@ -484,7 +484,7 @@ mod tests {
     #[test]
     fn webp_drops_exif_and_clears_vp8x_flag() {
         let mut body = b"WEBP".to_vec();
-        // VP8X com o bit de EXIF (0x08) ligado.
+        // VP8X with the EXIF bit (0x08) on.
         body.extend(riff_chunk(b"VP8X", &[0x08, 0, 0, 0, 0, 0, 0, 0, 0, 0]));
         body.extend(riff_chunk(b"VP8 ", &[9, 9, 9]));
         body.extend(riff_chunk(b"EXIF", b"II*\0segredo"));
@@ -497,13 +497,13 @@ mod tests {
         assert!(!out.windows(4).any(|w| w == b"EXIF"));
         assert!(out.windows(4).any(|w| w == b"VP8 "));
         let size = u32::from_le_bytes([out[4], out[5], out[6], out[7]]) as usize;
-        assert_eq!(size, out.len() - 8, "tamanho do RIFF tem que bater");
+        assert_eq!(size, out.len() - 8, "RIFF size must match");
         let vp8x = out.windows(4).position(|w| w == b"VP8X").unwrap();
-        assert_eq!(out[vp8x + 8] & 0x08, 0, "o bit de EXIF ficou ligado");
+        assert_eq!(out[vp8x + 8] & 0x08, 0, "the EXIF bit stayed on");
     }
 
-    /// Monta um JPEG com um APP1/EXIF de verdade: IFD0 com Make e Model, e
-    /// um IFD de GPS com latitude sul e longitude oeste (São Paulo).
+    /// Builds a JPEG with a real APP1/EXIF: IFD0 with Make and Model, and
+    /// a GPS IFD with south latitude and west longitude (São Paulo).
     fn jpeg_with_gps() -> Vec<u8> {
         fn entry(out: &mut Vec<u8>, tag: u16, kind: u16, count: u32, value: [u8; 4]) {
             out.extend_from_slice(&tag.to_le_bytes());
@@ -511,7 +511,7 @@ mod tests {
             out.extend_from_slice(&count.to_le_bytes());
             out.extend_from_slice(&value);
         }
-        // Mapa de offsets (relativos ao início do cabeçalho TIFF).
+        // Offset map (relative to the start of the TIFF header).
         const MAKE_AT: u32 = 50;
         const MODEL_AT: u32 = 56;
         const GPS_IFD_AT: u32 = 64;
@@ -572,12 +572,12 @@ mod tests {
         assert!(r.error.is_none(), "erro na leitura: {:?}", r.error);
         assert!(r.has_exif);
         assert_eq!(r.camera.as_deref(), Some("LibrG Test"));
-        let (lat, lon) = r.gps.expect("não achou o GPS");
+        let (lat, lon) = r.gps.expect("did not find the GPS");
         assert!((lat + 23.55).abs() < 1e-6, "latitude: {}", lat);
         assert!((lon + 46.6333333).abs() < 1e-5, "longitude: {}", lon);
         assert!(
             r.sensitive_count >= 4,
-            "campos de GPS não marcados como sensíveis"
+            "GPS fields not marked as sensitive"
         );
 
         let opts = StripOptions {
@@ -590,7 +590,7 @@ mod tests {
         let item = &res.items[0];
         assert!(item.ok, "falhou: {:?}", item.error);
         let clean = read(item.output.as_ref().unwrap());
-        assert!(!clean.has_exif, "o EXIF sobreviveu à limpeza");
+        assert!(!clean.has_exif, "the EXIF survived the cleanup");
         assert!(clean.gps.is_none());
         assert!(item.bytes_after < item.bytes_before);
     }

@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Servidor MCP embutido (estudos 22 e 23): liga/desliga, endereço, trechos de configuração e a lista de tools. */
+  /** Built-in MCP server (studies 22 and 23): on/off, address, config snippets and the tools list. */
   import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
   import { t } from "$lib/i18n";

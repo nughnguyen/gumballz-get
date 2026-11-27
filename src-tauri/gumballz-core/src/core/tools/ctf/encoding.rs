@@ -1,6 +1,6 @@
-//! Codificações que aparecem o tempo todo: base64/32/16, URL, entidades
-//! HTML, binário, decimal e morse. Tudo com ida e volta, e um "adivinhe o
-//! que é isso" que tenta reconhecer antes de decodificar.
+//! Encodings that show up all the time: base64/32/16, URL, HTML entities,
+//! binary, decimal and Morse. All round-trip, plus a "guess what this is"
+//! that tries to recognize before decoding.
 
 use serde::{Deserialize, Serialize};
 
@@ -139,7 +139,7 @@ pub fn html_unescape(text: &str) -> String {
         .replace("&#39;", "'")
         .replace("&apos;", "'")
         .replace("&nbsp;", " ");
-    // Entidades numéricas: &#65; e &#x41;
+    // Numeric entities: &#65; and &#x41;
     if let Ok(re) = regex::Regex::new(r"&#(x?)([0-9A-Fa-f]+);") {
         s = re
             .replace_all(&s, |c: &regex::Captures| {
@@ -152,7 +152,7 @@ pub fn html_unescape(text: &str) -> String {
             })
             .to_string();
     }
-    // O & vem por último para não desfazer as outras entidades.
+    // The & comes last so it does not undo the other entities.
     s.replace("&amp;", "&")
 }
 
@@ -191,10 +191,10 @@ pub fn convert(opts: &EncodeOptions) -> EncodeResult {
         let bytes: Result<Vec<u8>, String> = match opts.format.as_str() {
             "base64" => engine
                 .decode(input.trim())
-                .map_err(|e| format!("base64 inválido: {}", e)),
-            "base32" => b32_decode(input).ok_or_else(|| "base32 inválido".into()),
+                .map_err(|e| format!("invalid base64: {}", e)),
+            "base32" => b32_decode(input).ok_or_else(|| "invalid base32".into()),
             "hex" => hex::decode(input.trim().replace([' ', '\n', ':'], ""))
-                .map_err(|e| format!("hex inválido: {}", e)),
+                .map_err(|e| format!("invalid hex: {}", e)),
             "url" => Ok(urlencoding::decode(input.trim())
                 .map(|c| c.into_owned())
                 .unwrap_or_else(|_| input.clone())
@@ -202,18 +202,18 @@ pub fn convert(opts: &EncodeOptions) -> EncodeResult {
             "html" => Ok(html_unescape(input).into_bytes()),
             "binary" => input
                 .split_whitespace()
-                .map(|b| u8::from_str_radix(b, 2).map_err(|_| format!("binário inválido: {}", b)))
+                .map(|b| u8::from_str_radix(b, 2).map_err(|_| format!("invalid binary: {}", b)))
                 .collect(),
             "decimal" => input
                 .split(|c: char| !c.is_ascii_digit())
                 .filter(|s| !s.is_empty())
                 .map(|b| {
                     b.parse::<u8>()
-                        .map_err(|_| format!("decimal inválido: {}", b))
+                        .map_err(|_| format!("invalid decimal: {}", b))
                 })
                 .collect(),
             "morse" => Ok(morse_decode(input).into_bytes()),
-            other => Err(format!("formato desconhecido: {}", other)),
+            other => Err(format!("unknown format: {}", other)),
         };
         match bytes {
             Ok(b) => ok(String::from_utf8_lossy(&b).to_string()),
@@ -238,12 +238,12 @@ pub fn convert(opts: &EncodeOptions) -> EncodeResult {
                 .collect::<Vec<_>>()
                 .join(" "),
             "morse" => morse_encode(input),
-            _ => return fail("formato desconhecido"),
+            _ => return fail("unknown format"),
         })
     }
 }
 
-/// Palpite de qual codificação é o texto, para não ter que tentar uma a uma.
+/// Guesses which encoding the text is, so you do not have to try them one by one.
 pub fn detect(input: &str) -> Vec<String> {
     let s = input.trim();
     let mut out = Vec::new();
@@ -321,7 +321,7 @@ mod tests {
             assert_eq!(
                 round(f, "GumballZ Get 2026!"),
                 "GumballZ Get 2026!",
-                "formato {}",
+                "format {}",
                 f
             );
         }

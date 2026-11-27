@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Arquivo do X (estudo 67): abre o zip de "Baixar seus dados" offline. */
+  /** X archive (study 67): opens the "Download your data" zip offline. */
   import { invoke } from "@tauri-apps/api/core";
   import { t } from "$lib/i18n";
   import { showToast } from "$lib/stores/toast-store.svelte";

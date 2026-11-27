@@ -1,63 +1,65 @@
-//! Traduz o stderr do yt-dlp em causa nomeada mais a correcao correspondente.
+//! Translates yt-dlp stderr into a named cause plus the matching fix.
 //!
-//! O usuario nao le stderr. Ele le "falhou" e abre uma issue, ou desiste. Este
-//! modulo e o que converte o B41, o B42 e o B43 em algo acionavel: sem ele,
-//! cada um entrega capacidade que o usuario nao consegue acionar.
+//! The user does not read stderr. They read "failed" and open an issue, or give
+//! up. This module is what turns B41, B42 and B43 into something actionable:
+//! without it, each one delivers capability the user cannot trigger.
 //!
-//! Cada causa carrega **uma acao**, e a acao e o que a tela vira botao. Causa
-//! sem acao correspondente e so um erro melhor escrito, e nao era isso o pedido.
+//! Each cause carries **one action**, and the action is what the screen turns
+//! into a button. A cause with no matching action is just a better-written
+//! error, and that was not what was asked for.
 //!
-//! A ordem de deteccao importa: a primeira que casar vence, e as mais
-//! especificas vem antes. Um 403 por fingerprint e um 403 por conteudo privado
-//! parecem iguais no fim da mensagem, e mandar o usuario atras da solucao errada
-//! e pior que nao sugerir nada.
+//! Detection order matters: the first match wins, and the most specific ones
+//! come first. A 403 for fingerprinting and a 403 for private content look the
+//! same at the end of the message, and sending the user after the wrong fix is
+//! worse than suggesting nothing.
 //!
-//! Origem: painel unico de causa raiz em controle de trafego aereo — uma tela
-//! onde cada alarme tem causa e acao ao lado, em vez de uma lista de sintomas.
+//! Origin: the single root-cause panel in air-traffic control — one screen
+//! where every alarm has its cause and action beside it, instead of a list of
+//! symptoms.
 
 use serde::Serialize;
 
-/// O que o usuario pode fazer. Vira botao na tela.
+/// What the user can do. Becomes a button on the screen.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Remedy {
-    /// Importar cookies do navegador.
+    /// Import browser cookies.
     ImportCookies,
-    /// Tentar de novo imitando um navegador (`--impersonate`).
+    /// Try again imitating a browser (`--impersonate`).
     UseImpersonation,
-    /// Subir ou configurar o provedor de PO Token.
+    /// Set up or configure the PO Token provider.
     SetUpPotProvider,
-    /// Trocar o client do YouTube — a cascata do B41 ja faz sozinha.
+    /// Switch the YouTube client — the B41 cascade already does that on its own.
     SwitchPlayerClient,
-    /// Esperar e tentar de novo; nada a configurar.
+    /// Wait and try again; nothing to configure.
     WaitAndRetry,
     /// Liberar espaco em disco.
     FreeDiskSpace,
-    /// Atualizar o yt-dlp.
+    /// Update yt-dlp.
     UpdateYtdlp,
-    /// Nada que o app saiba sugerir.
+    /// Nothing the app knows how to suggest.
     None,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Diagnosis {
-    /// Chave de i18n. Nunca texto pronto: a mensagem e traduzida na tela.
+    /// i18n key. Never ready-made text: the message is translated on screen.
     pub cause_key: &'static str,
     pub remedy: Remedy,
-    /// Detalhe tecnico, para o painel de debug. Nao vai para o toast.
+    /// Technical detail, for the debug panel. Does not go to the toast.
     pub detail: Option<String>,
 }
 
-/// Diagnostica uma falha de download a partir do stderr.
+/// Diagnoses a download failure from stderr.
 ///
-/// `None` significa que o app nao sabe — melhor admitir do que inventar causa,
-/// porque um diagnostico errado manda o usuario para a solucao errada e ele
-/// perde mais tempo do que se nao houvesse diagnostico nenhum.
+/// `None` means the app does not know — better to admit it than to invent a
+/// cause, because a wrong diagnosis sends the user to the wrong fix and they
+/// lose more time than if there had been no diagnosis at all.
 pub fn diagnose(stderr: &str) -> Option<Diagnosis> {
     let s = stderr.to_lowercase();
 
-    // Mais especificas primeiro. Varias destas terminam em 403 ou em
-    // "unavailable", e a ordem e o que evita casar pela razao errada.
+    // Most specific first. Several of these end in 403 or in "unavailable",
+    // and the order is what avoids matching for the wrong reason.
     if crate::core::pot_provider::stderr_indicates_missing_token(&s) {
         return Some(Diagnosis {
             cause_key: "error.cause.po_token_required",
@@ -90,8 +92,8 @@ pub fn diagnose(stderr: &str) -> Option<Diagnosis> {
         });
     }
 
-    // Auth antes de fingerprint: "private video" e "members-only" sao
-    // inequivocos, enquanto 403 sozinho e ambiguo.
+    // Auth before fingerprint: "private video" and "members-only" are
+    // unambiguous, while a bare 403 is ambiguous.
     if s.contains("private video")
         || s.contains("video is private")
         || s.contains("members-only")
@@ -126,10 +128,11 @@ pub fn diagnose(stderr: &str) -> Option<Diagnosis> {
     None
 }
 
-/// Todas as chaves de i18n que a tela precisa ter traduzidas.
+/// Every i18n key the screen needs translated.
 ///
-/// Existe para o teste travar: causa nova sem chave correspondente vira texto
-/// cru na interface, que e a forma mais visivel de regressao de i18n.
+/// Exists so the test can pin it down: a new cause without a matching key
+/// becomes raw text in the UI, which is the most visible kind of i18n
+/// regression.
 pub const ALL_CAUSE_KEYS: &[&str] = &[
     "error.cause.po_token_required",
     "error.cause.sabr_only",
@@ -150,7 +153,7 @@ mod tests {
 
     #[test]
     fn as_cinco_falhas_mais_frequentes_tem_causa_e_acao() {
-        // Criterio de aceite do item.
+        // Acceptance criterion of the item.
         let casos = [
             (
                 "ERROR: [youtube] abc: Sign in to confirm you're not a bot",
@@ -179,7 +182,7 @@ mod tests {
             ),
         ];
         for (stderr, chave, acao) in casos {
-            let d = diagnose(stderr).unwrap_or_else(|| panic!("sem diagnostico: {stderr:?}"));
+            let d = diagnose(stderr).unwrap_or_else(|| panic!("no diagnosis: {stderr:?}"));
             assert_eq!(d.cause_key, chave, "stderr: {stderr:?}");
             assert_eq!(d.remedy, acao, "stderr: {stderr:?}");
         }
@@ -194,9 +197,9 @@ mod tests {
 
     #[test]
     fn a_ordem_evita_mandar_o_usuario_para_a_solucao_errada() {
-        // 403 puro e ambiguo e vira fingerprint; 403 acompanhado de
-        // "members-only" e conteudo pago e vira cookies. Trocar a ordem faria o
-        // usuario instalar impersonation para resolver falta de login.
+        // A bare 403 is ambiguous and becomes fingerprinting; a 403 accompanied
+        // by "members-only" is paid content and becomes cookies. Swapping the
+        // order would make the user install impersonation to fix a missing login.
         assert_eq!(
             causa("ERROR: HTTP Error 403: Forbidden"),
             Some(("error.cause.tls_fingerprint", Remedy::UseImpersonation))
@@ -209,8 +212,8 @@ mod tests {
 
     #[test]
     fn falha_desconhecida_admite_que_nao_sabe() {
-        // Inventar causa e pior que nao diagnosticar: manda o usuario atras da
-        // solucao errada e ele perde mais tempo do que perderia sem nada.
+        // Inventing a cause is worse than not diagnosing: it sends the user after
+        // the wrong fix and they lose more time than they would have with nothing.
         for desconhecido in [
             "ERROR: something nobody has seen before",
             "ERROR: ffmpeg exited with code 1",
@@ -226,15 +229,15 @@ mod tests {
 
     #[test]
     fn sabr_vence_rate_limit_quando_os_dois_aparecem() {
-        // O 429 e consequencia frequente da cascata de client tentando de novo;
-        // reportar rate limit esconderia a causa de verdade.
+        // The 429 is a frequent consequence of the client cascade retrying;
+        // reporting a rate limit would hide the real cause.
         let d = diagnose("YouTube is forcing SABR streaming\nHTTP Error 429").unwrap();
         assert_eq!(d.cause_key, "error.cause.sabr_only");
     }
 
     #[test]
     fn toda_causa_esta_na_lista_de_chaves_de_i18n() {
-        // Causa nova sem chave vira texto cru na interface.
+        // A new cause without a key becomes raw text in the UI.
         let amostras = [
             "sign in to confirm you're not a bot",
             "forcing sabr streaming",
@@ -245,10 +248,10 @@ mod tests {
             "nsig extraction failed",
         ];
         for a in amostras {
-            let d = diagnose(a).unwrap_or_else(|| panic!("sem diagnostico: {a:?}"));
+            let d = diagnose(a).unwrap_or_else(|| panic!("no diagnosis: {a:?}"));
             assert!(
                 ALL_CAUSE_KEYS.contains(&d.cause_key),
-                "{} nao esta em ALL_CAUSE_KEYS",
+                "{} is not in ALL_CAUSE_KEYS",
                 d.cause_key
             );
         }
@@ -256,8 +259,8 @@ mod tests {
 
     #[test]
     fn detalhe_tecnico_nao_vaza_para_a_causa() {
-        // O detalhe vai para o painel de debug; a tela mostra a chave
-        // traduzida. Sao campos separados de proposito.
+        // The detail goes to the debug panel; the screen shows the translated
+        // key. Separate fields on purpose.
         let d = diagnose("YouTube is forcing SABR streaming").unwrap();
         assert!(d.cause_key.starts_with("error.cause."));
         assert!(d.detail.is_some());

@@ -203,9 +203,9 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
         .item(&quit_item)
         .build()?;
 
-    // Icon mac dinh khong co thi bo qua tray chu KHONG duoc giet ca app:
-    // `.expect()` o day tung la 1 duong chet lang luc khoi dong (app tat
-    // ngam, khong cua so, khong bao loi) neu icon bi thieu/hong.
+    // If there is no default icon, skip the tray but do NOT kill the whole app:
+    // the `.expect()` here used to be a silent death path at startup (app quits
+    // silently, no window, no error message) if the icon was missing/corrupt.
     let Some(icon) = app.default_window_icon().cloned() else {
         tracing::warn!("app icon not found; running without tray icon");
         return Ok(());

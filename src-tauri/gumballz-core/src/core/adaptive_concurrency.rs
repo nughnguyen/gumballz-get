@@ -1,44 +1,44 @@
-//! Ajusta `-N` por host medindo o throughput real, em vez de confiar num
-//! numero fixo em Config.
+//! Adjusts `-N` per host by measuring real throughput, instead of trusting a
+//! fixed number in Config.
 //!
-//! O numero em Config e um chute que o usuario tem que dar sem informacao: alto
-//! demais toma 429, baixo demais desperdiça banda, e o valor certo depende do
-//! host e do momento. O limitador por host e o contador de 429 ja existem — o
-//! que faltava era fechar o laco.
+//! The number in Config is a guess the user has to make without information: too
+//! high gets 429s, too low wastes bandwidth, and the right value depends on the
+//! host and the moment. The per-host limiter and the 429 counter already exist — what
+//! was missing was closing the loop.
 //!
-//! Ficou possivel agora porque o B23 fez o freio de 429 funcionar de verdade:
-//! antes, `-N` e `--concurrent-fragments` disputavam e o valor efetivo nao era
-//! o que o codigo pensava, entao nao havia sinal confiavel para realimentar.
+//! It became possible now because B23 made the 429 brake really work:
+//! before, `-N` and `--concurrent-fragments` fought each other and the effective value was not
+//! what the code thought, so there was no reliable signal to feed back.
 //!
-//! A decisao e pura: dadas amostras de throughput e o historico de 429, qual
-//! deve ser o proximo `-N`. Medir e I/O.
+//! The decision is pure: given throughput samples and the 429 history, what
+//! should the next `-N` be. Measuring is I/O.
 //!
-//! Origem: controle de congestionamento de CDN — subir devagar, cair rapido.
+//! Origin: CDN congestion control — climb slowly, drop fast.
 
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-/// Limites do ajuste. Um host nunca sai desta faixa, por mais que as medicoes
-/// sugiram: o teto protege o servidor e o piso garante que o download anda.
+/// Tuning limits. A host never leaves this range, no matter what the measurements
+/// suggest: the ceiling protects the server and the floor keeps the download moving.
 pub const MIN_N: u32 = 1;
 pub const MAX_N: u32 = 16;
 
-/// Orçamento de conexões da máquina inteira, somando todos os downloads
-/// ativos. O stress de 2/4/8 downloads de 1 GiB no loopback (estudo 66)
-/// saturou acima de 32 conexões: 4 downloads × 8 segmentos rendeu 3,9 GB/s e
-/// 8 × 8 caiu para 1,9 GB/s. Vinte e quatro deixa 3 downloads com o `-N 8`
-/// cheio e reparte o resto quando a fila enche.
+/// Connection budget for the whole machine, summing all active downloads.
+/// The 2/4/8-download 1 GiB loopback stress test (study 66)
+/// saturated above 32 connections: 4 downloads × 8 segments yielded 3.9 GB/s and
+/// 8 × 8 dropped to 1.9 GB/s. Twenty-four leaves 3 downloads with a full `-N 8`
+/// and shares the rest when the queue fills up.
 pub const GLOBAL_CONNECTION_BUDGET: u32 = 24;
 
 static ACTIVE_DOWNLOADS: AtomicU32 = AtomicU32::new(0);
 
-/// Quantos downloads estão puxando bytes agora (yt-dlp ou fetcher direto).
+/// How many downloads are pulling bytes right now (yt-dlp or direct fetcher).
 pub fn active_downloads() -> u32 {
     ACTIVE_DOWNLOADS.load(Ordering::Relaxed)
 }
 
-/// Marca um download como ativo enquanto o guard vive.
+/// Marks a download as active while the guard lives.
 pub struct ActiveDownloadGuard(());
 
 impl ActiveDownloadGuard {
@@ -60,24 +60,24 @@ impl Drop for ActiveDownloadGuard {
     }
 }
 
-/// Teto por download dado o orçamento global e quantos downloads o dividem.
+/// Per-download ceiling given the global budget and how many downloads share it.
 ///
-/// `active` inclui o download que está perguntando. Nunca abaixo de `MIN_N`:
-/// um download sempre anda, mesmo que a fila esteja lotada.
+/// `active` includes the download asking. Never below `MIN_N`:
+/// a download always moves, even when the queue is full.
 pub fn per_download_ceiling(budget: u32, active: u32) -> u32 {
     (budget / active.max(1)).clamp(MIN_N, MAX_N)
 }
 
-/// Ganho minimo para justificar subir mais.
+/// Minimum gain to justify climbing further.
 ///
-/// Dez por cento: abaixo disso a diferenca se confunde com variacao normal de
-/// rede, e subir `-N` atras de ruido so aumenta a chance de 429.
+/// Ten percent: below that the difference blends into normal network
+/// variation, and raising `-N` chasing noise only increases the chance of 429.
 pub const MEANINGFUL_GAIN: f64 = 1.10;
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub struct Sample {
     pub concurrency: u32,
-    /// Bytes por segundo observados com essa concorrencia.
+    /// Bytes per second observed at this concurrency.
     pub throughput_bps: f64,
 }
 
@@ -101,10 +101,10 @@ impl HostStats {
         self.rate_limit_hits = self.rate_limit_hits.saturating_add(1);
     }
 
-    /// Melhor throughput observado para uma dada concorrencia.
+    /// Best throughput observed for a given concurrency.
     ///
-    /// Melhor e nao media: uma amostra ruim costuma ser interferencia local
-    /// (outro download, wifi), nao a capacidade real daquele nivel.
+    /// Best, not average: a bad sample is usually local interference
+    /// (another download, wifi), not the real capacity of that level.
     fn best_at(&self, concurrency: u32) -> Option<f64> {
         self.samples
             .iter()
@@ -116,34 +116,34 @@ impl HostStats {
     }
 }
 
-/// Proximo `-N` para o host.
+/// Next `-N` for the host.
 ///
-/// Sobe devagar e cai rapido, que e a assimetria certa: subir errado custa um
-/// 429 e um retry; descer errado custa um pouco de velocidade.
+/// Climbs slowly and drops fast, which is the right asymmetry: climbing wrong costs a
+/// 429 and a retry; dropping wrong costs a little speed.
 pub fn next_concurrency(stats: &HostStats, current: u32) -> u32 {
     let current = current.clamp(MIN_N, MAX_N);
 
-    // 429 domina qualquer medicao de velocidade. Nao adianta o throughput
-    // parecer bom se o host esta recusando.
+    // 429 dominates any speed measurement. No point in throughput
+    // looking good if the host is refusing.
     if stats.rate_limit_hits > 0 {
-        let penalizado = current / 2u32.pow(stats.rate_limit_hits.min(3));
-        return penalizado.clamp(MIN_N, MAX_N);
+        let penalized = current / 2u32.pow(stats.rate_limit_hits.min(3));
+        return penalized.clamp(MIN_N, MAX_N);
     }
 
-    let Some(atual) = stats.best_at(current) else {
-        return current; // sem medicao ainda: nao mexe
+    let Some(current_best) = stats.best_at(current) else {
+        return current; // no measurement yet: do not touch
     };
 
     match stats.best_at(current.saturating_sub(1)) {
-        // Se um nivel abaixo era melhor, subir foi erro — desce.
-        Some(anterior) if anterior > atual * MEANINGFUL_GAIN => (current - 1).clamp(MIN_N, MAX_N),
+        // If one level below was better, climbing was a mistake — go down.
+        Some(previous) if previous > current_best * MEANINGFUL_GAIN => (current - 1).clamp(MIN_N, MAX_N),
         _ => {
-            // Só sobe se o degrau anterior mostrou ganho real.
-            let vale_subir = match stats.best_at(current.saturating_sub(1)) {
-                Some(anterior) => atual > anterior * MEANINGFUL_GAIN,
-                None => true, // primeiro degrau medido: tenta subir uma vez
+            // Only climb if the previous step showed real gain.
+            let worth_climbing = match stats.best_at(current.saturating_sub(1)) {
+                Some(previous) => current_best > previous * MEANINGFUL_GAIN,
+                None => true, // first measured step: try climbing once
             };
-            if vale_subir {
+            if worth_climbing {
                 (current + 1).clamp(MIN_N, MAX_N)
             } else {
                 current
@@ -152,7 +152,7 @@ pub fn next_concurrency(stats: &HostStats, current: u32) -> u32 {
     }
 }
 
-/// Estado por host, para o ajuste sobreviver entre downloads.
+/// Per-host state, so the tuning survives between downloads.
 #[derive(Debug, Default)]
 pub struct ConcurrencyTuner {
     hosts: HashMap<String, HostStats>,
@@ -173,29 +173,29 @@ impl ConcurrencyTuner {
             .record_rate_limit();
     }
 
-    /// `ceiling` e o numero de Config: vira **teto**, nao valor fixo. O teto
-    /// ainda e cortado pelo orcamento global de conexoes repartido entre os
-    /// downloads ativos (`GLOBAL_CONNECTION_BUDGET`).
+    /// `ceiling` is the Config number: it becomes a **ceiling**, not a fixed value. The ceiling
+    /// is still cut by the global connection budget shared between active
+    /// downloads (`GLOBAL_CONNECTION_BUDGET`).
     pub fn suggest(&self, host: &str, current: u32, ceiling: u32) -> u32 {
         let shared = per_download_ceiling(GLOBAL_CONNECTION_BUDGET, active_downloads());
         self.suggest_with_ceiling(host, current, ceiling.min(shared))
     }
 
-    /// `suggest` sem o orcamento global: a regra por host, pura.
+    /// `suggest` without the global budget: the per-host rule, pure.
     pub fn suggest_with_ceiling(&self, host: &str, current: u32, ceiling: u32) -> u32 {
-        let teto = ceiling.clamp(MIN_N, MAX_N);
+        let cap = ceiling.clamp(MIN_N, MAX_N);
         match self.hosts.get(host) {
-            Some(stats) => next_concurrency(stats, current).min(teto),
-            None => current.min(teto),
+            Some(stats) => next_concurrency(stats, current).min(cap),
+            None => current.min(cap),
         }
     }
 }
 
-/// Um tuner por processo, compartilhado entre o downloader direto e o yt-dlp.
+/// One tuner per process, shared between the direct downloader and yt-dlp.
 ///
-/// O host é o mesmo nos dois caminhos (um 429 do `googlevideo.com` vale para
-/// qualquer um deles), então dividir as estatísticas é o comportamento certo.
-/// `tokio::sync::Mutex` porque é travado dentro de código async.
+/// The host is the same on both paths (a 429 from `googlevideo.com` counts for
+/// either of them), so sharing the statistics is the right behavior.
+/// `tokio::sync::Mutex` because it is locked inside async code.
 pub fn global() -> &'static tokio::sync::Mutex<ConcurrencyTuner> {
     static TUNER: std::sync::OnceLock<tokio::sync::Mutex<ConcurrencyTuner>> =
         std::sync::OnceLock::new();
@@ -209,44 +209,44 @@ mod tests {
     const MB: f64 = 1_000_000.0;
 
     #[test]
-    fn orcamento_global_reparte_entre_downloads_ativos() {
+    fn global_budget_is_shared_between_active_downloads() {
         assert_eq!(per_download_ceiling(24, 0), 16); // MAX_N
         assert_eq!(per_download_ceiling(24, 1), 16);
         assert_eq!(per_download_ceiling(24, 3), 8);
         assert_eq!(per_download_ceiling(24, 6), 4);
-        assert_eq!(per_download_ceiling(24, 100), 1); // nunca abaixo de MIN_N
+        assert_eq!(per_download_ceiling(24, 100), 1); // never below MIN_N
     }
 
     #[test]
-    fn guard_conta_e_desconta() {
-        let antes = active_downloads();
+    fn guard_counts_and_uncounts() {
+        let before = active_downloads();
         {
             let _a = ActiveDownloadGuard::new();
             let _b = ActiveDownloadGuard::new();
-            assert_eq!(active_downloads(), antes + 2);
+            assert_eq!(active_downloads(), before + 2);
         }
-        assert_eq!(active_downloads(), antes);
+        assert_eq!(active_downloads(), before);
     }
 
     #[test]
-    fn sem_medicao_nenhuma_nao_mexe() {
-        // Ajustar sem dado seria adivinhar, que e o que a feature veio evitar.
+    fn no_measurement_at_all_means_no_change() {
+        // Tuning without data would be guessing, which is what the feature came to avoid.
         let s = HostStats::default();
         assert_eq!(next_concurrency(&s, 4), 4);
     }
 
     #[test]
-    fn sobe_quando_o_degrau_anterior_mostrou_ganho_real() {
+    fn climbs_when_the_previous_step_showed_real_gain() {
         let mut s = HostStats::default();
         s.record(3, 3.0 * MB);
-        s.record(4, 5.0 * MB); // +66%, bem acima do ruido
+        s.record(4, 5.0 * MB); // +66%, well above the noise
         assert_eq!(next_concurrency(&s, 4), 5);
     }
 
     #[test]
-    fn nao_sobe_atras_de_ruido() {
-        // 5% de diferenca se confunde com variacao normal de rede; subir por
-        // isso so aumenta a chance de 429 sem ganhar velocidade.
+    fn does_not_climb_chasing_noise() {
+        // A 5% difference blends into normal network variation; climbing for
+        // that only increases the chance of 429 without gaining speed.
         let mut s = HostStats::default();
         s.record(3, 5.0 * MB);
         s.record(4, 5.25 * MB);
@@ -254,18 +254,18 @@ mod tests {
     }
 
     #[test]
-    fn desce_quando_subir_piorou() {
+    fn drops_when_climbing_made_it_worse() {
         let mut s = HostStats::default();
         s.record(3, 8.0 * MB);
-        s.record(4, 5.0 * MB); // subir custou velocidade
+        s.record(4, 5.0 * MB); // climbing cost speed
         assert_eq!(next_concurrency(&s, 4), 3);
     }
 
     #[test]
-    fn rate_limit_derruba_rapido_e_ignora_o_throughput() {
-        // Assimetria deliberada: subir errado custa 429 e retry, descer errado
-        // custa um pouco de velocidade. E throughput bom nao significa nada se
-        // o host esta recusando.
+    fn rate_limit_drops_fast_and_ignores_throughput() {
+        // Deliberate asymmetry: climbing wrong costs a 429 and a retry, dropping wrong
+        // costs a little speed. And good throughput means nothing if
+        // the host is refusing.
         let mut s = HostStats::default();
         s.record(8, 50.0 * MB);
         s.record_rate_limit();
@@ -279,53 +279,53 @@ mod tests {
     }
 
     #[test]
-    fn nunca_sai_da_faixa() {
+    fn never_leaves_the_range() {
         let mut s = HostStats::default();
         s.record(16, 100.0 * MB);
         s.record(15, 10.0 * MB);
-        assert_eq!(next_concurrency(&s, 16), MAX_N, "nao passa do teto");
+        assert_eq!(next_concurrency(&s, 16), MAX_N, "does not exceed the ceiling");
 
-        let mut baixo = HostStats::default();
+        let mut low = HostStats::default();
         for _ in 0..10 {
-            baixo.record_rate_limit();
+            low.record_rate_limit();
         }
-        assert_eq!(next_concurrency(&baixo, 1), MIN_N, "nao vai abaixo de 1");
+        assert_eq!(next_concurrency(&low, 1), MIN_N, "does not go below 1");
     }
 
     #[test]
-    fn amostra_ruim_nao_apaga_a_boa() {
-        // Interferencia local (outro download, wifi) nao e a capacidade real do
-        // nivel. Por isso o melhor, e nao a media.
+    fn bad_sample_does_not_erase_the_good_one() {
+        // Local interference (another download, wifi) is not the real capacity of
+        // the level. That is why the best, not the average.
         let mut s = HostStats::default();
         s.record(3, 3.0 * MB);
         s.record(4, 5.0 * MB);
-        s.record(4, 0.1 * MB); // pico de interferencia
-        assert_eq!(next_concurrency(&s, 4), 5, "a amostra ruim nao deve mandar");
+        s.record(4, 0.1 * MB); // interference spike
+        assert_eq!(next_concurrency(&s, 4), 5, "the bad sample must not rule");
     }
 
     #[test]
-    fn medicao_invalida_e_descartada() {
+    fn invalid_measurement_is_discarded() {
         let mut s = HostStats::default();
         s.record(4, f64::NAN);
         s.record(4, -1.0);
         s.record(4, 0.0);
-        assert_eq!(next_concurrency(&s, 4), 4, "sem amostra valida, nao mexe");
+        assert_eq!(next_concurrency(&s, 4), 4, "without a valid sample, do not touch");
     }
 
     #[test]
-    fn o_numero_de_config_vira_teto_e_nao_valor_fixo() {
-        // O ponto da feature: o usuario deixa de adivinhar um numero e passa a
-        // declarar um limite.
+    fn the_config_number_becomes_a_ceiling_not_a_fixed_value() {
+        // The point of the feature: the user stops guessing a number and starts
+        // declaring a limit.
         let mut t = ConcurrencyTuner::default();
         t.record("youtube.com", 3, 3.0 * MB);
         t.record("youtube.com", 4, 6.0 * MB);
-        assert_eq!(t.suggest("youtube.com", 4, 16), 5, "abaixo do teto, sobe");
-        assert_eq!(t.suggest("youtube.com", 4, 4), 4, "o teto segura");
+        assert_eq!(t.suggest("youtube.com", 4, 16), 5, "below the ceiling, climb");
+        assert_eq!(t.suggest("youtube.com", 4, 4), 4, "the ceiling holds");
     }
 
     #[test]
-    fn hosts_nao_contaminam_uns_aos_outros() {
-        // 429 do YouTube nao pode reduzir a concorrencia do Bilibili.
+    fn hosts_do_not_contaminate_each_other() {
+        // A YouTube 429 must not lower Bilibili's concurrency.
         let mut t = ConcurrencyTuner::default();
         t.record_rate_limit("youtube.com");
         assert_eq!(t.suggest("youtube.com", 8, 16), 4);

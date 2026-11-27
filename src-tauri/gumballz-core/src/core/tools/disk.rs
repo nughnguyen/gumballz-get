@@ -1,7 +1,7 @@
-//! Analisador de disco (estudo 10, Kudu): volumes com espaço livre, árvore de
-//! tamanhos de uma pasta (para o treemap) e os maiores arquivos. Uma única
-//! varredura com `walkdir` alimenta as três coisas; a árvore devolvida é
-//! podada (profundidade e número de filhos) para caber na tela.
+//! Disk analyzer (study 10, Kudu): volumes with free space, the size tree of
+//! a folder (for the treemap) and the largest files. A single `walkdir` pass
+//! feeds all three; the returned tree is pruned (depth and child count) to fit
+//! on screen.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -105,8 +105,8 @@ pub struct DiskScan {
     pub skipped: u64,
 }
 
-/// Varre `root` e devolve a árvore até `max_depth` níveis, com no máximo
-/// `max_children` filhos por nó (o resto vira "outros").
+/// Scans `root` and returns the tree up to `max_depth` levels, with at most
+/// `max_children` children per node (the rest becomes "others").
 pub fn scan(
     root: &str,
     max_depth: usize,
@@ -115,13 +115,13 @@ pub fn scan(
 ) -> anyhow::Result<DiskScan> {
     let root_path = PathBuf::from(root.trim());
     if !root_path.is_dir() {
-        anyhow::bail!("pasta nao encontrada: {}", root_path.display());
+        anyhow::bail!("folder not found: {}", root_path.display());
     }
     let max_depth = max_depth.clamp(1, 8);
     let max_children = max_children.clamp(5, 200);
 
-    // Os maiores arquivos e, por diretório, a lista de filhos diretos com
-    // tamanho somado de baixo para cima.
+    // The largest files and, per directory, the list of direct children with
+    // sizes summed bottom-up.
     let mut largest: Vec<BigFile> = Vec::new();
     let mut scanned = 0u64;
     let mut skipped = 0u64;
@@ -130,8 +130,8 @@ pub fn scan(
     let walker = walkdir::WalkDir::new(&root_path)
         .follow_links(false)
         .min_depth(1);
-    // Pilha "caminho → bytes" para fechar diretórios ao sair deles: walkdir é
-    // pré-ordem, então guardamos o acumulado de cada diretório aberto.
+    // Stack "path → bytes" for closing directories on exit: walkdir is
+    // pre-order, so we keep the running total of each open directory.
     let mut open: Vec<(PathBuf, u64, u64)> = vec![(root_path.clone(), 0, 0)];
     let mut immediate: HashMap<PathBuf, Vec<(String, u64, bool, u64)>> = HashMap::new();
 
@@ -256,7 +256,7 @@ pub fn scan(
                 }
                 if rest_n > 0 {
                     children.push(Node {
-                        name: format!("… {} itens", rest_n),
+                        name: format!("… {} items", rest_n),
                         path: String::new(),
                         bytes: rest_bytes,
                         is_dir: false,
@@ -299,7 +299,7 @@ pub fn scan(
     })
 }
 
-/// Move para a lixeira (nunca apaga direto).
+/// Moves to the trash (never deletes directly).
 pub fn trash_paths(paths: &[String]) -> (Vec<String>, Vec<String>) {
     let mut ok = Vec::new();
     let mut failed = Vec::new();

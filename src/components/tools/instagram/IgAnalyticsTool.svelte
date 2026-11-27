@@ -18,8 +18,8 @@
 
 <script lang="ts">
   /**
-   * Métricas de um perfil (engajamento, ritmo, melhores dias e horas,
-   * hashtags, top posts) e comparação lado a lado entre perfis.
+   * Metrics for a profile (engagement, pace, best days and hours,
+   * hashtags, top posts) and side-by-side comparison between profiles.
    * `mode` = "analytics" | "compare".
    */
   import { invoke } from "@tauri-apps/api/core";

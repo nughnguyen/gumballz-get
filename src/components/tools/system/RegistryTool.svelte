@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** ⚠️ Só Windows. Limpar registro (estudo 10, Kudu): órfãos com backup .reg antes. */
+  /** ⚠️ Windows only. Clean the registry (study 10, Kudu): orphans, with a .reg backup first. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

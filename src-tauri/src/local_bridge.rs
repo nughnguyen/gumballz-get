@@ -552,9 +552,9 @@ pub async fn spawn(app: AppHandle) {
     });
 }
 
-/// Estado da fila, o mesmo `QueueItemInfo` que a tela recebe. Serve para a
-/// extensão mostrar progresso e para harness de teste observar o app por
-/// fora sem instrumentar a UI. Mesmo bearer do `enqueue`.
+/// Queue state, the same `QueueItemInfo` the screen receives. Lets the extension
+/// show progress and lets a test harness observe the app from outside without
+/// instrumenting the UI. Same bearer <redacted> `enqueue`.
 async fn queue_state(State(state): State<BridgeState>, headers: HeaderMap) -> Response {
     if !check_bearer(&headers, &state.token) {
         return unauthorized();
@@ -567,7 +567,7 @@ async fn queue_state(State(state): State<BridgeState>, headers: HeaderMap) -> Re
     (StatusCode::OK, Json(items)).into_response()
 }
 
-/// Últimas linhas do log de um download (até 200, redigidas na origem).
+/// Last lines of a download's log (up to 200, redacted at the source).
 async fn download_log(
     State(state): State<BridgeState>,
     headers: HeaderMap,
@@ -705,7 +705,7 @@ async fn pair(State(state): State<BridgeState>, headers: HeaderMap) -> Response 
         .get("user-agent")
         .and_then(|v| v.to_str().ok())
         .map(str::to_string);
-    // Record which browser paired, so Settings can show "Đã cài đặt" for it.
+    // Record which browser paired, so Settings can show it as installed.
     record_paired_browser(&state.app, user_agent.as_deref());
     if let Err(error) = state.app.emit(
         "bridge-paired",
@@ -951,8 +951,8 @@ pub fn build_pairing_url(port: u16) -> String {
 
 // ── MCP (Streamable HTTP, só JSON) ─────────────────────────────────────
 
-/// `POST /mcp`: JSON-RPC do MCP. Mesmo bearer da extensão; 403 quando a
-/// tool "Servidor MCP" está desligada; 202 sem corpo para notificações.
+/// `POST /mcp`: MCP JSON-RPC. Same bearer <redacted> extension; 403 when the
+/// "MCP server" tool is off; 202 with no body for notifications.
 async fn mcp_post(
     State(state): State<BridgeState>,
     headers: HeaderMap,
@@ -980,12 +980,12 @@ async fn mcp_post(
     }
 }
 
-/// Sem canal SSE: quem pedir GET recebe 405 e continua só com POST.
+/// No SSE channel: a GET request gets 405 and continues with POST only.
 async fn mcp_get() -> Response {
     StatusCode::METHOD_NOT_ALLOWED.into_response()
 }
 
-// ── Receptor local de diapositivas Google Slides (/api/reset, /api/slide, /api/compile) ──
+// ── Local receiver for Google Slides slides (/api/reset, /api/slide, /api/compile) ──
 
 #[derive(Default)]
 struct SlidesSession {

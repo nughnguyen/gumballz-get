@@ -130,7 +130,7 @@
   import LiChecklistTool from "$components/tools/linkedin/ChecklistTool.svelte";
   import type { Component } from "svelte";
 
-  // Runners que rodam dentro do Tools (chave do catálogo → componente).
+  // Runners that run inside Tools (catalog key → component).
   const RUNNERS: Record<string, Component<any>> = {
     spicetify: SpicetifyTool,
     whisper: WhisperTool,
@@ -257,8 +257,8 @@
     "li-checklist": LiChecklistTool,
   };
 
-  // Props extras por tool (o mesmo componente serve várias). A chave é o id
-  // da tool; `win-harden` e `win-tweaks` são nomes de runner, daí o fallback.
+  // Extra props per tool (the same component serves several). The key is the tool
+  // id; `win-harden` and `win-tweaks` are runner names, hence the fallback.
   const RUNNER_PROPS: Record<string, Record<string, unknown>> = {
     "win-harden": { group: "harden" },
     "pdf-merge": { mode: "merge" },

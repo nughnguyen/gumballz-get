@@ -1,7 +1,7 @@
-//! Categoria LinkedIn: tudo aqui roda em cima do export oficial que o usuario
-//! baixa em Settings -> Data privacy -> Get a copy of your data. E dado
-//! proprio, lido do disco, sem nenhuma requisicao de rede e sem tocar no site
-//! — por isso a categoria existe.
+//! LinkedIn category: everything here runs on top of the official export the user
+//! downloads in Settings -> Data privacy -> Get a copy of your data. It is their own data,
+//! read from disk, with no network request at all and without touching the site
+//! — that is why the category exists.
 
 pub mod checklist;
 pub mod connections;
@@ -15,21 +15,21 @@ use std::collections::HashMap;
 use anyhow::Result;
 use serde::Serialize;
 
-/// Par nome/quantidade, usado nos rankings (empresas, cargos, contatos).
+/// Name/count pair, used in the rankings (companies, roles, contacts).
 #[derive(Debug, Clone, Serialize)]
 pub struct Count {
     pub name: String,
     pub count: usize,
 }
 
-/// Quantidade num periodo (`2021-08` ou `2021`).
+/// Count in a period (`2021-08` or `2021`).
 #[derive(Debug, Clone, Serialize)]
 pub struct Bucket {
     pub period: String,
     pub count: usize,
 }
 
-/// Ranking decrescente, empate resolvido pelo nome para a saida ser estavel.
+/// Descending ranking, ties resolved by name so the output is stable.
 pub fn top(map: &HashMap<String, usize>, limit: usize) -> Vec<Count> {
     let mut v: Vec<Count> = map
         .iter()
@@ -43,7 +43,7 @@ pub fn top(map: &HashMap<String, usize>, limit: usize) -> Vec<Count> {
     v
 }
 
-/// Serie temporal em ordem cronologica.
+/// Time series in chronological order.
 pub fn series(map: &HashMap<String, usize>) -> Vec<Bucket> {
     let mut v: Vec<Bucket> = map
         .iter()
@@ -63,7 +63,7 @@ pub fn bump(map: &mut HashMap<String, usize>, key: &str) {
     *map.entry(key.to_string()).or_insert(0) += 1;
 }
 
-/// Pasta de saida dos arquivos exportados. Sem `out_dir` cai em
+/// Output folder for the exported files. Without `out_dir` it falls back to
 /// `<app_data>/tools/linkedin`.
 pub fn out_dir(opt: Option<&str>) -> std::path::PathBuf {
     let dir = match opt {
@@ -76,14 +76,14 @@ pub fn out_dir(opt: Option<&str>) -> std::path::PathBuf {
     dir
 }
 
-/// Grava um arquivo de saida e devolve o caminho como string.
+/// Writes an output file and returns the path as a string.
 pub fn write_out(dir: &std::path::Path, name: &str, body: &str) -> Result<String> {
     let path = dir.join(super::sanitize_name(name));
     std::fs::write(&path, body)?;
     Ok(path.to_string_lossy().to_string())
 }
 
-/// Escapa texto para HTML (os exports viram pagina local).
+/// Escapes text for HTML (the exports become a local page).
 pub fn html_escape(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {
@@ -99,7 +99,7 @@ pub fn html_escape(s: &str) -> String {
     out
 }
 
-/// JSON embutido dentro de `<script>`: `<` vira `<` para nao fechar a tag.
+/// JSON embedded inside `<script>`: `<` becomes `<` so it does not close the tag.
 pub fn json_for_script(v: &serde_json::Value) -> String {
     serde_json::to_string(v)
         .unwrap_or_else(|_| "null".to_string())

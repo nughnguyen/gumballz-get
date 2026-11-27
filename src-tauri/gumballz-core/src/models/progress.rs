@@ -1,8 +1,8 @@
-/// O stream (formato) que o yt-dlp está baixando neste instante.
+/// The stream (format) yt-dlp is downloading right now.
 ///
-/// Vem de `%(info.*)s` no `--progress-template`: em `bv+ba` cada stream chega
-/// com o próprio dict, então dá para dizer "1080p60 · avc1" e depois
-/// "áudio · mp4a" sem um segundo processo.
+/// Comes from `%(info.*)s` in `--progress-template`: in `bv+ba` each stream arrives
+/// with its own dict, so it can say "1080p60 · avc1" and later
+/// "audio · mp4a" without a second process.
 #[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct StreamInfo {
     pub format_id: String,
@@ -33,7 +33,7 @@ impl StreamInfo {
         self.acodec.as_deref().is_some_and(|a| a != "none")
     }
 
-    /// Nome curto do codec sem o perfil (`avc1.64002a` → `avc1`).
+    /// Short codec name without the profile (`avc1.64002a` → `avc1`).
     pub fn short_vcodec(&self) -> Option<String> {
         self.vcodec
             .as_deref()
@@ -57,11 +57,11 @@ pub struct ProgressUpdate {
     pub speed_bps: Option<f64>,
     pub eta_seconds: Option<u64>,
     pub phase: Option<String>,
-    /// Stream em download agora (só o yt-dlp preenche).
+    /// Stream downloading now (only yt-dlp fills this in).
     pub stream: Option<StreamInfo>,
     pub fragment_index: Option<u32>,
     pub fragment_count: Option<u32>,
-    /// Formatos que o yt-dlp anunciou que vai baixar (`Downloading 2 format(s): 299+140`).
+    /// Formats yt-dlp announced it will download (`Downloading 2 format(s): 299+140`).
     pub planned_formats: Option<Vec<String>>,
 }
 
@@ -102,9 +102,9 @@ impl ProgressUpdate {
         self.downloaded_bytes.is_some() || self.speed_bps.is_some() || self.eta_seconds.is_some()
     }
 
-    /// Muda o *estado* mostrado (fase, stream, plano de formatos, fragmento),
-    /// não só o número. Nunca pode cair no throttle de 250 ms: perder um
-    /// "trocou para o áudio" deixa a tela mentindo até o próximo tick.
+    /// Changes the displayed *state* (phase, stream, format plan, fragment),
+    /// not just the number. It must never fall under the 250 ms throttle: missing a
+    /// "switched to audio" leaves the screen lying until the next tick.
     pub fn is_structural(&self) -> bool {
         self.phase.is_some()
             || self.stream.is_some()

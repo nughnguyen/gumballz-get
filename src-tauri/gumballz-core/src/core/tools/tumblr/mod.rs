@@ -1,16 +1,16 @@
-//! Tumblr e favoritos de arte.
+//! Tumblr and art favorites.
 //!
-//! Nada aqui reimplementa scraping: o gallery-dl já é um binário gerido do
-//! projeto (`core/dependencies::ensure_gallerydl`) e já fala Tumblr,
-//! DeviantArt, ArtStation e Flickr. O trabalho destas tools é pós-processar o
-//! dump JSON dele e virar índice pesquisável (CSV/JSON) ou espelho HTML.
+//! Nothing here reimplements scraping: gallery-dl is already a managed binary of
+//! the project (`core/dependencies::ensure_gallerydl`) and already speaks Tumblr,
+//! DeviantArt, ArtStation and Flickr. The work of these tools is to post-process its
+//! JSON dump and turn it into a searchable index (CSV/JSON) or an HTML mirror.
 
 pub mod art;
 pub mod backup;
 pub mod gdl;
 pub mod likes;
 
-/// Escapa texto para caber dentro de um nó ou atributo HTML.
+/// Escapes text to fit inside an HTML node or attribute.
 pub fn esc(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 8);
     for c in s.chars() {
@@ -26,7 +26,7 @@ pub fn esc(s: &str) -> String {
     out
 }
 
-/// Célula de CSV no dialeto do resto do projeto (aspas dobradas).
+/// CSV cell in the dialect of the rest of the project (double quotes).
 pub fn csv_cell(s: &str) -> String {
     if s.contains(',') || s.contains('"') || s.contains('\n') || s.contains('\r') {
         format!("\"{}\"", s.replace('"', "\"\""))
@@ -45,8 +45,8 @@ pub fn csv_line(cells: &[String]) -> String {
     line
 }
 
-/// Nome de arquivo seguro e curto, para páginas geradas (tag, post, blog).
-/// Só ASCII minúsculo, dígitos e hífen; nunca vazio, nunca `..`.
+/// Safe and short file name, for generated pages (tag, post, blog).
+/// Only lowercase ASCII, digits and hyphen; never empty, never `..`.
 pub fn safe_slug(s: &str) -> String {
     let mut out = String::new();
     let mut last_dash = true;
@@ -65,7 +65,7 @@ pub fn safe_slug(s: &str) -> String {
     }
     let out = out.trim_matches('-').to_string();
     if out.is_empty() {
-        "sem-nome".to_string()
+        "no-name".to_string()
     } else {
         out
     }
@@ -95,8 +95,8 @@ mod tests {
     fn slug_nunca_escapa_da_pasta() {
         assert_eq!(safe_slug("../../etc/passwd"), "etc-passwd");
         assert_eq!(safe_slug("Arte Digital / IA"), "arte-digital-ia");
-        assert_eq!(safe_slug("   "), "sem-nome");
-        assert_eq!(safe_slug("日本語"), "sem-nome");
+        assert_eq!(safe_slug("   "), "no-name");
+        assert_eq!(safe_slug("日本語"), "no-name");
         assert!(safe_slug(&"a".repeat(200)).len() <= 60);
     }
 }

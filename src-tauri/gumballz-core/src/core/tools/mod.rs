@@ -1,6 +1,6 @@
-//! Seção Tools: cada módulo aqui é uma capacidade isolada com entrada e saída
-//! serializáveis, para a UI Svelte e (mais tarde) um servidor MCP chamarem o
-//! mesmo código. Nada de estado de janela; progresso sai por callback.
+//! Tools section: each module here is an isolated capability with serializable
+//! input and output, so the Svelte UI and (later) an MCP server can call the
+//! same code. No window state; progress comes out via callback.
 
 pub mod ai_keys;
 pub mod ai_tokens;
@@ -94,12 +94,12 @@ use std::sync::Arc;
 
 use serde::Serialize;
 
-/// Progresso genérico de uma ferramenta. `id` identifica a operação na UI
-/// (a mesma tela pode ter vários downloads de modelo ao mesmo tempo).
+/// Generic progress of a tool. `id` identifies the operation in the UI
+/// (the same screen can have several model downloads at once).
 #[derive(Debug, Clone, Serialize)]
 pub struct ToolProgress {
     pub id: String,
-    /// "started" | "progress" | "done" | "error" | texto livre da etapa
+    /// "started" | "progress" | "done" | "error" | free-form stage text
     pub stage: String,
     pub done: u64,
     pub total: Option<u64>,
@@ -161,12 +161,12 @@ pub fn report_bytes(
     });
 }
 
-/// Pasta de dados das ferramentas (`<app_data>/tools`).
+/// Tools data folder (`<app_data>/tools`).
 pub fn tools_dir() -> Option<std::path::PathBuf> {
     crate::core::paths::app_data_dir().map(|d| d.join("tools"))
 }
 
-/// Pasta temporária própria, para não deixar lixo no `/tmp` do sistema.
+/// Own temp folder, so it does not leave junk in the system `/tmp`.
 pub fn temp_dir() -> std::path::PathBuf {
     let base = tools_dir().unwrap_or_else(std::env::temp_dir).join("tmp");
     let _ = std::fs::create_dir_all(&base);
@@ -190,7 +190,7 @@ pub fn client() -> anyhow::Result<reqwest::Client> {
     )
 }
 
-/// Baixa uma URL para um arquivo, em streaming, reportando bytes.
+/// Downloads a URL to a file, streaming, reporting bytes.
 pub async fn download_to(
     client: &reqwest::Client,
     url: &str,
@@ -203,7 +203,7 @@ pub async fn download_to(
 
     let resp = client.get(url).send().await?;
     if !resp.status().is_success() {
-        anyhow::bail!("download de {} falhou: HTTP {}", url, resp.status());
+        anyhow::bail!("download of {} failed: HTTP {}", url, resp.status());
     }
     let total = resp.content_length();
     if let Some(parent) = dest.parent() {
@@ -234,7 +234,7 @@ pub async fn download_to(
 pub fn sanitize_name(name: &str) -> String {
     let s = sanitize_filename::sanitize(name.trim());
     if s.is_empty() {
-        "arquivo".to_string()
+        "file".to_string()
     } else {
         s
     }

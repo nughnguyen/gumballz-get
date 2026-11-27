@@ -18,8 +18,8 @@
 
 <script lang="ts">
   /**
-   * As tools de PDF que escrevem estrutura (lopdf): senha, marca d'água,
-   * corte de margem e sumário. `mode` decide qual formulário aparece.
+   * The PDF tools that write structure (lopdf): password, watermark,
+   * margin crop and outline. `mode` picks which form shows.
    */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
@@ -42,7 +42,7 @@
   let result = $state<Result | null>(null);
   let unlisten: (() => void) | null = null;
 
-  // senha
+  // password
   let pwMode = $state("add");
   let userPw = $state("");
   let ownerPw = $state("");
@@ -67,7 +67,7 @@
   let top = $state(40);
   let bottom = $state(40);
   let uniform = $state(true);
-  // sumário
+  // summary
   let entries = $state<Entry[]>([]);
 
   const PROGRESS_ID: Record<string, string> = { password: "pdf-password", watermark: "pdf-watermark", crop: "pdf-crop" };

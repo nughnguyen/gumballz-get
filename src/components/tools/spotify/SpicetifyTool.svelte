@@ -18,9 +18,9 @@
 
 <script lang="ts">
   /**
-   * Ferramenta "Spotify → Spicetify". O backend chama o CLI oficial; esta
-   * tela mostra o estado (CLI, Spotify, aplicado ou não), troca tema e
-   * esquema, instala o Marketplace e lista extensões e apps.
+   * "Spotify → Spicetify" tool. The backend calls the official CLI; this
+   * screen shows the state (CLI, Spotify, applied or not), switches theme and
+   * scheme, installs the Marketplace and lists extensions and apps.
    */
   import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
@@ -216,7 +216,7 @@
     </div>
   </section>
 
-  <!-- Aparência -->
+  <!-- Appearance -->
   <section>
     <span class="group-label">{$t("tools.spicetify.appearance")}</span>
     <div class="group">
@@ -286,7 +286,7 @@
     </div>
   </section>
 
-  <!-- Extensões e apps -->
+  <!-- Extensions and apps -->
   <section>
     <span class="group-label">{$t("tools.spicetify.addons")}</span>
     <div class="group">
@@ -326,7 +326,7 @@
     </div>
   </section>
 
-  <!-- Avançado -->
+  <!-- Advanced -->
   <section>
     <span class="group-label">{$t("tools.spicetify.advanced")}</span>
     <div class="group">

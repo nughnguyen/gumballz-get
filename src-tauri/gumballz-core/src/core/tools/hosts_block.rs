@@ -1,15 +1,15 @@
-//! Bloqueio de anúncio e telemetria pelo arquivo `hosts` do sistema.
+//! Blocking ads and telemetry via the system `hosts` file.
 //!
-//! Sem servidor, sem driver, sem proxy: o sistema já resolve nome pelo
-//! `hosts` antes de perguntar ao DNS, então apontar um domínio para
-//! `0.0.0.0` mata a conexão na origem.
+//! No server, no driver, no proxy: the system already resolves names via
+//! `hosts` before asking DNS, so pointing a domain at
+//! `0.0.0.0` kills the connection at the source.
 //!
-//! A regra dura deste módulo é **nunca tocar em nada fora do bloco**. Tudo
-//! que o GumballZ Get escreve vive entre dois marcadores; o texto antes e depois
-//! deles é preservado byte a byte. Escrever no `hosts` exige admin/root: se
-//! não der, o módulo não tenta escalar privilégio — ele grava a versão
-//! pronta num arquivo de teste e devolve o comando exato para o usuário
-//! rodar.
+//! This module's hard rule is to **never touch anything outside the block**. Everything
+//! GumballZ Get writes lives between two markers; the text before and after
+//! them is preserved byte for byte. Writing to `hosts` needs admin/root: if
+//! that fails, the module does not try to escalate privileges — it writes the
+//! ready version to a test file and returns the exact command for the user
+//! to run.
 
 use std::path::{Path, PathBuf};
 
@@ -21,8 +21,8 @@ pub const END: &str = "# <<< GumballZ Get block list <<<";
 
 const ID: &str = "sys-hosts";
 
-/// Telemetria da Microsoft: lista curta e conservadora (só o que é
-/// diagnóstico/anúncio, nada de Update, Store ou ativação).
+/// Microsoft telemetry: short, conservative list (only what is
+/// diagnostics/ads, nothing about Update, Store or activation).
 pub const MICROSOFT_TELEMETRY: &[&str] = &[
     "vortex.data.microsoft.com",
     "vortex-win.data.microsoft.com",
@@ -48,7 +48,7 @@ pub const MICROSOFT_TELEMETRY: &[&str] = &[
     "scorecardresearch.com",
 ];
 
-/// Fontes conhecidas. `None` de URL = lista embutida, não baixa nada.
+/// Known sources. `None` URL = built-in list, downloads nothing.
 pub fn source_url(id: &str) -> Option<&'static str> {
     match id {
         "stevenblack" => Some("https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"),
@@ -61,7 +61,7 @@ pub fn known_sources() -> Vec<&'static str> {
     vec!["stevenblack", "adaway", "microsoft"]
 }
 
-// ── Caminho do arquivo ──
+// ── File path ──
 
 pub fn default_hosts_path() -> PathBuf {
     if cfg!(windows) {
@@ -83,32 +83,32 @@ fn resolve_path(path: &Option<String>) -> PathBuf {
     }
 }
 
-/// Testa permissão de escrita abrindo o arquivo em modo escrita **sem**
-/// truncar. Não muda nada e é a única checagem que vale nos três sistemas.
+/// Tests write permission by opening the file in write mode **without**
+/// truncating. It changes nothing and is the only check that holds on all three systems.
 pub fn is_writable(path: &Path) -> bool {
     std::fs::OpenOptions::new().write(true).open(path).is_ok()
 }
 
-/// Comando pronto para o usuário aplicar por fora, quando falta permissão.
+/// Ready command for the user to apply externally, when permission is missing.
 pub fn permission_hint(staging: &Path, target: &Path) -> String {
     if cfg!(windows) {
         format!(
-            "Abra o GumballZ Get como administrador, ou rode num Prompt elevado: copy /Y \"{}\" \"{}\"",
+            "Open GumballZ Get as administrator, or run in an elevated Prompt: copy /Y \"{}\" \"{}\"",
             staging.display(),
             target.display()
         )
     } else {
         format!(
-            "Falta permissão de root. Rode: sudo cp '{}' '{}'",
+            "Missing root permission. Run: sudo cp '{}' '{}'",
             staging.display(),
             target.display()
         )
     }
 }
 
-// ── Parse e normalização ──
+// ── Parse and normalization ──
 
-/// Domínios que nunca podem entrar no bloco: quebrariam a própria máquina.
+/// Domains that can never enter the block: they would break the machine itself.
 fn is_reserved(domain: &str) -> bool {
     matches!(
         domain,
@@ -137,7 +137,7 @@ fn looks_like_ip(token: &str) -> bool {
                 .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit())))
 }
 
-/// Deixa o domínio na forma canônica ou devolve `None` se não for domínio.
+/// Leaves the domain in canonical form or returns `None` if it is not a domain.
 pub fn normalize_domain(raw: &str) -> Option<String> {
     let d = raw.trim().trim_end_matches('.').to_ascii_lowercase();
     if d.len() < 4 || d.len() > 253 || !d.contains('.') {
@@ -161,8 +161,8 @@ pub fn normalize_domain(raw: &str) -> Option<String> {
     Some(d)
 }
 
-/// Lê uma lista nos dois formatos que circulam por aí: `0.0.0.0 dominio`
-/// (formato hosts) e só o domínio por linha. Comentário com `#` cai fora.
+/// Reads a list in the two formats going around: `0.0.0.0 domain`
+/// (hosts format) and just the domain per line. A `#` comment drops out.
 pub fn parse_list(text: &str) -> Vec<String> {
     let mut out = Vec::new();
     for line in text.lines() {
@@ -185,7 +185,7 @@ pub fn parse_list(text: &str) -> Vec<String> {
     out
 }
 
-/// `true` quando o domínio está na whitelist, direto ou como subdomínio.
+/// `true` when the domain is in the whitelist, directly or as a subdomain.
 pub fn whitelisted(domain: &str, whitelist: &[String]) -> bool {
     whitelist.iter().any(|w| {
         let w = w.trim().trim_end_matches('.').to_ascii_lowercase();
@@ -193,8 +193,8 @@ pub fn whitelisted(domain: &str, whitelist: &[String]) -> bool {
     })
 }
 
-/// Junta tudo, tira repetido, tira whitelist e ordena. Devolve
-/// `(domínios, quantos a whitelist barrou)`.
+/// Joins everything, drops duplicates, drops the whitelist and sorts. Returns
+/// `(domains, how many the whitelist barred)`.
 pub fn merge(lists: &[Vec<String>], whitelist: &[String]) -> (Vec<String>, usize) {
     let mut set = std::collections::BTreeSet::new();
     let mut skipped = 0usize;
@@ -210,7 +210,7 @@ pub fn merge(lists: &[Vec<String>], whitelist: &[String]) -> (Vec<String>, usize
     (set.into_iter().collect(), skipped)
 }
 
-// ── O bloco ──
+// ── The block ──
 
 fn newline_of(text: &str) -> &'static str {
     if text.contains("\r\n") {
@@ -220,11 +220,11 @@ fn newline_of(text: &str) -> &'static str {
     }
 }
 
-/// Faixa de bytes ocupada pelo bloco, incluindo as duas linhas de marcador.
+/// Byte range occupied by the block, including the two marker lines.
 ///
-/// Se o `BEGIN` existe e o `END` não, o bloco vai até o fim do arquivo: é
-/// resto de escrita interrompida, e tudo depois do marcador foi escrito por
-/// nós. Assim uma reaplicação conserta o arquivo em vez de duplicar o bloco.
+/// If `BEGIN` exists and `END` does not, the block runs to the end of the file: it is
+/// leftover from an interrupted write, and everything after the marker was written by
+/// us. So re-applying fixes the file instead of duplicating the block.
 fn block_span(text: &str) -> Option<(usize, usize)> {
     let mut begin: Option<usize> = None;
     let mut idx = 0usize;
@@ -246,7 +246,7 @@ pub fn has_block(text: &str) -> bool {
     block_span(text).is_some()
 }
 
-/// Só o miolo do bloco (sem os marcadores), se ele existir.
+/// Only the middle of the block (without the markers), if it exists.
 pub fn block_body(text: &str) -> Option<&str> {
     let (start, end) = block_span(text)?;
     let inner = &text[start..end];
@@ -259,12 +259,12 @@ pub fn block_body(text: &str) -> Option<&str> {
     Some(&body[..before_end])
 }
 
-/// Quantos domínios o bloco atual bloqueia.
+/// How many domains the current block blocks.
 pub fn count_blocked(text: &str) -> usize {
     block_body(text).map(|b| parse_list(b).len()).unwrap_or(0)
 }
 
-/// Data que o cabeçalho do bloco anuncia, se houver.
+/// Date the block header announces, if any.
 pub fn block_updated_at(text: &str) -> Option<String> {
     let body = block_body(text)?;
     body.lines().find_map(|l| {
@@ -274,7 +274,7 @@ pub fn block_updated_at(text: &str) -> Option<String> {
     })
 }
 
-/// Monta o bloco inteiro, marcadores incluídos, terminado em quebra de linha.
+/// Builds the whole block, markers included, ending in a line break.
 pub fn render_block(domains: &[String], ip: &str, updated_at: &str, nl: &str) -> String {
     let ip = if ip.trim().is_empty() {
         "0.0.0.0"
@@ -284,11 +284,11 @@ pub fn render_block(domains: &[String], ip: &str, updated_at: &str, nl: &str) ->
     let mut s = String::with_capacity(domains.len() * 32 + 256);
     s.push_str(BEGIN);
     s.push_str(nl);
-    s.push_str("# gerado pelo GumballZ Get — não edite aqui dentro");
+    s.push_str("# generated by GumballZ Get — do not edit inside here");
     s.push_str(nl);
     s.push_str(&format!("# atualizado em {}", updated_at));
     s.push_str(nl);
-    s.push_str(&format!("# {} domínios", domains.len()));
+    s.push_str(&format!("# {} domains", domains.len()));
     s.push_str(nl);
     for d in domains {
         s.push_str(&format!("{} {}", ip, d));
@@ -299,9 +299,9 @@ pub fn render_block(domains: &[String], ip: &str, updated_at: &str, nl: &str) ->
     s
 }
 
-/// Troca (ou acrescenta) o bloco. O texto do usuário sai intacto: a única
-/// coisa que pode mudar fora do bloco é ganhar a quebra de linha final que
-/// faltava, senão a última linha do usuário grudaria no marcador.
+/// Swaps (or appends) the block. The user's text comes out intact: the only
+/// thing that can change outside the block is gaining the missing final line break,
+/// otherwise the user's last line would stick to the marker.
 pub fn apply_to_text(current: &str, domains: &[String], ip: &str, updated_at: &str) -> String {
     let nl = newline_of(current);
     let block = render_block(domains, ip, updated_at, nl);
@@ -325,7 +325,7 @@ pub fn apply_to_text(current: &str, domains: &[String], ip: &str, updated_at: &s
     }
 }
 
-/// Tira o bloco e devolve o resto exatamente como estava.
+/// Removes the block and returns the rest exactly as it was.
 pub fn remove_from_text(current: &str) -> String {
     match block_span(current) {
         Some((start, end)) => {
@@ -338,11 +338,11 @@ pub fn remove_from_text(current: &str) -> String {
     }
 }
 
-// ── Estado ──
+// ── State ──
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct ReadOptions {
-    /// Vazio = o `hosts` do sistema.
+    /// Empty = the system `hosts`.
     #[serde(default)]
     pub path: Option<String>,
 }
@@ -360,13 +360,13 @@ pub struct HostsState {
     pub exists: bool,
     pub writable: bool,
     pub bytes: u64,
-    /// Linhas fora do bloco (o que é do usuário), incluindo comentário.
+    /// Lines outside the block (what belongs to the user), including comments.
     pub user_lines: usize,
-    /// Domínios dentro do bloco do GumballZ Get.
+    /// Domains inside the GumballZ Get block.
     pub blocked: usize,
     pub block_present: bool,
     pub updated_at: Option<String>,
-    /// Prévia do que é do usuário, para a UI mostrar sem abrir o arquivo.
+    /// Preview of what belongs to the user, for the UI to show without opening the file.
     pub user_preview: Vec<String>,
     pub backups: Vec<BackupInfo>,
     pub sources: Vec<String>,
@@ -392,7 +392,7 @@ fn list_backups() -> Vec<BackupInfo> {
             path: e.path().to_string_lossy().to_string(),
         })
         .collect();
-    // O nome carrega a data, então ordem alfabética invertida = mais novo antes.
+    // The name carries the date, so reversed alphabetical order = newest first.
     out.sort_by(|a, b| b.name.cmp(&a.name));
     out.truncate(30);
     out
@@ -429,7 +429,7 @@ pub fn read_state(opts: &ReadOptions) -> anyhow::Result<HostsState> {
     })
 }
 
-// ── Aplicar ──
+// ── Apply ──
 
 fn yes() -> bool {
     true
@@ -445,24 +445,24 @@ fn default_sources() -> Vec<String> {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ApplyOptions {
-    /// Vazio = o `hosts` do sistema.
+    /// Empty = the system `hosts`.
     #[serde(default)]
     pub path: Option<String>,
-    /// Ids de `known_sources()`; o resto é tratado como URL solta.
+    /// Ids from `known_sources()`; the rest is treated as a bare URL.
     #[serde(default = "default_sources")]
     pub sources: Vec<String>,
-    /// Domínios extras do usuário.
+    /// Extra domains from the user.
     #[serde(default)]
     pub extra: Vec<String>,
-    /// Domínios que nunca entram (o subdomínio também é poupado).
+    /// Domains that never enter (the subdomain is spared too).
     #[serde(default)]
     pub whitelist: Vec<String>,
     #[serde(default = "default_ip")]
     pub ip: String,
-    /// Padrão seguro: só mostra o que aconteceria.
+    /// Safe default: only shows what would happen.
     #[serde(default = "yes")]
     pub dry_run: bool,
-    /// Escrever aqui em vez do `hosts` (saída para quem não tem permissão).
+    /// Write here instead of `hosts` (output for those without permission).
     #[serde(default)]
     pub output_path: Option<String>,
 }
@@ -489,7 +489,7 @@ pub struct ApplyResult {
     pub updated_at: String,
     pub sources: Vec<SourceStat>,
     pub needs_admin: bool,
-    /// Cópia pronta do arquivo, quando faltou permissão.
+    /// Ready copy of the file, when permission was missing.
     pub staged: Option<String>,
     pub hint: Option<String>,
     pub error: Option<String>,
@@ -607,7 +607,7 @@ pub async fn apply(
         lists.push(extra);
     }
     if lists.iter().all(|l| l.is_empty()) {
-        return Err(anyhow!("nenhuma lista veio: nada a bloquear"));
+        return Err(anyhow!("no list came back: nothing to block"));
     }
 
     let (domains, skipped) = merge(&lists, &opts.whitelist);
@@ -634,7 +634,7 @@ pub async fn apply(
         error: None,
     };
 
-    // Saída alternativa: gerar o arquivo onde o usuário mandou, sem admin.
+    // Alternative output: generate the file where the user asked, without admin.
     if let Some(out) = opts.output_path.as_ref().filter(|s| !s.trim().is_empty()) {
         let out = PathBuf::from(out.trim());
         if !opts.dry_run {
@@ -660,9 +660,9 @@ pub async fn apply(
         result.hint = staged.as_ref().map(|s| permission_hint(s, &path));
         result.staged = staged.map(|s| s.to_string_lossy().to_string());
         result.error = Some(if cfg!(windows) {
-            "sem permissão para escrever no hosts: o GumballZ Get precisa estar aberto como administrador".into()
+            "no permission to write to hosts: GumballZ Get needs to be open as administrator".into()
         } else {
-            "sem permissão para escrever no hosts: precisa de root".into()
+            "no permission to write to hosts: root needed".into()
         });
         super::report(progress, ID, "done", total, Some(total), None);
         return Ok(result);
@@ -676,7 +676,7 @@ pub async fn apply(
         result.needs_admin = e.kind() == std::io::ErrorKind::PermissionDenied;
         result.hint = staged.as_ref().map(|s| permission_hint(s, &path));
         result.staged = staged.map(|s| s.to_string_lossy().to_string());
-        result.error = Some(format!("não consegui escrever: {}", e));
+        result.error = Some(format!("could not write: {}", e));
     } else {
         result.written = true;
     }
@@ -684,13 +684,13 @@ pub async fn apply(
     Ok(result)
 }
 
-// ── Desfazer ──
+// ── Undo ──
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct RestoreOptions {
     #[serde(default)]
     pub path: Option<String>,
-    /// Caminho de um backup; vazio = só remover o bloco.
+    /// Path of a backup; empty = just remove the block.
     #[serde(default)]
     pub backup: Option<String>,
     #[serde(default = "yes")]
@@ -721,7 +721,7 @@ pub fn restore(opts: &RestoreOptions) -> anyhow::Result<RestoreResult> {
     let (next, restored_from) = match opts.backup.as_ref().filter(|s| !s.trim().is_empty()) {
         Some(b) => {
             let text = std::fs::read_to_string(b.trim())
-                .map_err(|e| anyhow!("não li o backup {}: {}", b.trim(), e))?;
+                .map_err(|e| anyhow!("could not read the backup {}: {}", b.trim(), e))?;
             (text, Some(b.trim().to_string()))
         }
         None => (remove_from_text(&current), None),
@@ -749,7 +749,7 @@ pub fn restore(opts: &RestoreOptions) -> anyhow::Result<RestoreResult> {
         result.needs_admin = true;
         result.hint = staged.as_ref().map(|s| permission_hint(s, &path));
         result.staged = staged.map(|s| s.to_string_lossy().to_string());
-        result.error = Some("sem permissão para escrever no hosts".into());
+        result.error = Some("no permission to write to hosts".into());
         return Ok(result);
     }
     if !current.is_empty() {
@@ -762,7 +762,7 @@ pub fn restore(opts: &RestoreOptions) -> anyhow::Result<RestoreResult> {
             result.needs_admin = e.kind() == std::io::ErrorKind::PermissionDenied;
             result.hint = staged.as_ref().map(|s| permission_hint(s, &path));
             result.staged = staged.map(|s| s.to_string_lossy().to_string());
-            result.error = Some(format!("não consegui escrever: {}", e));
+            result.error = Some(format!("could not write: {}", e));
         }
     }
     Ok(result)
@@ -772,12 +772,12 @@ pub fn restore(opts: &RestoreOptions) -> anyhow::Result<RestoreResult> {
 mod tests {
     use super::*;
 
-    /// Nenhum teste aqui pode chegar perto do `hosts` de verdade: tudo roda
-    /// num arquivo temporário próprio.
+    /// No test here may go near the real `hosts`: everything runs in its
+    /// own temp file.
     fn tempdir(tag: &str) -> PathBuf {
         let d =
             std::env::temp_dir().join(format!("gumballz-get-hosts-{}-{}", tag, uuid::Uuid::new_v4()));
-        std::fs::create_dir_all(&d).expect("criar tempdir de teste");
+        std::fs::create_dir_all(&d).expect("create test tempdir");
         d
     }
 
@@ -797,7 +797,7 @@ mod tests {
         );
         assert!(
             out.starts_with(USER),
-            "o texto do usuário tem que abrir o arquivo intacto"
+            "the user's text must open the file intact"
         );
         assert!(out.contains(BEGIN) && out.contains(END));
         assert!(out.contains("0.0.0.0 ads.example.com"));
@@ -812,7 +812,7 @@ mod tests {
             "0.0.0.0",
             "2026-01-01 10:00",
         );
-        // O usuário mexe no arquivo depois, antes e depois do bloco.
+        // The user edits the file afterwards, before and after the block.
         let mexido = format!("# linha nova do usuário\n{}\n10.0.0.9 outro.casa\n", first);
         let antes = remove_from_text(&mexido);
 
@@ -826,14 +826,14 @@ mod tests {
         assert_eq!(
             antes.as_bytes(),
             depois.as_bytes(),
-            "o que está fora do bloco mudou"
+            "what is outside the block changed"
         );
         assert_eq!(count_blocked(&second), 2);
         assert!(
             !second.contains("a.example.com"),
-            "o bloco velho tinha que sumir"
+            "the old block had to disappear"
         );
-        // E não duplicou o bloco.
+        // And it did not duplicate the block.
         assert_eq!(second.matches(BEGIN).count(), 1);
         assert_eq!(second.matches(END).count(), 1);
     }
@@ -848,7 +848,7 @@ mod tests {
         );
         assert_eq!(remove_from_text(&out).as_bytes(), USER.as_bytes());
         assert!(!has_block(&remove_from_text(&out)));
-        // Remover de um arquivo sem bloco é no-op.
+        // Removing from a file without a block is a no-op.
         assert_eq!(remove_from_text(USER), USER);
     }
 
@@ -866,7 +866,7 @@ mod tests {
             "0.0.0.0",
             "2026-01-01 10:00",
         );
-        assert_eq!(one, two, "aplicar duas vezes tem que dar o mesmo arquivo");
+        assert_eq!(one, two, "applying twice must give the same file");
     }
 
     #[test]
@@ -895,9 +895,9 @@ mod tests {
             parse_list(plain_fmt),
             dominios(&["ads.example.com", "trk.example.net"])
         );
-        // Uma linha hosts com vários domínios conta todos.
+        // One hosts line with several domains counts them all.
         assert_eq!(parse_list("0.0.0.0 a.example.com b.example.com").len(), 2);
-        // Lixo não vira domínio.
+        // Junk does not become a domain.
         assert!(parse_list("nao-eh-dominio\n192.168.0.1\n::1 ip6-localhost\n").is_empty());
     }
 
@@ -911,7 +911,7 @@ mod tests {
             dominios(&["a.example.com", "b.example.com"]),
             "ordenado e sem repetido"
         );
-        assert_eq!(skipped, 2, "o domínio e o subdomínio dele saem");
+        assert_eq!(skipped, 2, "the domain and its subdomain go out");
         assert!(whitelisted(
             "cdn.ads.google.com",
             &dominios(&["ads.google.com"])
@@ -944,7 +944,7 @@ mod tests {
         for name in ["localhost", "broadcasthost", "ip6-allnodes", "0.0.0.0"] {
             assert!(
                 normalize_domain(name).is_none(),
-                "{} não podia passar",
+                "{} must not have passed",
                 name
             );
         }
@@ -956,9 +956,9 @@ mod tests {
 
     #[test]
     fn dry_run_is_the_default_and_writes_nothing() {
-        let opts: ApplyOptions = serde_json::from_str("{}").expect("options mínimas");
-        assert!(opts.dry_run, "dry_run tem que vir ligado por padrão");
-        let r: RestoreOptions = serde_json::from_str("{}").expect("options mínimas");
+        let opts: ApplyOptions = serde_json::from_str("{}").expect("minimal options");
+        assert!(opts.dry_run, "dry_run must come on by default");
+        let r: RestoreOptions = serde_json::from_str("{}").expect("minimal options");
         assert!(r.dry_run);
     }
 
@@ -972,7 +972,7 @@ mod tests {
             "0.0.0.0",
             "2026-01-01 10:00",
         );
-        std::fs::write(&file, &com_bloco).expect("escrever hosts de teste");
+        std::fs::write(&file, &com_bloco).expect("write test hosts");
 
         let seco = restore(&RestoreOptions {
             path: Some(file.to_string_lossy().to_string()),
@@ -985,7 +985,7 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(&file).expect("reler"),
             com_bloco,
-            "dry_run não podia escrever"
+            "dry_run must not have written"
         );
 
         let molhado = restore(&RestoreOptions {
@@ -1009,14 +1009,14 @@ mod tests {
             "0.0.0.0",
             "2026-03-03 09:09",
         );
-        std::fs::write(&file, &com_bloco).expect("escrever hosts de teste");
+        std::fs::write(&file, &com_bloco).expect("write test hosts");
         let st = read_state(&ReadOptions {
             path: Some(file.to_string_lossy().to_string()),
         })
-        .expect("ler estado");
+        .expect("read state");
         assert!(st.exists && st.block_present);
         assert_eq!(st.blocked, 2);
-        assert_eq!(st.user_lines, 5, "as cinco linhas do usuário, sem o bloco");
+        assert_eq!(st.user_lines, 5, "the user's five lines, without the block");
         assert_eq!(st.updated_at.as_deref(), Some("2026-03-03 09:09"));
         assert_eq!(st.bytes, com_bloco.len() as u64);
         let _ = std::fs::remove_dir_all(&dir);
@@ -1028,20 +1028,20 @@ mod tests {
         let st = read_state(&ReadOptions {
             path: Some(dir.join("nao-existe").to_string_lossy().to_string()),
         })
-        .expect("estado de arquivo ausente");
+        .expect("missing file state");
         assert!(!st.exists && !st.writable && !st.block_present);
         assert_eq!(st.blocked, 0);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// Baixa as listas de verdade e monta o bloco num arquivo temporário.
+    /// Downloads the real lists and builds the block in a temp file.
     /// `cargo test -p gumballz-core --lib -- --ignored live_hosts`
     #[tokio::test]
     #[ignore]
     async fn live_hosts_sources_download_and_merge() {
         let dir = tempdir("live");
         let file = dir.join("hosts");
-        std::fs::write(&file, USER).expect("escrever hosts de teste");
+        std::fs::write(&file, USER).expect("write test hosts");
         let res = apply(
             &ApplyOptions {
                 path: Some(file.to_string_lossy().to_string()),
@@ -1057,11 +1057,11 @@ mod tests {
         .await
         .expect("apply");
         assert!(res.written, "{:?}", res.error);
-        assert!(res.blocked > 50_000, "veio pouca coisa: {}", res.blocked);
-        let text = std::fs::read_to_string(&file).expect("reler");
+        assert!(res.blocked > 50_000, "too little came back: {}", res.blocked);
+        let text = std::fs::read_to_string(&file).expect("re-read");
         assert_eq!(remove_from_text(&text).as_bytes(), USER.as_bytes());
         assert!(!text.contains(" googleadservices.com"));
-        eprintln!("bloqueados: {} · {} bytes", res.blocked, res.bytes);
+        eprintln!("blocked: {} · {} bytes", res.blocked, res.bytes);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

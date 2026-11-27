@@ -1,9 +1,9 @@
-//! Comprimir imagem até caber num tamanho, sem chutar qualidade.
+//! Compress an image until it fits a size, without guessing quality.
 //!
-//! O `img-resize` muda dimensão e aceita uma qualidade fixa; aqui o alvo é o
-//! **tamanho do arquivo** — "essa foto tem que caber em 500 KB". A qualidade
-//! sai de uma busca binária em memória, e se nem no mínimo couber, a imagem
-//! encolhe um pouco e a busca recomeça. Nenhum processo externo.
+//! `img-resize` changes dimensions and takes a fixed quality; here the target is the
+//! **file size** — "this photo has to fit in 500 KB". The quality comes from
+//! an in-memory binary search, and if it does not fit even at the minimum, the image
+//! shrinks a little and the search restarts. No external process.
 
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
@@ -15,19 +15,19 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Deserialize)]
 pub struct CompressOptions {
     pub inputs: Vec<String>,
-    /// Alvo em KB por arquivo; 0 = usar a qualidade fixa.
+    /// Target in KB per file; 0 = use the fixed quality.
     #[serde(default)]
     pub target_kb: u64,
-    /// Qualidade fixa (1-100), usada quando não há alvo de tamanho.
+    /// Fixed quality (1-100), used when there is no size target.
     #[serde(default = "default_quality")]
     pub quality: u8,
-    /// Maior lado permitido; 0 = manter as dimensões.
+    /// Longest side allowed; 0 = keep the dimensions.
     #[serde(default)]
     pub max_side: u32,
-    /// Achata transparência nesta cor ao virar JPEG.
+    /// Flattens transparency onto this colour when turning JPEG.
     #[serde(default = "default_bg")]
     pub background: String,
-    /// Só relata o que aconteceria.
+    /// Only reports what would happen.
     #[serde(default)]
     pub dry_run: bool,
     #[serde(default)]
@@ -69,13 +69,13 @@ pub fn encode_jpeg(img: &DynamicImage, quality: u8) -> anyhow::Result<Vec<u8>> {
     let mut buf = Cursor::new(Vec::new());
     let mut enc = JpegEncoder::new_with_quality(&mut buf, quality.clamp(1, 100));
     enc.encode_image(&img.to_rgb8())
-        .map_err(|e| anyhow!("não codifiquei o JPEG: {}", e))?;
+        .map_err(|e| anyhow!("could not encode the JPEG: {}", e))?;
     Ok(buf.into_inner())
 }
 
-/// Busca binária da qualidade que cabe no alvo. Devolve `(bytes, qualidade)`
-/// com a **maior** qualidade que ainda cabe; se nem no mínimo couber, devolve
-/// a do mínimo para quem chamou decidir se encolhe a imagem.
+/// Binary search for the quality that fits the target. Returns `(bytes, quality)`
+/// with the **highest** quality that still fits; if not even the minimum fits, returns
+/// the minimum's so the caller can decide whether to shrink the image.
 pub fn fit_quality(
     img: &DynamicImage,
     target_bytes: u64,
@@ -84,7 +84,7 @@ pub fn fit_quality(
 ) -> anyhow::Result<(Vec<u8>, u8, bool)> {
     let (mut lo, mut hi) = (min_quality.max(1), max_quality.min(100));
     let mut best: Option<(Vec<u8>, u8)> = None;
-    // 7 passos cobrem a faixa 1-100 com folga.
+    // 7 steps cover the 1-100 range with room to spare.
     for _ in 0..7 {
         if lo > hi {
             break;
@@ -133,7 +133,7 @@ fn flatten(img: &DynamicImage, hex: &str) -> DynamicImage {
 fn compress_one(opts: &CompressOptions, input: &str) -> anyhow::Result<CompressItem> {
     let inp = Path::new(input);
     let bytes_before = std::fs::metadata(inp).map(|m| m.len()).unwrap_or(0);
-    let mut img = image::open(inp).map_err(|e| anyhow!("não abri a imagem: {}", e))?;
+    let mut img = image::open(inp).map_err(|e| anyhow!("could not open the image: {}", e))?;
     if img.color().has_alpha() {
         img = flatten(&img, &opts.background);
     }
@@ -143,9 +143,9 @@ fn compress_one(opts: &CompressOptions, input: &str) -> anyhow::Result<CompressI
     let (data, quality, hit) = if opts.target_kb > 0 {
         let target = opts.target_kb * 1024;
         let (mut data, mut quality, mut fits) = fit_quality(&img, target, 40, 95)?;
-        // Nem no melhor caso coube: cede qualidade e depois vai encolhendo.
-        // Foto ruidosa precisa de muitas rodadas; parar em três deixava o
-        // usuário com um arquivo acima do alvo e nenhuma explicação.
+        // It did not fit even in the best case: give up quality, then shrink.
+        // A noisy photo needs many rounds; stopping at three left the
+        // user with a file above the target and no explanation.
         let mut tries = 0;
         while !fits && tries < 8 {
             let floor = if tries < 2 { 30 } else { 20 };
@@ -175,9 +175,9 @@ fn compress_one(opts: &CompressOptions, input: &str) -> anyhow::Result<CompressI
     let stem = inp
         .file_stem()
         .map(|s| s.to_string_lossy().to_string())
-        .unwrap_or_else(|| "imagem".into());
+        .unwrap_or_else(|| "image".into());
     let suffix = if opts.suffix.is_empty() {
-        "-comprimida"
+        "-compressed"
     } else {
         opts.suffix.as_str()
     };
@@ -243,8 +243,8 @@ pub fn run(opts: &CompressOptions, progress: &super::ProgressFn) -> CompressResu
 mod tests {
     use super::*;
 
-    /// Imagem parecida com foto: degradê com algumas formas. Ruído puro é o
-    /// pior caso do JPEG e não representa o que o usuário comprime.
+    /// Photo-like image: gradient with a few shapes. Pure noise is the
+    /// worst case for JPEG and does not represent what the user compresses.
     fn photo(w: u32, h: u32) -> DynamicImage {
         let mut img = image::RgbImage::new(w, h);
         for (x, y, p) in img.enumerate_pixels_mut() {
@@ -264,7 +264,7 @@ mod tests {
         DynamicImage::ImageRgb8(img)
     }
 
-    /// Ruído colorido: comprime mal de propósito, então o alvo aperta de verdade.
+    /// Colour noise: compresses badly on purpose, so the target really bites.
     fn noisy(w: u32, h: u32) -> DynamicImage {
         let mut img = image::RgbImage::new(w, h);
         for (x, y, p) in img.enumerate_pixels_mut() {
@@ -281,7 +281,7 @@ mod tests {
         let high = encode_jpeg(&img, 95).unwrap().len();
         assert!(
             high > low,
-            "qualidade maior tem que pesar mais: {} vs {}",
+            "higher quality must weigh more: {} vs {}",
             high,
             low
         );
@@ -292,7 +292,7 @@ mod tests {
         let img = photo(600, 400);
         let target = 40 * 1024;
         let (bytes, q, fits) = fit_quality(&img, target, 30, 95).unwrap();
-        assert!(fits, "não coube no alvo");
+        assert!(fits, "did not fit the target");
         assert!(
             bytes.len() as u64 <= target,
             "{} bytes > {}",
@@ -301,12 +301,12 @@ mod tests {
         );
         assert!((30..=95).contains(&q));
         let _ = &bytes;
-        // E é a melhor qualidade possível: um passo acima já estoura.
+        // And it is the best quality possible: one step up already overflows.
         if q < 95 {
             let bigger = encode_jpeg(&img, q + 4).unwrap();
             assert!(
                 bigger.len() as u64 > target,
-                "dava para usar qualidade maior ({} ainda cabia)",
+                "a higher quality could have been used ({} still fit)",
                 q + 4
             );
         }
@@ -316,8 +316,8 @@ mod tests {
     fn an_impossible_target_is_reported_not_faked() {
         let img = noisy(1200, 900);
         let (bytes, q, fits) = fit_quality(&img, 1024, 30, 95).unwrap();
-        assert!(!fits, "1 KB não cabe, tinha que avisar");
-        assert_eq!(q, 30, "devolve o mínimo para quem chamou encolher");
+        assert!(!fits, "1 KB does not fit, it had to warn");
+        assert_eq!(q, 30, "returns the minimum so the caller can shrink");
         assert!(!bytes.is_empty());
     }
 
@@ -329,7 +329,7 @@ mod tests {
         assert_eq!(
             resize_to_side(&img, 500).dimensions(),
             (100, 50),
-            "não amplia"
+            "does not upscale"
         );
         assert_eq!(resize_to_side(&img, 50).dimensions(), (50, 25));
     }
@@ -350,8 +350,8 @@ mod tests {
         let src = dir.join("grande.png");
         photo(1400, 1000).save(&src).unwrap();
         let before = std::fs::metadata(&src).unwrap().len();
-        // Alvo relativo ao arquivo de origem: um PNG de degradê já é pequeno,
-        // e um alvo fixo poderia ser maior que ele.
+        // Target relative to the source file: a gradient PNG is already small,
+        // and a fixed target could be larger than it.
         let target_kb = (before / 1024 / 2).max(8);
 
         let opts = CompressOptions {
@@ -367,20 +367,20 @@ mod tests {
         let res = run(&opts, &crate::core::tools::noop_progress());
         let item = &res.items[0];
         assert!(item.ok, "{:?}", item.error);
-        assert!(item.hit_target, "não chegou no alvo");
+        assert!(item.hit_target, "did not reach the target");
         assert!(
             item.bytes_after <= target_kb * 1024,
-            "{} bytes acima do alvo de {} KB",
+            "{} bytes above the target of {} KB",
             item.bytes_after,
             target_kb
         );
-        assert!(item.bytes_after < before, "não ficou menor que o original");
+        assert!(item.bytes_after < before, "did not end up smaller than the original");
         let on_disk = std::fs::metadata(item.output.as_ref().unwrap())
             .unwrap()
             .len();
         assert_eq!(
             on_disk, item.bytes_after,
-            "o relatado tem que ser o gravado"
+            "the reported size must be the written size"
         );
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -405,9 +405,9 @@ mod tests {
             &crate::core::tools::noop_progress(),
         );
         let item = &res.items[0];
-        assert!(item.ok, "tem que entregar o melhor esforço, não falhar");
-        assert!(!item.hit_target, "2 KB é impossível e a UI precisa saber");
-        assert!(item.scaled, "tinha que ter encolhido tentando");
+        assert!(item.ok, "must deliver best effort, not fail");
+        assert!(!item.hit_target, "2 KB is impossible and the UI needs to know");
+        assert!(item.scaled, "it should have shrunk while trying");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

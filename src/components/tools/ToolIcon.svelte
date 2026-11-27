@@ -18,10 +18,10 @@
 
 <script lang="ts">
   /**
-   * Tile de ícone da seção Tools: quadrado arredondado com gradiente e um
-   * glifo branco em máscara. Aceita `brand:<nome>` (static/brands, Simple
-   * Icons) ou `glyph:<nome>` (static/icons, Phosphor Fill), o mesmo esquema
-   * do NavIcon da sidebar, só que em tamanho de Launchpad.
+   * Icon tile for the Tools section: rounded square with a gradient and a
+   * white glyph as a mask. Accepts `brand:<name>` (static/brands, Simple
+   * Icons) or `glyph:<name>` (static/icons, Phosphor Fill), the same scheme
+   * as the sidebar's NavIcon, only at Launchpad size.
    */
   let {
     icon,
@@ -80,7 +80,7 @@
     transition: transform var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
   }
 
-  /* brilho de topo, como os ícones de app do macOS */
+  /* top highlight, like macOS app icons */
   .tool-icon::before {
     content: "";
     position: absolute;

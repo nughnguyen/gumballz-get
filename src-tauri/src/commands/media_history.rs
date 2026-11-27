@@ -1,12 +1,13 @@
-//! Guarda o que cada URL era da ultima vez, para saber quando ela mudou.
+//! Keeps what each URL was last time, so we know when it changed.
 //!
-//! B39. O `core::media_diff` compara dois retratos e diz o que mudou; o que
-//! faltava era alguem guardar o retrato anterior. Sem isso, re-baixar um video
-//! reeditado sobrescreve em silencio e o usuario descobre assistindo.
+//! B39. `core::media_diff` compares two snapshots and says what changed; what
+//! was missing was someone keeping the previous snapshot. Without that,
+//! re-downloading a re-edited video overwrites silently and the user finds out
+//! while watching.
 //!
-//! Um arquivo proprio, chaveado por URL. Nao entra no historico de downloads
-//! porque a pergunta e outra: o historico diz o que voce baixou, isto diz o que
-//! a fonte era naquele momento.
+//! A file of its own, keyed by URL. It does not go in the download history
+//! because the question is a different one: the history says what you
+//! downloaded, this says what the source was at that moment.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -15,8 +16,8 @@ use crate::core::media_diff::{diff, summarize, MediaSnapshot};
 
 const SNAPSHOTS_FILE: &str = "media-snapshots.json";
 
-/// Quantos retratos guardar. Um por URL ja baixada acumula sem limite num
-/// usuario de anos; este teto corta os mais antigos por ordem de insercao.
+/// How many snapshots to keep. One per already-downloaded URL piles up without
+/// limit for a user of years; this ceiling cuts the oldest ones in insertion order.
 const MAX_SNAPSHOTS: usize = 2000;
 
 fn file_path() -> Option<PathBuf> {
@@ -52,10 +53,10 @@ fn save(map: &BTreeMap<String, MediaSnapshot>) {
     }
 }
 
-/// Corta os retratos mais antigos quando passa do teto.
+/// Cuts the oldest snapshots when it passes the ceiling.
 ///
-/// Separado para poder ser testado: um teto que nunca e exercitado e um vazamento
-/// de disco esperando a hora.
+/// Split out so it can be tested: a ceiling that is never exercised is a disk
+/// leak waiting for its moment.
 pub fn podar(
     mut map: BTreeMap<String, MediaSnapshot>,
     teto: usize,
@@ -69,10 +70,11 @@ pub fn podar(
     map
 }
 
-/// Compara o retrato novo com o guardado e devolve o resumo, se algo mudou.
+/// Compares the new snapshot with the saved one and returns the summary, if
+/// something changed.
 ///
-/// Chamada **antes** de baixar: e o unico momento em que dizer "isto nao e mais
-/// o mesmo video" ainda serve para alguma coisa.
+/// Called **before** downloading: the only moment when saying "this is not the
+/// same video anymore" is still good for something.
 #[tauri::command]
 pub fn check_media_changed(url: String, current: MediaSnapshot) -> Option<String> {
     let mapa = load();
@@ -81,7 +83,7 @@ pub fn check_media_changed(url: String, current: MediaSnapshot) -> Option<String
     summarize(&mudancas)
 }
 
-/// Guarda o retrato atual desta URL.
+/// Saves the current snapshot of this URL.
 #[tauri::command]
 pub fn record_media_snapshot(url: String, snapshot: MediaSnapshot) {
     let mut mapa = load();
@@ -105,8 +107,8 @@ mod tests {
 
     #[test]
     fn video_igual_nao_gera_ruido() {
-        // O caso comum: re-baixar o mesmo video. Avisar aqui seria alarme falso,
-        // e alarme falso treina o usuario a ignorar o aviso de verdade.
+        // The common case: re-downloading the same video. Warning here would be a
+        // false alarm, and a false alarm trains the user to ignore the real warning.
         let a = retrato(120.0, "abc", "Aula 1");
         let mudancas = diff(&a, &a);
         assert!(summarize(&mudancas).is_none());
@@ -127,12 +129,12 @@ mod tests {
             mapa.insert(format!("url-{i:02}"), retrato(1.0, "h", "x"));
         }
         let podado = podar(mapa, 4);
-        assert_eq!(podado.len(), 4, "o teto tem que valer");
+        assert_eq!(podado.len(), 4, "the ceiling has to hold");
         assert!(
             !podado.contains_key("url-00"),
-            "o mais antigo tem que sair primeiro"
+            "the oldest has to go first"
         );
-        assert!(podado.contains_key("url-09"), "o mais novo tem que ficar");
+        assert!(podado.contains_key("url-09"), "the newest has to stay");
     }
 
     #[test]

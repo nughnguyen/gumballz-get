@@ -82,7 +82,7 @@ fn register_one(app: &tauri::AppHandle, binding: &str, label: &str) {
 }
 
 pub fn on_hotkey_pressed(app: &tauri::AppHandle, shortcut: &Shortcut) {
-    // Atalhos das tools (autoclicker, ditado, replay) vêm antes dos do app.
+    // Tools shortcuts (autoclicker, dictation, replay) come before the app's.
     if let Some(action) = crate::commands::tools::desktop::action_for(shortcut) {
         crate::commands::tools::desktop::on_hotkey(app, &action);
         return;
@@ -115,12 +115,12 @@ fn matches_binding(pressed: &Shortcut, binding: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// Resultado de um acionamento do atalho global, sempre reportado à interface.
+/// Result of a global shortcut activation, always reported to the UI.
 ///
-/// Antes, cada caminho de falha fazia `return` mudo: quem apertava o atalho com
-/// o clipboard errado via o app não fazer absolutamente nada e concluía que o
-/// atalho estava quebrado (issue #198). O evento de sucesso existia mas ninguém
-/// escutava, então nem o caminho feliz dava sinal.
+/// Before, each failure path did a silent `return`: whoever pressed the shortcut
+/// with the wrong clipboard saw the app do absolutely nothing and concluded the
+/// shortcut was broken (issue #198). The success event existed but nobody
+/// listened, so not even the happy path gave a signal.
 fn emit_hotkey_result(app: &tauri::AppHandle, outcome: &str, url: Option<&str>) {
     let _ = app.emit(
         "hotkey-download-result",
@@ -132,7 +132,7 @@ fn handle_download_clipboard(app: &tauri::AppHandle) {
     let text = match app.clipboard().read_text() {
         Ok(t) => t,
         Err(e) => {
-            tracing::warn!("[hotkey] nao foi possivel ler o clipboard: {}", e);
+            tracing::warn!("[hotkey] could not read the clipboard: {}", e);
             emit_hotkey_result(app, "clipboard_error", None);
             return;
         }

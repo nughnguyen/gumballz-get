@@ -1,8 +1,8 @@
-//! Uma imagem → o pacote de ícones inteiro: `favicon.ico`, os PNG de web,
-//! `apple-touch-icon.png` e `icon.icns` do macOS.
+//! One image → the whole icon package: `favicon.ico`, the web PNGs,
+//! `apple-touch-icon.png` and macOS `icon.icns`.
 //!
-//! Tudo com o crate `image` já pago. O `.icns` é escrito à mão porque o
-//! formato é só um cabeçalho e uma lista de PNG — não vale uma dependência.
+//! All with the already-paid-for `image` crate. The `.icns` is written by hand because the
+//! format is just a header and a list of PNGs — not worth a dependency.
 
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
@@ -19,22 +19,22 @@ pub struct IconOptions {
     /// favicon.ico + favicon-16/32.png
     #[serde(default = "yes")]
     pub favicon: bool,
-    /// apple-touch-icon.png (180px, sem transparência, como a Apple pede)
+    /// apple-touch-icon.png (180px, no transparency, as Apple requires)
     #[serde(default = "yes")]
     pub apple: bool,
-    /// icon-192.png e icon-512.png (PWA/Android)
+    /// icon-192.png and icon-512.png (PWA/Android)
     #[serde(default = "yes")]
     pub android: bool,
-    /// icon.icns (app do macOS)
+    /// icon.icns (macOS app)
     #[serde(default)]
     pub icns: bool,
-    /// app.ico multi-resolução (atalho/executável do Windows)
+    /// app.ico multi-resolution (Windows shortcut/executable)
     #[serde(default)]
     pub win_ico: bool,
-    /// Cor de fundo para achatar a transparência do apple-touch: "#RRGGBB".
+    /// Background colour for flattening apple-touch transparency: "#RRGGBB".
     #[serde(default = "white")]
     pub background: String,
-    /// Margem em volta do desenho, em % do lado (0-40).
+    /// Margin around the artwork, in % of the side (0-40).
     #[serde(default)]
     pub padding_pct: u32,
 }
@@ -59,7 +59,7 @@ pub struct IconResult {
     pub folder: String,
     pub outputs: Vec<IconOut>,
     pub source_size: (u32, u32),
-    /// Avisa quando a origem é menor que o maior ícone pedido.
+    /// Warns when the source is smaller than the largest icon requested.
     pub upscaled_from: Option<u32>,
 }
 
@@ -82,7 +82,7 @@ pub fn parse_hex(color: &str) -> Rgba<u8> {
     }
 }
 
-/// Deixa a arte quadrada (centralizada, sobra transparente) e aplica a margem.
+/// Makes the art square (centered, transparent leftover) and applies the margin.
 pub fn squarify(src: &RgbaImage, padding_pct: u32) -> RgbaImage {
     let pad = padding_pct.min(40) as f32 / 100.0;
     let side = src.width().max(src.height()).max(1);
@@ -134,8 +134,8 @@ fn ico_bytes(base: &RgbaImage, sizes: &[u32]) -> anyhow::Result<Vec<u8>> {
     Ok(out.into_inner())
 }
 
-/// Tipos do `.icns` que carregam PNG direto. `ic11`..`ic14` são as variantes
-/// @2x que o Finder usa em tela Retina.
+/// `.icns` types that carry PNG directly. `ic11`..`ic14` are the @2x variants
+/// the Finder uses on Retina screens.
 const ICNS_TYPES: &[(&[u8; 4], u32)] = &[
     (b"ic11", 32),
     (b"ic12", 64),
@@ -162,13 +162,13 @@ pub fn icns_bytes(base: &RgbaImage) -> anyhow::Result<Vec<u8>> {
     Ok(out)
 }
 
-/// Um arquivo a gerar: o nome final e como produzir os bytes dele.
+/// A file to generate: the final name and how to produce its bytes.
 type IconJob<'a> = (String, Box<dyn Fn() -> anyhow::Result<Vec<u8>> + 'a>);
 
 pub fn run(opts: &IconOptions, progress: &super::ProgressFn) -> anyhow::Result<IconResult> {
     let inp = Path::new(&opts.input);
     let src = image::open(inp)
-        .map_err(|e| anyhow!("não consegui abrir a imagem: {}", e))?
+        .map_err(|e| anyhow!("could not open the image: {}", e))?
         .to_rgba8();
     let source_size = (src.width(), src.height());
     let base = squarify(&src, opts.padding_pct);
@@ -227,7 +227,7 @@ pub fn run(opts: &IconOptions, progress: &super::ProgressFn) -> anyhow::Result<I
         jobs.push(("icon.icns".into(), Box::new(|| icns_bytes(&base))));
     }
     if jobs.is_empty() {
-        return Err(anyhow!("nenhum formato selecionado"));
+        return Err(anyhow!("no format selected"));
     }
 
     let total = jobs.len() as u64;
@@ -277,9 +277,9 @@ mod tests {
         RgbaImage::from_pixel(w, h, Rgba([200, 30, 60, 255]))
     }
 
-    /// Gera o pacote inteiro de uma imagem de verdade, para conferir os
-    /// arquivos com as ferramentas do sistema (`iconutil`, `sips`).
-    /// `GUMBALLZ_IMG=/caminho/arte.png cargo test -p gumballz-core --lib -- --ignored live_icon`
+    /// Generates the whole package from a real image, to check the
+    /// files with the system tools (`iconutil`, `sips`).
+    /// `GUMBALLZ_IMG=/path/art.png cargo test -p gumballz-core --lib -- --ignored live_icon`
     #[test]
     #[ignore]
     fn live_icon_pack_from_a_real_image() {
@@ -302,9 +302,9 @@ mod tests {
         assert_eq!(res.outputs.len(), 8);
         for o in &res.outputs {
             let meta = std::fs::metadata(&o.path).unwrap();
-            assert!(meta.len() > 100, "{} saiu vazio", o.label);
+            assert!(meta.len() > 100, "{} came out empty", o.label);
         }
-        // O apple-touch não pode ter transparência (regra da Apple).
+        // The apple-touch icon cannot have transparency (Apple rule).
         let apple = res
             .outputs
             .iter()
@@ -329,7 +329,7 @@ mod tests {
     fn squarify_pads_the_short_side() {
         let sq = squarify(&art(200, 100), 0);
         assert_eq!(sq.dimensions(), (200, 200));
-        // Faixa de cima transparente, meio pintado.
+        // Transparent strip on top, painted middle.
         assert_eq!(sq.get_pixel(5, 5)[3], 0);
         assert_eq!(sq.get_pixel(100, 100)[3], 255);
     }
@@ -338,7 +338,7 @@ mod tests {
     fn padding_shrinks_the_art() {
         let sq = squarify(&art(100, 100), 20);
         assert_eq!(sq.dimensions(), (100, 100));
-        assert_eq!(sq.get_pixel(2, 50)[3], 0, "a margem tem que ficar vazia");
+        assert_eq!(sq.get_pixel(2, 50)[3], 0, "the margin must stay empty");
         assert_eq!(sq.get_pixel(50, 50)[3], 255);
     }
 
@@ -354,10 +354,10 @@ mod tests {
     #[test]
     fn ico_is_readable_back() {
         let bytes = ico_bytes(&art(64, 64), &[16, 32]).unwrap();
-        assert_eq!(&bytes[0..4], &[0, 0, 1, 0], "cabeçalho ICONDIR");
-        assert_eq!(bytes[4], 2, "duas entradas");
+        assert_eq!(&bytes[0..4], &[0, 0, 1, 0], "ICONDIR header");
+        assert_eq!(bytes[4], 2, "two entries");
         let decoded = image::load_from_memory_with_format(&bytes, ImageFormat::Ico).unwrap();
-        assert_eq!(decoded.width(), 32, "o ICO abre na maior entrada");
+        assert_eq!(decoded.width(), 32, "the ICO opens at the largest entry");
     }
 
     #[test]
@@ -365,15 +365,15 @@ mod tests {
         let bytes = icns_bytes(&art(64, 64)).unwrap();
         assert_eq!(&bytes[0..4], b"icns");
         let declared = u32::from_be_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]) as usize;
-        assert_eq!(declared, bytes.len(), "o tamanho declarado tem que bater");
-        // Percorre as entradas: soma dos tamanhos == corpo.
+        assert_eq!(declared, bytes.len(), "the declared size must match");
+        // Walk the entries: sum of sizes == body.
         let mut i = 8usize;
         let mut seen = 0;
         while i + 8 <= bytes.len() {
             let len = u32::from_be_bytes([bytes[i + 4], bytes[i + 5], bytes[i + 6], bytes[i + 7]])
                 as usize;
-            assert!(len >= 8 && i + len <= bytes.len(), "entrada estourou");
-            assert_eq!(&bytes[i + 8..i + 12], b"\x89PNG", "entrada tem que ser PNG");
+            assert!(len >= 8 && i + len <= bytes.len(), "entry overflowed");
+            assert_eq!(&bytes[i + 8..i + 12], b"\x89PNG", "entry must be PNG");
             i += len;
             seen += 1;
         }

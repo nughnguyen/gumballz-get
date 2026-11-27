@@ -86,7 +86,7 @@ impl PlatformDownloader for GdocsDownloader {
 
     async fn get_media_info(&self, url: &str) -> anyhow::Result<MediaInfo> {
         let parsed =
-            gdocs::parse(url).ok_or_else(|| anyhow!("Enlace de Google Docs/Slides no válido"))?;
+            gdocs::parse(url).ok_or_else(|| anyhow!("Invalid Google Docs/Slides link"))?;
 
         let title = if parsed.kind == "presentation" {
             fetch_presentation_title(url).await.unwrap_or_else(|| {
@@ -145,10 +145,10 @@ impl PlatformDownloader for GdocsDownloader {
             .page_url
             .as_deref()
             .or_else(|| info.available_qualities.first().map(|q| q.url.as_str()))
-            .ok_or_else(|| anyhow!("No hay URL disponible para Google Docs/Slides"))?;
+            .ok_or_else(|| anyhow!("No URL available for Google Docs/Slides"))?;
 
         let parsed = gdocs::parse(target_url)
-            .ok_or_else(|| anyhow!("Enlace de Google Docs/Slides no válido"))?;
+            .ok_or_else(|| anyhow!("Invalid Google Docs/Slides link"))?;
 
         let requested_format = opts
             .format_id

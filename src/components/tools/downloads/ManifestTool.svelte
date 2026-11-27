@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** .m3u8/.mpd → MP4 pelo FFmpeg, com Referer/cookie (estudos 34/54). */
+  /** .m3u8/.mpd → MP4 via FFmpeg, with Referer/cookie (studies 34/54). */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

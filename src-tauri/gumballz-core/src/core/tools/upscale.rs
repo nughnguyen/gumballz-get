@@ -1,6 +1,6 @@
-//! Real-ESRGAN via `realesrgan-ncnn-vulkan` (estudo 37): binário oficial do
-//! xinntao, que já vem com os modelos `realesrgan-x4plus` e
-//! `realesrgan-x4plus-anime`. Roda em qualquer GPU com Vulkan.
+//! Real-ESRGAN via `realesrgan-ncnn-vulkan` (study 37): the official binary
+//! from xinntao, which already ships with the `realesrgan-x4plus` and
+//! `realesrgan-x4plus-anime` models. Runs on any GPU with Vulkan.
 
 use std::path::{Path, PathBuf};
 
@@ -81,7 +81,7 @@ pub async fn install(progress: super::ProgressFn) -> anyhow::Result<String> {
     let dir = managed_dir().ok_or_else(|| anyhow!("Could not determine data directory"))?;
     let client = github::client()?;
     let asset = github::asset(&client, REPO, None, asset_pick).await?;
-    // Release de 2022: a API não tem digest para esses assets.
+    // 2022 release: the API has no digest for these assets.
     let data = github::download(&client, &asset, true, &progress, BIN).await?;
     let staging = dir.with_extension("new");
     let _ = std::fs::remove_dir_all(&staging);
@@ -91,14 +91,14 @@ pub async fn install(progress: super::ProgressFn) -> anyhow::Result<String> {
         .map_err(|e| anyhow!("Spawn blocking failed: {}", e))??;
     let Some(exe) = github::find_file(&staging, &bin_name(BIN)) else {
         let _ = std::fs::remove_dir_all(&staging);
-        return Err(anyhow!("o pacote nao contem o {}", BIN));
+        return Err(anyhow!("the package does not contain {}", BIN));
     };
     github::make_executable(&exe);
     github::swap_dir(&staging, &dir)?;
     github::strip_quarantine(&dir).await;
     locate()
         .map(|p| p.to_string_lossy().to_string())
-        .ok_or_else(|| anyhow!("binario sumiu apos instalar"))
+        .ok_or_else(|| anyhow!("binary disappeared after install"))
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -138,7 +138,7 @@ pub async fn run(
     progress: super::ProgressFn,
 ) -> anyhow::Result<UpscaleResult> {
     use tokio::io::{AsyncBufReadExt, BufReader};
-    let bin = locate().ok_or_else(|| anyhow!("Real-ESRGAN nao esta instalado"))?;
+    let bin = locate().ok_or_else(|| anyhow!("Real-ESRGAN is not installed"))?;
     let models_dir = bin.parent().map(|p| p.join("models")).unwrap_or_default();
     let mut outputs = Vec::new();
     let mut failed = Vec::new();
@@ -154,7 +154,7 @@ pub async fn run(
         let stem = inp
             .file_stem()
             .map(|s| s.to_string_lossy().to_string())
-            .unwrap_or_else(|| "imagem".into());
+            .unwrap_or_else(|| "image".into());
         let out = out_dir.join(format!("{}_{}x.{}", stem, opts.scale, opts.format));
         let id = format!("upscale:{}", input);
         super::report(&progress, &id, "started", i as u64, Some(total), None);
@@ -206,7 +206,7 @@ pub async fn run(
         if st.success() && out.exists() {
             outputs.push(out.to_string_lossy().to_string());
         } else {
-            tracing::warn!("[upscale] {} falhou: {}", input, tail);
+            tracing::warn!("[upscale] {} failed: {}", input, tail);
             failed.push(input.clone());
         }
     }

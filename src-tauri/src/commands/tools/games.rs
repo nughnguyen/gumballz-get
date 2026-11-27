@@ -1,5 +1,5 @@
-//! Grupo Games: importar o álbum do Switch, organizar clipes do PC e
-//! consultar o ProtonDB. A lógica mora em `gumballz_core::core::tools::games`.
+//! Games group: import the Switch album, organize PC clips and query ProtonDB.
+//! The logic lives in `gumballz_core::core::tools::games`.
 
 use gumballz_core::core::tools::games::{clip_organizer, protondb, switch_album};
 

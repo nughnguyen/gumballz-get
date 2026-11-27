@@ -1,6 +1,6 @@
-//! Duplicados (estudo 38, o método do Czkawka em versão enxuta): agrupa por
-//! tamanho, depois pelo hash dos primeiros 64 KB e só então pelo hash inteiro.
-//! Roda em `spawn_blocking`; nunca apaga sozinho.
+//! Duplicates (study 38, the Czkawka method in a slim version): groups by
+//! size, then by the hash of the first 64 KB, and only then by the full hash.
+//! Runs in `spawn_blocking`; never deletes anything on its own.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

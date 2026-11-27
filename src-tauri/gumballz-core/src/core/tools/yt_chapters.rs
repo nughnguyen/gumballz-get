@@ -1,11 +1,11 @@
-//! Capítulos automáticos para quem publica: onde o assunto muda costuma
-//! haver uma pausa na fala e um corte de imagem ao mesmo tempo.
+//! Automatic chapters for publishers: where the topic changes there is usually
+//! a pause in the speech and an image cut at the same time.
 //!
-//! Dois sinais entram — o `silencedetect` (o mesmo detector do corte de
-//! silêncio) e o `select='gt(scene,N)'` com `showinfo` — e são fundidos: marca
-//! que aparece nos dois pesa mais que marca de um só. Depois vem a duração
-//! mínima de capítulo, porque o YouTube ignora capítulo curto demais e ninguém
-//! quer um sumário de quarenta linhas.
+//! Two signals go in — `silencedetect` (the same detector as the silence cut)
+//! and `select='gt(scene,N)'` with `showinfo` — and they are merged: a mark
+//! that appears in both weighs more than a mark from only one. Then comes the minimum
+//! chapter duration, because YouTube ignores chapters that are too short and nobody
+//! wants a forty-line outline.
 
 use std::path::{Path, PathBuf};
 
@@ -16,15 +16,15 @@ use super::silence_cut::Span;
 use super::subtitle::Cue;
 use super::yt_notes::fmt_stamp;
 
-/// O YouTube só monta o sumário com três capítulos ou mais, o primeiro em
-/// 0:00 e nenhum com menos de dez segundos.
+/// YouTube only builds the outline with three chapters or more, the first at
+/// 0:00 and none shorter than ten seconds.
 pub const YT_MIN_CHAPTERS: usize = 3;
 pub const YT_MIN_SECONDS: f64 = 10.0;
 const ID: &str = "yt-chapters";
 
 // ── Sinais ─────────────────────────────────────────────────────────────
 
-/// Lê os `pts_time` que o `showinfo` imprime depois do filtro de cena.
+/// Reads the `pts_time` values `showinfo` prints after the scene filter.
 pub fn parse_scene_times(stderr: &str) -> Vec<f64> {
     let mut out = Vec::new();
     for line in stderr.lines() {
@@ -58,13 +58,13 @@ pub struct Candidate {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct FuseOptions {
-    /// Marcas a menos disso uma da outra são a mesma marca.
+    /// Marks closer than this to each other are the same mark.
     #[serde(default = "default_window")]
     pub window: f64,
-    /// Capítulo nenhum sai mais curto que isto.
+    /// No chapter comes out shorter than this.
     #[serde(default = "default_min_chapter")]
     pub min_chapter: f64,
-    /// Teto de capítulos (0 = sem teto).
+    /// Chapter cap (0 = no cap).
     #[serde(default)]
     pub max_chapters: u32,
 }
@@ -86,7 +86,7 @@ impl Default for FuseOptions {
     }
 }
 
-/// Silêncio longo é sinal forte; a marca fica onde a fala volta.
+/// A long silence is a strong signal; the mark sits where the speech returns.
 fn from_silences(silences: &[Span]) -> Vec<Candidate> {
     silences
         .iter()
@@ -111,21 +111,21 @@ fn from_scenes(scenes: &[f64]) -> Vec<Candidate> {
         .collect()
 }
 
-/// Junta o que está perto e devolve as marcas fortes o bastante, em ordem de
-/// tempo, respeitando a duração mínima de capítulo.
+/// Joins what is close and returns the marks strong enough, in order of
+/// time, respecting the minimum chapter duration.
 pub fn merge_signals(silences: &[Span], scenes: &[f64], opts: &FuseOptions) -> Vec<Candidate> {
     let mut raw = from_silences(silences);
     raw.extend(from_scenes(scenes));
     raw.sort_by(|a, b| a.time.total_cmp(&b.time));
 
-    // 1. Agrupa marcas vizinhas numa só.
+    // 1. Groups neighbouring marks into one.
     let window = opts.window.max(0.0);
     let mut clusters: Vec<Candidate> = Vec::new();
     for c in raw {
         match clusters.last_mut() {
             Some(last) if c.time - last.time <= window => {
                 let confirma = last.source != c.source && last.source != "ambos";
-                // Entre dois sinais colados, a volta da fala é a borda melhor.
+                // Between two signals stuck together, the speech returning is the better edge.
                 if c.source == "silencio" && last.source == "cena" {
                     last.time = c.time;
                 }
@@ -139,7 +139,7 @@ pub fn merge_signals(silences: &[Span], scenes: &[f64], opts: &FuseOptions) -> V
         }
     }
 
-    // 2. As mais fortes primeiro; cada aceita bloqueia a vizinhança.
+    // 2. The strongest first; each accepted one blocks its neighbourhood.
     let min = opts.min_chapter.max(1.0);
     let mut order: Vec<usize> = (0..clusters.len()).collect();
     order.sort_by(|a, b| {
@@ -151,7 +151,7 @@ pub fn merge_signals(silences: &[Span], scenes: &[f64], opts: &FuseOptions) -> V
     let cap = if opts.max_chapters == 0 {
         usize::MAX
     } else {
-        // O primeiro capítulo é o 0:00, que não sai daqui.
+        // The first chapter is 0:00, which does not come from here.
         (opts.max_chapters as usize).saturating_sub(1)
     };
     let mut kept: Vec<Candidate> = Vec::new();
@@ -202,7 +202,7 @@ fn shorten(text: &str, max_chars: usize) -> String {
     }
 }
 
-/// Título tirado da fala que abre o capítulo. Sem transcrição, "Parte N".
+/// Title taken from the speech that opens the chapter. Without a transcript, "Part N".
 pub fn title_at(cues: &[Cue], start: f64, index: usize) -> String {
     let start_ms = (start * 1000.0).round() as i64;
     let found = cues
@@ -211,14 +211,14 @@ pub fn title_at(cues: &[Cue], start: f64, index: usize) -> String {
         .map(|c| shorten(&c.text, 58))
         .unwrap_or_default();
     if found.is_empty() {
-        format!("Parte {}", index + 1)
+        format!("Part {}", index + 1)
     } else {
         found
     }
 }
 
-/// Fecha os capítulos: o primeiro sempre em 0:00, cada um terminando onde o
-/// próximo começa, e o rabo curto demais volta para o anterior.
+/// Closes the chapters: the first always at 0:00, each one ending where the
+/// next starts, and a tail too short goes back to the previous one.
 pub fn build_chapters(
     marks: &[Candidate],
     cues: &[Cue],
@@ -242,7 +242,7 @@ pub fn build_chapters(
             source: source.clone(),
         });
     }
-    // Um último capítulo curto é sobra de vinheta, não capítulo.
+    // A short last chapter is leftover intro, not a chapter.
     if out.len() > 1 {
         let last_short = out
             .last()
@@ -259,7 +259,7 @@ pub fn build_chapters(
     out
 }
 
-/// O bloco que se cola na descrição do vídeo.
+/// The block that gets pasted into the video description.
 pub fn description_block(chapters: &[ChapterOut]) -> String {
     chapters
         .iter()
@@ -289,7 +289,7 @@ fn escape_meta(s: &str) -> String {
     out
 }
 
-/// Metadados de capítulo do FFmpeg (`-i meta.txt -map_metadata 1`).
+/// FFmpeg chapter metadata (`-i meta.txt -map_metadata 1`).
 pub fn ffmetadata(chapters: &[ChapterOut]) -> String {
     let mut out = String::from(";FFMETADATA1\n");
     for c in chapters {
@@ -301,19 +301,19 @@ pub fn ffmetadata(chapters: &[ChapterOut]) -> String {
     out
 }
 
-/// O que ainda falta para o YouTube aceitar o sumário.
+/// What is still missing for YouTube to accept the outline.
 pub fn youtube_note(chapters: &[ChapterOut]) -> Option<String> {
     if chapters.len() < YT_MIN_CHAPTERS {
         return Some(format!(
-            "o YouTube só monta o sumário com {} capítulos ou mais",
+            "YouTube only builds the outline with {} chapters or more",
             YT_MIN_CHAPTERS
         ));
     }
     match chapters.first() {
         Some(c) if c.start > 0.0 => {
-            return Some("o primeiro capítulo precisa começar em 0:00".into())
+            return Some("the first chapter must start at 0:00".into())
         }
-        None => return Some("nenhum capítulo".into()),
+        None => return Some("no chapters".into()),
         _ => {}
     }
     if chapters
@@ -321,7 +321,7 @@ pub fn youtube_note(chapters: &[ChapterOut]) -> Option<String> {
         .any(|c| c.end - c.start < YT_MIN_SECONDS - 1e-6)
     {
         return Some(format!(
-            "cada capítulo precisa de pelo menos {:.0} segundos",
+            "each chapter needs at least {:.0} seconds",
             YT_MIN_SECONDS
         ));
     }
@@ -332,9 +332,9 @@ pub fn youtube_note(chapters: &[ChapterOut]) -> Option<String> {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Options {
-    /// Arquivo de vídeo do próprio criador.
+    /// The creator's own video file.
     pub input: String,
-    /// Legenda ou transcrição, só para dar nome aos capítulos.
+    /// Subtitle or transcript, only to name the chapters.
     #[serde(default)]
     pub subtitle_path: String,
     #[serde(default = "default_true")]
@@ -349,7 +349,7 @@ pub struct Options {
     pub scene_threshold: f64,
     #[serde(default)]
     pub fuse: FuseOptions,
-    /// Escrever `capitulos.txt` e `capitulos.ffmeta` ao lado do vídeo.
+    /// Write `capitulos.txt` and `capitulos.ffmeta` next to the video.
     #[serde(default)]
     pub write_files: bool,
     #[serde(default)]
@@ -405,7 +405,7 @@ async fn detect_silence(
         ])
         .output()
         .await
-        .map_err(|e| anyhow!("o ffmpeg não iniciou: {}", e))?;
+        .map_err(|e| anyhow!("ffmpeg did not start: {}", e))?;
     let stderr = String::from_utf8_lossy(&out.stderr).to_string();
     Ok(super::silence_cut::parse_spans(&stderr, total))
 }
@@ -427,21 +427,21 @@ async fn detect_scenes(ffmpeg: &Path, input: &Path, threshold: f64) -> anyhow::R
         ])
         .output()
         .await
-        .map_err(|e| anyhow!("o ffmpeg não iniciou: {}", e))?;
+        .map_err(|e| anyhow!("ffmpeg did not start: {}", e))?;
     Ok(parse_scene_times(&String::from_utf8_lossy(&out.stderr)))
 }
 
 pub async fn run(opts: Options, progress: super::ProgressFn) -> anyhow::Result<ChaptersResult> {
     let input = PathBuf::from(opts.input.trim());
     if !input.exists() {
-        return Err(anyhow!("arquivo não encontrado: {}", opts.input));
+        return Err(anyhow!("file not found: {}", opts.input));
     }
     let ffmpeg = crate::core::dependencies::ensure_ffmpeg().await?;
     super::report(&progress, ID, "progress", 0, Some(3), None);
     let probe = crate::core::ffmpeg::probe(&input).await?;
     let total = probe.duration_seconds;
     if total <= 0.0 {
-        return Err(anyhow!("não consegui medir a duração do vídeo"));
+        return Err(anyhow!("could not measure the video duration"));
     }
 
     let mut cues: Vec<Cue> = Vec::new();
@@ -533,28 +533,28 @@ frame= 2 fps=0.0 q=-0.0 size=N/A time=00:00:00.08
     #[test]
     fn reads_the_scene_times() {
         let t = parse_scene_times(SHOWINFO);
-        assert_eq!(t, vec![0.0, 60.5, 121.25], "o pts_time inválido cai fora");
+        assert_eq!(t, vec![0.0, 60.5, 121.25], "the invalid pts_time drops out");
         assert!(parse_scene_times("nada aqui").is_empty());
     }
 
     #[test]
     fn a_mark_seen_by_both_signals_beats_one_seen_by_a_single_one() {
-        // 60 s tem silêncio e corte de cena; 130 s só cena; 200 s só silêncio.
+        // 60 s has silence and a scene cut; 130 s only a scene; 200 s only silence.
         let silences = [span(57.0, 60.0), span(199.0, 200.0)];
         let scenes = [60.4, 130.0];
         let marks = merge_signals(&silences, &scenes, &FuseOptions::default());
         let em_60 = marks
             .iter()
             .find(|m| (m.time - 60.0).abs() < 1.0)
-            .expect("a marca de 60 s devia estar lá");
+            .expect("the 60 s mark should have been there");
         assert_eq!(em_60.source, "ambos");
         let so_cena = marks
             .iter()
             .find(|m| (m.time - 130.0).abs() < 0.1)
-            .expect("a marca de 130 s devia estar lá");
+            .expect("the 130 s mark should have been there");
         assert!(
             em_60.score > so_cena.score,
-            "a confirmada tem de pesar mais"
+            "the confirmed one must weigh more"
         );
         assert_eq!(marks.len(), 3);
     }
@@ -569,15 +569,15 @@ frame= 2 fps=0.0 q=-0.0 size=N/A time=00:00:00.08
             max_chapters: 0,
         };
         let marks = merge_signals(&silences, &scenes, &opts);
-        assert_eq!(marks.len(), 1, "as duas marcas estão a 5 s uma da outra");
-        assert_eq!(marks[0].source, "ambos", "sobrou a confirmada pelos dois");
+        assert_eq!(marks.len(), 1, "the two marks are 5 s apart");
+        assert_eq!(marks[0].source, "ambos", "the one confirmed by both remained");
     }
 
     #[test]
     fn a_mark_before_the_minimum_never_becomes_a_chapter() {
         let silences = [span(5.0, 8.0)];
         let marks = merge_signals(&silences, &[], &FuseOptions::default());
-        assert!(marks.is_empty(), "8 s não abre capítulo com mínimo de 45 s");
+        assert!(marks.is_empty(), "8 s does not open a chapter with a 45 s minimum");
     }
 
     #[test]
@@ -585,7 +585,7 @@ frame= 2 fps=0.0 q=-0.0 size=N/A time=00:00:00.08
         let silences: Vec<Span> = (1..=8)
             .map(|i| span(i as f64 * 60.0 - 1.0, i as f64 * 60.0))
             .collect();
-        // A de 300 s é confirmada pela cena, então tem de sobreviver ao teto.
+        // The 300 s one is confirmed by the scene, so it has to survive the cap.
         let scenes = [300.2];
         let opts = FuseOptions {
             window: 2.0,
@@ -593,7 +593,7 @@ frame= 2 fps=0.0 q=-0.0 size=N/A time=00:00:00.08
             max_chapters: 3,
         };
         let marks = merge_signals(&silences, &scenes, &opts);
-        assert_eq!(marks.len(), 2, "teto de 3 capítulos = 0:00 + 2 marcas");
+        assert_eq!(marks.len(), 2, "cap of 3 chapters = 0:00 + 2 marks");
         assert!(marks.iter().any(|m| m.source == "ambos"));
     }
 
@@ -629,8 +629,8 @@ frame= 2 fps=0.0 q=-0.0 size=N/A time=00:00:00.08
         assert_eq!(chs[0].start, 0.0);
         assert_eq!(chs[0].end, 60.0);
         assert_eq!(chs[1].end, 300.0);
-        assert_eq!(chs[0].title, "Bem-vindo ao canal", "o ponto final sai fora");
-        assert_eq!(chs[1].title, "A moagem certa", "vírgula do fim sai fora");
+        assert_eq!(chs[0].title, "Bem-vindo ao canal", "the final period comes off");
+        assert_eq!(chs[1].title, "A moagem certa", "trailing comma drops out");
     }
 
     #[test]
@@ -641,7 +641,7 @@ frame= 2 fps=0.0 q=-0.0 size=N/A time=00:00:00.08
             text: "palavra ".repeat(12).trim().to_string(),
         }];
         let titulo = title_at(&cues, 0.0, 0);
-        assert!(titulo.chars().count() <= 58, "ficou com {}", titulo.len());
+        assert!(titulo.chars().count() <= 58, "ended up with {}", titulo.len());
         assert_eq!(titulo.split_whitespace().count(), 7);
         assert!(titulo.starts_with("Palavra palavra"));
     }
@@ -673,7 +673,7 @@ frame= 2 fps=0.0 q=-0.0 size=N/A time=00:00:00.08
             },
         ];
         let chs = build_chapters(&marks, &[], 300.0, 45.0);
-        assert_eq!(chs.len(), 2, "o rabo de 3 s não é capítulo");
+        assert_eq!(chs.len(), 2, "the 3 s tail is not a chapter");
         assert_eq!(chs[1].end, 300.0);
     }
 
@@ -742,7 +742,7 @@ frame= 2 fps=0.0 q=-0.0 size=N/A time=00:00:00.08
     #[test]
     fn youtube_rules_are_checked() {
         let poucos = build_chapters(&[], &[], 300.0, 45.0);
-        assert!(youtube_note(&poucos).is_some(), "um capítulo só não serve");
+        assert!(youtube_note(&poucos).is_some(), "a single chapter is not enough");
 
         let bons = build_chapters(
             &[
@@ -789,17 +789,17 @@ frame= 2 fps=0.0 q=-0.0 size=N/A time=00:00:00.08
             .contains("10 segundos"));
     }
 
-    /// Gera um clipe com dois cortes de cena e silêncio no meio e confere que
-    /// os capítulos caem onde deveriam.
+    /// Generates a clip with two scene cuts and silence in the middle and checks
+    /// the chapters land where they should.
     /// `cargo test -p gumballz-core --lib -- --ignored live_yt_chapters`
     #[tokio::test]
     #[ignore]
     async fn live_yt_chapters_finds_the_planted_cut() {
         let ffmpeg = crate::core::dependencies::ensure_ffmpeg()
             .await
-            .expect("ffmpeg gerido");
+            .expect("managed ffmpeg");
         let dir = super::super::temp_dir().join("yt-chapters-live");
-        std::fs::create_dir_all(&dir).expect("pasta");
+        std::fs::create_dir_all(&dir).expect("folder");
         let src = dir.join("fonte.mp4");
         let gen = crate::core::process::command(&ffmpeg)
             .args([
@@ -849,9 +849,9 @@ frame= 2 fps=0.0 q=-0.0 size=N/A time=00:00:00.08
         };
         let r = run(opts, super::super::noop_progress())
             .await
-            .expect("capítulos");
+            .expect("chapters");
         eprintln!("{}", r.description);
-        assert!(r.chapters.len() >= 2, "era para achar o corte em ~34 s");
+        assert!(r.chapters.len() >= 2, "it was supposed to find the cut at ~34 s");
         assert!((r.chapters[1].start - 34.0).abs() < 2.0);
         let _ = std::fs::remove_dir_all(&dir);
     }

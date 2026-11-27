@@ -41,7 +41,7 @@ export type CourseDownloadItem = BaseItem & {
   currentModuleIndex: number;
 };
 
-/** Stream (formato) que o yt-dlp está baixando; vem de `%(info.*)s` no template de progresso. */
+/** Stream (format) yt-dlp is downloading; comes from `%(info.*)s` in the progress template. */
 export type StreamInfo = {
   format_id: string;
   height?: number;
@@ -54,7 +54,7 @@ export type StreamInfo = {
   format_note?: string;
 };
 
-/** Último comando yt-dlp rodado para o item, já redigido no backend. */
+/** Last yt-dlp command run for the item, already redacted in the backend. */
 export type CommandRecord = {
   program: string;
   args: string[];
@@ -518,8 +518,8 @@ export function upsertGenericProgress(
 
   const effectiveSpeed = resolvedStatus === "downloading" ? speed : 0;
 
-  // Evento de progresso é um patch por cima do item, não uma substituição:
-  // thumbnail, tipo, comando e afins só chegam pelo `queue-state-update`.
+  // A progress event is a patch on top of the item, not a replacement:
+  // thumbnail, type, command and the like only arrive via `queue-state-update`.
   const nextStream = extra?.stream ?? prev?.stream ?? null;
   let streamsDone = prev?.streamsDone ?? [];
   if (nextStream && prev?.stream && prev.stream.format_id !== nextStream.format_id) {

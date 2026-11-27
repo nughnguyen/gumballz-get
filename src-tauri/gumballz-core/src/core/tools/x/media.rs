@@ -1,7 +1,7 @@
-//! Mídia em lote (estudo 67): todas as fotos e videos de um perfil (ou de
-//! uma lista de posts) em qualidade original, como o
-//! Twitter-X-Media-Batch-Downloader e o "Export Media" do
-//! twitter-web-exporter. 1 arquivo por vez com pausa curta.
+//! Batch media (study 67): all photos and videos of a profile (or of
+//! a list of posts) in original quality, like the
+//! Twitter-X-Media-Batch-Downloader and the "Export Media" of
+//! twitter-web-exporter. 1 file at a time with a short pause.
 
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
@@ -56,7 +56,7 @@ pub fn file_name(post: &XPost, index: usize, url: &str, kind: &str) -> String {
     )
 }
 
-/// Baixa a midia de `posts` para `dest`. `job` e o id de progresso/cancelamento.
+/// Downloads the media of `posts` to `dest`. `job` is the progress/cancellation id.
 pub async fn download_posts(
     posts: &[XPost],
     dest: &std::path::Path,
@@ -143,7 +143,7 @@ async fn fetch_to(
     Ok(())
 }
 
-/// Todas as midias publicas de um perfil (aba Midia), ate `limit` posts.
+/// All public media of a profile (Media tab), up to `limit` posts.
 pub async fn download_profile(
     input: &str,
     dest: &str,
@@ -153,7 +153,7 @@ pub async fn download_profile(
     progress: ProgressFn,
 ) -> anyhow::Result<MediaResult> {
     let handle = super::handle_from(input)
-        .ok_or_else(|| anyhow!("nao reconheci um perfil do X em: {}", input))?;
+        .ok_or_else(|| anyhow!("did not recognise an X profile in: {}", input))?;
     let job = format!("x-media:{}", handle.to_ascii_lowercase());
     super::clear_cancel(&job);
     let mut posts: Vec<XPost> = Vec::new();

@@ -1,15 +1,15 @@
-//! Comandos da categoria Listas: exportar diário e estante do Letterboxd, do
-//! Trakt e do Goodreads, e juntar tudo numa linha do tempo só.
+//! Commands of the Lists category: export the Letterboxd, Trakt and Goodreads
+//! diary and shelf, and merge it all into a single timeline.
 //!
-//! Letterboxd e Goodreads não têm API pública — o caminho é a sessão que a
-//! extensão capturou, cada um no seu bucket de cookie. O Trakt tem API
-//! oficial e usa o device flow, com credenciais que o próprio usuário cria.
+//! Letterboxd and Goodreads have no public API — the way in is the session the
+//! extension captured, each in its own cookie bucket. Trakt has an official API
+//! and uses the device flow, with credentials the user creates themselves.
 
 use gumballz_core::core::tools::lists::{goodreads, letterboxd, merge, trakt};
 
 use super::{err, progress};
 
-/// Cookies da conta escolhida no gerenciador (None = `_default`).
+/// Cookies of the account chosen in the manager (None = `_default`).
 fn session_of(domain: &str, slug: Option<&str>) -> Option<String> {
     let slug = slug.unwrap_or("_default");
     let content = crate::cookies::storage::read_account_file(domain, slug).ok()?;
@@ -20,8 +20,8 @@ fn session_of(domain: &str, slug: Option<&str>) -> Option<String> {
     Some(content)
 }
 
-/// Se existe sessão salva para o domínio, para a UI dizer se está logado
-/// antes de o usuário apertar qualquer botão.
+/// Whether a saved session exists for the domain, so the UI can say if the user
+/// is logged in before they press any button.
 #[tauri::command]
 pub fn tool_lists_session(domain: String, account_slug: Option<String>) -> bool {
     let domain = match domain.as_str() {
@@ -67,13 +67,13 @@ pub fn tool_trakt_disconnect(forget: bool) -> Result<trakt::CredsView, String> {
     }
 }
 
-/// Passo 1 do device flow: o código que o usuário digita no site.
+/// Step 1 of the device flow: the code the user types on the site.
 #[tauri::command]
 pub async fn tool_trakt_device_code() -> Result<trakt::DeviceCode, String> {
     trakt::device_code().await.map_err(err)
 }
 
-/// Passo 2: espera o usuário liberar o acesso e guarda o token.
+/// Step 2: waits for the user to grant access and saves the token.
 #[tauri::command]
 pub async fn tool_trakt_connect(
     app: tauri::AppHandle,
@@ -104,7 +104,7 @@ pub async fn tool_gr_export(
     goodreads::run(&opts, progress(&app)).await.map_err(err)
 }
 
-// ── Diário único ────────────────────────────────────────────────────────
+// ── Single diary ────────────────────────────────────────────────────────
 
 #[tauri::command]
 pub async fn tool_media_diary(

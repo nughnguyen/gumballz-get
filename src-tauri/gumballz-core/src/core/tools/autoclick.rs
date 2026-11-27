@@ -1,9 +1,9 @@
-//! Autoclicker (estudo 14, Blur AutoClicker — GPL-3): laço de cliques com
-//! timer de alta resolução (sleep grosso + espera ativa no último
-//! milissegundo), CPS fixo ou em faixa aleatória, botão, clique duplo, limite
-//! por cliques ou tempo e posição fixa. Multiplataforma via `enigo`; no macOS
-//! exige a permissão de Acessibilidade para o GumballZ Get, no Wayland o clique
-//! sintético é limitado. O atalho global fica no app (hotkey.rs).
+//! Autoclicker (study 14, Blur AutoClicker — GPL-3): a click loop with a
+//! high-resolution timer (coarse sleep + busy-wait on the last
+//! millisecond), fixed CPS or a random range, button, double click, a limit
+//! by clicks or time, and a fixed position. Cross-platform via `enigo`; on macOS
+//! it needs the Accessibility permission for GumballZ Get, on Wayland synthetic
+//! clicks are limited. The global shortcut lives in the app (hotkey.rs).
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
@@ -15,9 +15,9 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClickOptions {
-    /// cliques por segundo (0,1 a 1000)
+    /// clicks per second (0.1 to 1000)
     pub cps: f64,
-    /// variação aleatória do intervalo, em % (0 = fixo)
+    /// random variation of the interval, in % (0 = fixed)
     #[serde(default)]
     pub jitter_pct: u8,
     /// "left" | "right" | "middle"
@@ -25,19 +25,19 @@ pub struct ClickOptions {
     pub button: String,
     #[serde(default)]
     pub double: bool,
-    /// 0 = sem limite
+    /// 0 = no limit
     #[serde(default)]
     pub max_clicks: u64,
-    /// 0 = sem limite
+    /// 0 = no limit
     #[serde(default)]
     pub max_seconds: u64,
-    /// posição fixa (senão clica onde o mouse estiver)
+    /// fixed position (otherwise clicks where the mouse is)
     #[serde(default)]
     pub position: Option<(i32, i32)>,
-    /// tempo com o botão pressionado, em ms (0 = clique instantâneo)
+    /// time with the button held down, in ms (0 = instant click)
     #[serde(default)]
     pub hold_ms: u32,
-    /// atraso antes de começar, em segundos
+    /// delay before starting, in seconds
     #[serde(default)]
     pub start_delay: u32,
 }
@@ -74,7 +74,7 @@ pub fn last_options() -> Option<ClickOptions> {
     LAST_OPTS.lock().unwrap_or_else(|e| e.into_inner()).clone()
 }
 
-/// Espera precisa: dorme até faltar 1,5 ms e gira o resto.
+/// Precise wait: sleeps until 1.5 ms remain, then spins the rest.
 fn sleep_until(deadline: Instant) {
     loop {
         let now = Instant::now();
@@ -100,11 +100,11 @@ fn button_of(name: &str) -> Button {
 
 pub fn start(opts: ClickOptions) -> anyhow::Result<()> {
     if RUNNING.swap(true, Ordering::SeqCst) {
-        return Err(anyhow!("ja esta rodando"));
+        return Err(anyhow!("already running"));
     }
     if !(0.1..=1000.0).contains(&opts.cps) {
         RUNNING.store(false, Ordering::SeqCst);
-        return Err(anyhow!("CPS fora de 0,1 a 1000"));
+        return Err(anyhow!("CPS out of 0.1 to 1000"));
     }
     *LAST_OPTS.lock().unwrap_or_else(|e| e.into_inner()) = Some(opts.clone());
     *ERROR.lock().unwrap_or_else(|e| e.into_inner()) = None;
@@ -117,7 +117,7 @@ pub fn start(opts: ClickOptions) -> anyhow::Result<()> {
             let mut enigo = match Enigo::new(&Settings::default()) {
                 Ok(e) => e,
                 Err(e) => {
-                    *ERROR.lock().unwrap_or_else(|e| e.into_inner()) = Some(format!("nao consegui controlar o mouse: {} (macOS: Ajustes → Privacidade → Acessibilidade)", e));
+                    *ERROR.lock().unwrap_or_else(|e| e.into_inner()) = Some(format!("could not control the mouse: {} (macOS: Settings → Privacy → Accessibility)", e));
                     RUNNING.store(false, Ordering::SeqCst);
                     return;
                 }
@@ -165,7 +165,7 @@ pub fn start(opts: ClickOptions) -> anyhow::Result<()> {
                 if opts.max_clicks > 0 && n >= opts.max_clicks {
                     break;
                 }
-                // xorshift para o jitter, sem crate
+                // xorshift for the jitter, no crate
                 rng_state ^= rng_state << 13;
                 rng_state ^= rng_state >> 7;
                 rng_state ^= rng_state << 17;
@@ -194,14 +194,14 @@ pub fn stop() {
     RUNNING.store(false, Ordering::SeqCst);
 }
 
-/// Atalho global: para se estiver rodando, senão começa com as últimas opções.
+/// Global shortcut: stops if running, otherwise starts with the last options.
 pub fn toggle() -> anyhow::Result<bool> {
     if RUNNING.load(Ordering::SeqCst) {
         stop();
         return Ok(false);
     }
     let opts = last_options()
-        .ok_or_else(|| anyhow!("configure e inicie uma vez pela tela antes de usar o atalho"))?;
+        .ok_or_else(|| anyhow!("configure and start once from the screen before using the shortcut"))?;
     start(opts)?;
     Ok(true)
 }

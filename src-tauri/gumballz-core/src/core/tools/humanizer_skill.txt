@@ -1,5 +1,5 @@
 Humanizer skill — https://github.com/blader/humanizer
-MIT License, Copyright (c) 2025 Siqi Chen. Reproduzido na íntegra a partir de SKILL.md.
+MIT License, Copyright (c) 2025 Siqi Chen. Reproduced in full from SKILL.md.
 
 # Humanizer: remove AI writing patterns
 

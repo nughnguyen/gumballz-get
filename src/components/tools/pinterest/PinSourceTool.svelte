@@ -18,9 +18,9 @@
 
 <script lang="ts">
   /**
-   * Achar a fonte (estudo 67): link de destino, criador, checagem do link,
-   * cópia na Wayback Machine e busca reversa (Google Lens, TinEye, Yandex,
-   * Bing, SauceNAO). Também expande pin.it.
+   * Find the source (study 67): destination link, creator, link check,
+   * Wayback Machine copy and reverse search (Google Lens, TinEye, Yandex,
+   * Bing, SauceNAO). Also expands pin.it.
    */
   import { invoke } from "@tauri-apps/api/core";
   import { t } from "$lib/i18n";

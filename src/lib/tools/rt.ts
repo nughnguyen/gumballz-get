@@ -1,7 +1,7 @@
 /**
- * Utilidades compartilhadas pelos componentes da seção Tools: diálogos de
- * arquivo, progresso (`tool-progress`), formatação e erros. Cada tool é um
- * componente pequeno; o que se repete mora aqui.
+ * Utilities shared by the Tools section components: file
+ * dialogs, progress (`tool-progress`), formatting and errors. Each tool is a
+ * small component; what repeats lives here.
  */
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 

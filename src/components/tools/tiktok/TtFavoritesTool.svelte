@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Índice dos favoritos e da mídia do perfil no TikTok, em CSV/JSON, com download opcional. */
+  /** Index of TikTok favorites and profile media, in CSV/JSON, with optional download. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

@@ -1,6 +1,6 @@
-//! Sistema: ajustes do Windows, limpeza de caches, analisador de disco,
-//! inicialização, desinstalador, bloqueio por `hosts` e (só Windows) debloat,
-//! registro e atualizador. A lógica mora em `gumballz_core::core::tools`.
+//! System: Windows tweaks, cache cleaning, disk analyzer, startup, uninstaller,
+//! blocking via `hosts` and (Windows only) debloat, registry and updater. The
+//! logic lives in `gumballz_core::core::tools`.
 
 use gumballz_core::core::tools::{
     disk, hosts_block, startup, sysclean, uninstall, win_apps, win_registry, win_tweaks,
@@ -20,7 +20,7 @@ pub async fn tool_win_tweak_apply(id: String, enable: bool) -> Result<win_tweaks
     win_tweaks::apply(&id, enable).await.map_err(err)
 }
 
-// ── Limpar caches ──
+// ── Clean caches ──
 
 #[tauri::command]
 pub async fn tool_clean_scan(app: tauri::AppHandle) -> Result<Vec<sysclean::CleanRule>, String> {
@@ -41,7 +41,7 @@ pub async fn tool_clean_run(
         .map_err(err)
 }
 
-// ── Analisador de disco ──
+// ── Disk analyzer ──
 
 #[tauri::command]
 pub fn tool_disk_volumes() -> Vec<disk::Volume> {
@@ -76,7 +76,7 @@ pub fn tool_disk_trash(paths: Vec<String>) -> TrashOut {
     TrashOut { ok, failed }
 }
 
-// ── Inicialização ──
+// ── Startup ──
 
 #[tauri::command]
 pub async fn tool_startup_list() -> Vec<startup::StartupItem> {
@@ -92,7 +92,7 @@ pub async fn tool_startup_set(
     Ok(startup::list().await)
 }
 
-// ── Desinstalador ──
+// ── Uninstaller ──
 
 #[tauri::command]
 pub async fn tool_uninstall_list(app: tauri::AppHandle) -> Vec<uninstall::App> {
@@ -114,7 +114,7 @@ pub async fn tool_uninstall_run(
     uninstall::uninstall(&app, &leftovers).await
 }
 
-// ── Windows: debloat, registro, atualizador ──
+// ── Windows: debloat, registry, updater ──
 
 #[tauri::command]
 pub async fn tool_debloat_list() -> Result<Vec<win_apps::AppxPackage>, String> {
@@ -163,7 +163,7 @@ pub async fn tool_updater_upgrade(
     win_updater::upgrade(&items, &progress(&app)).await
 }
 
-// ── Bloqueio de anúncio e telemetria pelo `hosts` ──
+// ── Ad and telemetry blocking via `hosts` ──
 
 #[tauri::command]
 pub async fn tool_hosts_read(

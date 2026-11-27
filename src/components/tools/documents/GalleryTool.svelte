@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** gallery-dl (estudo 52): galerias e perfis inteiros de 250+ sites. */
+  /** gallery-dl (study 52): whole galleries and profiles from 250+ sites. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

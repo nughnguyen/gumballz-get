@@ -1,10 +1,10 @@
-//! Diário único: junta o que saiu do Letterboxd, do Trakt, do Goodreads e do
-//! Spotify numa linha do tempo só de leu/assistiu/ouviu.
+//! One diary: joins what came out of Letterboxd, Trakt, Goodreads and
+//! Spotify into a single read/watched/listened timeline.
 //!
-//! Nada de rede aqui — é tudo arquivo que as outras três ferramentas já
-//! gravaram (ou que o usuário baixou à mão). A ferramenta reconhece o
-//! formato pelo cabeçalho, então tanto faz apontar o `letterboxd.json` que a
-//! gente escreveu ou o `diary.csv` cru de dentro do ZIP oficial.
+//! No network here — it is all files the other three tools already
+//! wrote (or the user downloaded by hand). The tool recognizes the
+//! format by the header, so it makes no difference whether you point at the `letterboxd.json` we
+//! wrote or the raw `diary.csv` from inside the official ZIP.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -19,25 +19,25 @@ const TOOL_ID: &str = "media-diary";
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Options {
-    /// Arquivos ou pastas com os exports (JSON/CSV) das outras ferramentas.
+    /// Files or folders with the exports (JSON/CSV) from the other tools.
     pub inputs: Vec<String>,
-    /// Export do Spotify: ZIP, pasta ou os `Streaming_History_*.json` soltos.
+    /// Spotify export: ZIP, folder or the loose `Streaming_History_*.json` files.
     #[serde(default)]
     pub spotify: Vec<String>,
-    /// Escutas mais curtas que isso não entram na linha do tempo.
+    /// Listens shorter than this do not enter the timeline.
     #[serde(default = "default_min_ms")]
     pub min_ms: u64,
-    /// Só as músicas com pelo menos tantas escutas no total (o histórico do
-    /// Spotify tem dezenas de milhares de linhas; sem isso ele afoga o resto).
+    /// Only songs with at least that many listens in total (the Spotify
+    /// history has tens of thousands of lines; without this it drowns the rest).
     #[serde(default = "default_min_plays")]
     pub min_plays: u32,
     pub dest: String,
     #[serde(default)]
     pub formats: Vec<String>,
-    /// Juntar linhas iguais vindas de serviços diferentes.
+    /// Join identical lines coming from different services.
     #[serde(default = "default_true")]
     pub dedup: bool,
-    /// Deixar de fora o que não tem data (watchlist, "quero ler").
+    /// Leave out what has no date (watchlist, "want to read").
     #[serde(default)]
     pub only_dated: bool,
 }
@@ -82,21 +82,21 @@ pub struct MergeResult {
     pub sample: Vec<Entry>,
 }
 
-// ── Reconhecimento de formato ───────────────────────────────────────────
+// ── Format recognition ───────────────────────────────────────────
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Format {
-    /// O CSV que as nossas ferramentas escrevem.
+    /// The CSV our tools write.
     Unified,
-    /// Um CSV plano do export do Letterboxd (diary, ratings, watchlist…).
+    /// A flat CSV from the Letterboxd export (diary, ratings, watchlist…).
     Letterboxd,
     /// O `goodreads_library_export.csv` oficial.
     Goodreads,
     Unknown,
 }
 
-/// Descobre o formato pelo cabeçalho. Cada export tem uma coluna que só ele
-/// tem, então não precisa adivinhar pelo nome do arquivo.
+/// Figures out the format from the header. Each export has a column only it
+/// has, so there is no need to guess from the file name.
 pub fn sniff(header: &[String]) -> Format {
     let low: Vec<String> = header.iter().map(|h| h.trim().to_lowercase()).collect();
     let has = |name: &str| low.iter().any(|h| h == name);
@@ -149,12 +149,12 @@ fn unified_row(row: &[String], idx: &HashMap<String, usize>) -> Option<Entry> {
     Some(e)
 }
 
-/// Lê o conteúdo de um arquivo já carregado. Aceita o JSON do esquema comum,
-/// o CSV do esquema comum e os CSVs crus do Letterboxd e do Goodreads.
+/// Reads the content of an already-loaded file. Accepts the common-schema JSON,
+/// the common-schema CSV and the raw Letterboxd and Goodreads CSVs.
 pub fn parse_any(name: &str, text: &str) -> Vec<Entry> {
     let trimmed = text.trim_start();
     if trimmed.starts_with('[') || trimmed.starts_with('{') {
-        // JSON: nosso próprio export, ou o array cru de itens do Trakt.
+        // JSON: our own export, or the raw Trakt item array.
         if let Ok(list) = serde_json::from_str::<Vec<Entry>>(trimmed) {
             if list.iter().any(|e| !e.title.is_empty()) {
                 return list.into_iter().filter(|e| !e.title.is_empty()).collect();
@@ -195,8 +195,8 @@ pub fn parse_any(name: &str, text: &str) -> Vec<Entry> {
     }
 }
 
-/// Todos os arquivos que valem a pena tentar, de uma lista de arquivos e
-/// pastas.
+/// All the files worth trying, from a list of files and
+/// folders.
 pub fn collect_files(inputs: &[String]) -> Vec<PathBuf> {
     let ok = |p: &Path| {
         p.extension()
@@ -228,9 +228,9 @@ pub fn collect_files(inputs: &[String]) -> Vec<PathBuf> {
 
 // ── Spotify ─────────────────────────────────────────────────────────────
 
-/// O export do Spotify já tem leitor no app (`music::history`): aqui é só
-/// converter as escutas para o esquema comum, agrupando por faixa para o
-/// histórico não afogar filmes e livros na linha do tempo.
+/// The Spotify export already has a reader in the app (`music::history`): here it is just
+/// converting the listens to the common schema, grouping by track so the
+/// history does not drown movies and books in the timeline.
 pub fn spotify_entries(
     plays: &[crate::core::tools::music::history::Play],
     min_plays: u32,
@@ -255,7 +255,7 @@ pub fn spotify_entries(
             e
         });
         slot.times += 1;
-        // A data que vale é a primeira escuta: é o dia em que entrou na vida.
+        // The date that counts is the first listen: the day it entered your life.
         if slot.date.is_empty() || (!date.is_empty() && date < slot.date) {
             slot.date = date;
         }
@@ -271,10 +271,10 @@ pub fn spotify_entries(
     out
 }
 
-// ── Deduplicação ────────────────────────────────────────────────────────
+// ── Deduplication ────────────────────────────────────────────────────────
 
-/// Qual das duas linhas é a mais completa. Nota e review pesam mais que
-/// qualquer outra coisa: é o que o usuário escreveu.
+/// Which of the two lines is the most complete. Rating and review weigh more than
+/// anything else: that is what the user wrote.
 fn richness(e: &Entry) -> u32 {
     let mut score = 0;
     if e.rating.is_some() {
@@ -301,9 +301,9 @@ fn richness(e: &Entry) -> u32 {
     score
 }
 
-/// Junta o que é a mesma obra: mantém a linha mais completa e traz dela o que
-/// faltava na outra. Origem e lista viram uma lista separada por vírgula, e
-/// a data que fica é a mais antiga (a primeira vez conta).
+/// Joins what is the same work: keeps the most complete line and brings from it what
+/// was missing in the other. Source and list become a comma-separated list, and
+/// the date that stays is the oldest (the first time counts).
 pub fn dedup(entries: Vec<Entry>) -> (Vec<Entry>, usize) {
     let mut order: Vec<String> = Vec::new();
     let mut map: HashMap<String, Entry> = HashMap::new();
@@ -346,7 +346,7 @@ pub fn dedup(entries: Vec<Entry>) -> (Vec<Entry>, usize) {
                 if keep.year.is_none() {
                     keep.year = other.year;
                 }
-                // A mais antiga das datas conhecidas.
+                // The oldest of the known dates.
                 if keep.date.is_empty() || (!other.date.is_empty() && other.date < keep.date) {
                     keep.date = other.date.clone();
                 }
@@ -380,7 +380,7 @@ fn join_unique(a: &str, b: &str) -> String {
     format!("{}, {}", a, b)
 }
 
-// ── Linha do tempo ──────────────────────────────────────────────────────
+// ── Timeline ──────────────────────────────────────────────────────
 
 pub fn years_of(entries: &[Entry]) -> Vec<YearCount> {
     let mut map: HashMap<String, YearCount> = HashMap::new();
@@ -413,27 +413,27 @@ pub fn years_of(entries: &[Entry]) -> Vec<YearCount> {
 
 fn icon(kind: &str) -> &'static str {
     match kind {
-        "filme" => "Filme",
-        "serie" => "Série",
-        "livro" => "Livro",
-        "musica" => "Música",
-        _ => "Outro",
+        "filme" => "Movie",
+        "serie" => "Series",
+        "livro" => "Book",
+        "musica" => "Music",
+        _ => "Other",
     }
 }
 
 const MESES: [&str; 12] = [
-    "janeiro",
-    "fevereiro",
-    "março",
-    "abril",
-    "maio",
-    "junho",
-    "julho",
-    "agosto",
-    "setembro",
-    "outubro",
-    "novembro",
-    "dezembro",
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
 ];
 
 fn month_name(month: &str) -> String {
@@ -445,13 +445,13 @@ fn month_name(month: &str) -> String {
     MESES.get(n.saturating_sub(1)).unwrap_or(&"").to_string()
 }
 
-/// A linha do tempo em Markdown: um capítulo por ano, um subtítulo por mês.
-/// É o formato que as três ferramentas de export usam também.
+/// The timeline in Markdown: one chapter per year, one subtitle per month.
+/// It is the format the three export tools use too.
 pub fn timeline_markdown(title: &str, entries: &[Entry]) -> String {
     let mut out = format!("# {}\n\n", title);
     let dated: Vec<&Entry> = entries.iter().filter(|e| !e.date.is_empty()).collect();
     let undated: Vec<&Entry> = entries.iter().filter(|e| e.date.is_empty()).collect();
-    out.push_str(&format!("{} linhas\n\n", entries.len()));
+    out.push_str(&format!("{} lines\n\n", entries.len()));
 
     let mut last_year = String::new();
     let mut last_month = String::new();
@@ -470,7 +470,7 @@ pub fn timeline_markdown(title: &str, entries: &[Entry]) -> String {
         out.push_str(&line_md(e));
     }
     if !undated.is_empty() {
-        out.push_str("\n## Sem data\n\n");
+        out.push_str("\n## No date\n\n");
         for e in &undated {
             out.push_str(&line_md(e));
         }
@@ -504,11 +504,11 @@ fn line_md(e: &Entry) -> String {
     s
 }
 
-// ── Execução ────────────────────────────────────────────────────────────
+// ── Execution ────────────────────────────────────────────────────────────
 
 pub fn run(opts: &Options, p: &ProgressFn) -> Result<MergeResult> {
     if opts.dest.trim().is_empty() {
-        return Err(anyhow!("escolha a pasta de destino"));
+        return Err(anyhow!("choose the destination folder"));
     }
     let files = collect_files(&opts.inputs);
     if files.is_empty() && opts.spotify.is_empty() {
@@ -575,7 +575,7 @@ pub fn run(opts: &Options, p: &ProgressFn) -> Result<MergeResult> {
 
     if all.is_empty() {
         return Err(anyhow!(
-            "nenhum dos arquivos apontados tem um formato que eu saiba ler"
+            "none of the pointed-to files has a format I can read"
         ));
     }
     if opts.only_dated {
@@ -589,7 +589,7 @@ pub fn run(opts: &Options, p: &ProgressFn) -> Result<MergeResult> {
         a.sort_by(|x, y| y.date.cmp(&x.date).then(x.title.cmp(&y.title)));
         (a, 0)
     };
-    tracing::debug!("media-diary: {} linhas, {} juntadas", before, merged);
+    tracing::debug!("media-diary: {} lines, {} merged", before, merged);
 
     let dest = PathBuf::from(opts.dest.trim());
     let formats = if opts.formats.is_empty() {
@@ -669,8 +669,8 @@ mod tests {
     }
 
     #[test]
-    fn caminho_feliz_inteiro_grava_os_tres_formatos() {
-        // Nada de rede: o merge é a única das quatro que roda inteira aqui.
+    fn happy_path_writes_all_three_formats() {
+        // No network: merge is the only one of the four that runs entirely here.
         let base = crate::core::tools::temp_dir().join(format!(
             "lists-merge-{}",
             std::time::SystemTime::now()
@@ -707,9 +707,9 @@ mod tests {
         };
         let r = match run(&opts, &crate::core::tools::noop_progress()) {
             Ok(r) => r,
-            Err(e) => panic!("o merge devia ter rodado: {}", e),
+            Err(e) => panic!("the merge should have run: {}", e),
         };
-        // Duna (filme) do Letterboxd e do Trakt viram uma linha; o livro fica.
+        // Dune (film) from Letterboxd and Trakt become one row; the book stays.
         assert_eq!(r.merged, 1);
         assert_eq!(r.entries, 2);
         assert_eq!(r.sources.len(), 3);
@@ -718,7 +718,7 @@ mod tests {
         assert_eq!(r.first_date, "2021-10-22");
         for f in &r.files {
             let texto = std::fs::read_to_string(f).unwrap_or_default();
-            assert!(!texto.is_empty(), "{} saiu vazio", f);
+            assert!(!texto.is_empty(), "{} came out empty", f);
         }
         let md = std::fs::read_to_string(saida.join("diario.md")).unwrap_or_default();
         assert!(md.contains("## 2024"));
@@ -736,11 +736,11 @@ mod tests {
         let (out, merged) = dedup(vec![a, b]);
         assert_eq!(merged, 1);
         assert_eq!(out.len(), 1);
-        // Fica a linha mais completa, mas herda o que faltava da outra.
+        // The most complete row stays, but inherits what was missing from the other.
         assert_eq!(out[0].rating, Some(9.0));
         assert_eq!(out[0].review, "areia");
         assert_eq!(out[0].tmdb_id, Some(693134));
-        // E a data mais antiga das duas.
+        // And the oldest date of the two.
         assert_eq!(out[0].date, "2024-03-07");
         assert_eq!(out[0].source, "letterboxd, trakt");
         assert_eq!(out[0].times, 2);
@@ -758,8 +758,8 @@ mod tests {
     }
 
     #[test]
-    fn colisao_de_titulo_normalizado_junta_de_proposito() {
-        // "The Thing" e "Thing, The" do mesmo ano são o mesmo filme.
+    fn normalized_title_collision_merges_on_purpose() {
+        // "The Thing" and "Thing, The" from the same year are the same film.
         let a = filme("The Thing", 1982, "2019-10-31", "letterboxd");
         let b = filme("Thing, The", 1982, "2020-10-31", "trakt");
         let (out, merged) = dedup(vec![a, b]);
@@ -776,7 +776,7 @@ mod tests {
         let (out, _) = dedup(vec![wl, visto]);
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].date, "2023-01-05");
-        // A linha datada ganha, mas a lembrança de que estava na watchlist fica.
+        // The dated line wins, but the memory that it was on the watchlist stays.
         assert_eq!(out[0].list, "watchlist");
     }
 
@@ -811,8 +811,8 @@ mod tests {
         let md = timeline_markdown("Meu diário", &[a, b, sem_data]);
         assert!(md.starts_with("# Meu diário"));
         assert!(md.contains("## 2021"));
-        assert!(md.contains("### outubro"));
-        assert!(md.contains("### fevereiro"));
+        assert!(md.contains("### October"));
+        assert!(md.contains("### February"));
         assert!(md.contains("**Duna** (2021)"));
         assert!(md.contains("8.0/10"));
         assert!(md.contains("> gostei"));
@@ -845,7 +845,7 @@ mod tests {
         assert_eq!(e[0].title, "Creep");
         assert_eq!(e[0].kind, "musica");
         assert_eq!(e[0].times, 3);
-        // A data é a da primeira escuta.
+        // The date is the first listen's.
         assert_eq!(e[0].date, "2017-07-14");
         assert_eq!(spotify_entries(&plays, 1).len(), 2);
         assert!(spotify_entries(&[], 1).is_empty());

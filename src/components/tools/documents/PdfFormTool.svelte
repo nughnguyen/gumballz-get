@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Preencher AcroForm e achatar: o valor vira tinta na página. */
+  /** Fill AcroForm and flatten: the value becomes ink on the page. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

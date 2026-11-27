@@ -1,4 +1,4 @@
-//! Return YouTube Dislike (estudo 44): leitura pública de `GET /votes`.
+//! Return YouTube Dislike (study 44): public read of `GET /votes`.
 
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
@@ -24,7 +24,7 @@ pub struct Votes {
 
 pub async fn votes(input: &str) -> anyhow::Result<Votes> {
     let id = super::sponsorblock::video_id(input)
-        .ok_or_else(|| anyhow!("nao reconheci um video do YouTube em: {}", input))?;
+        .ok_or_else(|| anyhow!("did not recognise a YouTube video in: {}", input))?;
     let client = super::client()?;
     let resp = client
         .get(format!("{}/votes?videoId={}", API, id))

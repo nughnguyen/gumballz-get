@@ -1,5 +1,5 @@
-//! Baixar um manifesto HLS (.m3u8) ou DASH (.mpd) direto pelo FFmpeg
-//! (estudos 34 e 54): `-c copy`, cabeçalhos e cookies do usuário, sem DRM.
+//! Download an HLS (.m3u8) or DASH (.mpd) manifest directly via FFmpeg
+//! (studies 34 and 54): `-c copy`, user headers and cookies, no DRM.
 
 use std::path::PathBuf;
 
@@ -59,7 +59,7 @@ pub async fn download(
     let ffmpeg = crate::core::dependencies::ensure_ffmpeg().await?;
     let url = opts.url.trim().to_string();
     if !(url.contains(".m3u8") || url.contains(".mpd") || url.starts_with("http")) {
-        return Err(anyhow!("cole a URL de um .m3u8 ou .mpd"));
+        return Err(anyhow!("paste the URL of a .m3u8 or .mpd"));
     }
     std::fs::create_dir_all(&opts.dest_dir)?;
     let mut name = super::sanitize_name(opts.file_name.trim());
@@ -149,13 +149,13 @@ pub async fn download(
     let tail = t2.await.unwrap_or_default();
     if !st.success() {
         let hint = if tail.contains("403") || tail.contains("401") {
-            " (o servidor recusou: falta Referer/cookie ou o link expirou)"
+            " (the server refused: missing Referer/cookie or the link expired)"
         } else if tail.to_lowercase().contains("drm") || tail.contains("cenc") {
-            " (conteudo com DRM nao e suportado)"
+            " (content with DRM is not supported)"
         } else {
             ""
         };
-        return Err(anyhow!("ffmpeg falhou: {}{}", tail, hint));
+        return Err(anyhow!("ffmpeg failed: {}{}", tail, hint));
     }
     super::report(&progress, &id, "done", secs as u64, Some(secs as u64), None);
     Ok(ManifestResult {

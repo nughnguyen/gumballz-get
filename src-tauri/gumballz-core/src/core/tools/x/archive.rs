@@ -1,7 +1,7 @@
-//! Arquivo do X (estudo 67): le o zip de "Baixar seus dados" (ou a pasta
-//! extraida) no formato `window.YTD.<x>.part0 = [...]` mapeado pelo
-//! twitter-archive-reader (MIT), e faz offline o que o
-//! twitter-x-unfollow-tool faz: seguindo × seguidores sem tocar na rede.
+//! X archive (study 67): reads the "Download your data" zip (or the
+//! extracted folder) in the `window.YTD.<x>.part0 = [...]` format mapped by
+//! twitter-archive-reader (MIT), and does offline what
+//! twitter-x-unfollow-tool does: following × followers without touching the network.
 
 use std::collections::HashMap;
 use std::io::Read;
@@ -93,7 +93,7 @@ impl Source {
             }
         }
         if files.is_empty() {
-            return Err(anyhow!("nao achei os arquivos data/*.js do arquivo do X"));
+            return Err(anyhow!("did not find the data/*.js files of the X archive"));
         }
         Ok(Self { files })
     }
@@ -530,6 +530,6 @@ pub fn export(path: &str, dest_dir: &str, what: &str, format: &str) -> anyhow::R
         "fans" => accounts(&l.summary.fans),
         "blocked" => accounts(&l.blocked),
         "muted" => accounts(&l.muted),
-        other => Err(anyhow!("nao sei exportar {}", other)),
+        other => Err(anyhow!("do not know how to export {}", other)),
     }
 }

@@ -1,6 +1,6 @@
-//! Exportar favoritos (estudo 67): as tres fases do xarchive (pastas →
-//! conteudo das pastas → todos os bookmarks), sem o limite de 800 da API
-//! oficial. Precisa da sessao.
+//! Export bookmarks (study 67): the three phases of xarchive (folders →
+//! folder contents → all bookmarks), without the official API's 800 limit.
+//! Needs the session.
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -83,7 +83,7 @@ pub async fn folders(client: &XClient) -> anyhow::Result<Vec<BookmarkFolder>> {
     Ok(folders_from(&v))
 }
 
-/// Lista tudo (com pastas) sem gravar nada; `max` = 0 e sem limite.
+/// Lists everything (with folders) without writing anything; `max` = 0 means no limit.
 pub async fn collect(
     max: usize,
     progress: &ProgressFn,

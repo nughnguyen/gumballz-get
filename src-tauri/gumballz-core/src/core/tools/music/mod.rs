@@ -1,12 +1,12 @@
-//! Categoria Música: o que fazer com a música que já é sua.
+//! Music category: what to do with music that is already yours.
 //!
-//! - `playlist`: casa uma playlist exportada com os arquivos do disco e
-//!   escreve `.m3u8`/`.pls` para o tocador local.
-//! - `lyrics`: letra sincronizada (`.lrc`) pelo LRCLIB.
-//! - `history`: análise do export oficial do Spotify, sem rede.
+//! - `playlist`: matches an exported playlist with the disk files and
+//!   writes `.m3u8`/`.pls` for the local player.
+//! - `lyrics`: synced lyrics (`.lrc`) via LRCLIB.
+//! - `history`: analysis of the official Spotify export, no network.
 //!
-//! `norm` é o que os três compartilham: normalizar artista e título de um
-//! jeito só, para "Song (Remastered 2011)" e "song" serem a mesma coisa.
+//! `norm` is what the three share: normalize artist and title in one
+//! single way, so "Song (Remastered 2011)" and "song" are the same thing.
 
 pub mod history;
 pub mod lyrics;

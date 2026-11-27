@@ -1,16 +1,16 @@
-//! Preencher formulário de PDF (AcroForm) e achatar.
+//! Fill in a PDF form (AcroForm) and flatten it.
 //!
-//! Escolha de caminho: tudo pelo `lopdf`, sem FFI nova no PDFium. O PDFium
-//! tem as `FPDF_Form*`, mas elas exigem um ambiente de formulário vivo
-//! (`FPDFDOC_InitFormFillEnvironment`) e não dá para exercitar isso em teste
-//! sem baixar a biblioteca. Mexer no dicionário direto é o que o Stirling-PDF
-//! faz por baixo, roda em qualquer máquina e — o que mais importa aqui — dá
-//! para testar de ponta a ponta com um PDF montado à mão, sem binário externo.
+//! Choice of path: everything through `lopdf`, with no new FFI into PDFium. PDFium
+//! has the `FPDF_Form*` calls, but they need a live form-fill environment
+//! (`FPDFDOC_InitFormFillEnvironment`) and that cannot be exercised in a test
+//! without downloading the library. Poking the dictionary directly is what Stirling-PDF
+//! does underneath, runs on any machine and — what matters most here — can
+//! be tested end to end with a hand-built PDF, with no external binary.
 //!
-//! Preencher = escrever `/V` (e `/AS` no caso de caixa e rádio) e ligar o
-//! `/NeedAppearances`, que manda o leitor redesenhar. Achatar = desenhar o
-//! valor no content stream da página com Helvetica e apagar os widgets e o
-//! `/AcroForm`, para o texto virar parte do papel.
+//! Fill = write `/V` (and `/AS` for checkbox and radio) and turn on
+//! `/NeedAppearances`, which tells the reader to redraw. Flatten = draw the
+//! value in the page's content stream with Helvetica and delete the widgets and the
+//! `/AcroForm`, so the text becomes part of the paper.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -24,7 +24,7 @@ use super::pdf_write::{decode_pdf_text, text_width};
 
 const ID: &str = "pdf-form-fill";
 
-// Bits do /Ff (a numeração da especificação começa em 1).
+// /Ff bits (the spec's numbering starts at 1).
 const FF_READONLY: i64 = 1;
 const FF_REQUIRED: i64 = 1 << 1;
 const FF_MULTILINE: i64 = 1 << 12;
@@ -33,16 +33,16 @@ const FF_PUSH: i64 = 1 << 16;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Field {
-    /// Nome completo, com o caminho do pai ("endereco.cidade").
+    /// Full name, with the parent's path ("endereco.cidade").
     pub name: String,
     /// "text" | "check" | "radio" | "choice" | "push" | "signature"
     pub kind: String,
     pub value: String,
-    /// Estados aceitos (caixa/rádio) ou itens da lista.
+    /// Accepted states (checkbox/radio) or list items.
     pub options: Vec<String>,
-    /// Página 1-based onde o campo aparece; 0 quando não tem widget.
+    /// 1-based page where the field shows up; 0 when it has no widget.
     pub page: usize,
-    /// Retângulo do widget, em pontos.
+    /// Widget rectangle, in points.
     pub rect: [f32; 4],
     pub readonly: bool,
     pub required: bool,
@@ -62,10 +62,10 @@ pub struct Options {
     pub password: String,
     #[serde(default)]
     pub values: Vec<FieldValue>,
-    /// Desenha os valores na página e apaga o formulário.
+    /// Draws the values on the page and deletes the form.
     #[serde(default)]
     pub flatten: bool,
-    /// Corpo da fonte ao achatar. 0 = calcula pela altura do campo.
+    /// Font size when flattening. 0 = computed from the field's height.
     #[serde(default)]
     pub font_size: f32,
     #[serde(default)]
@@ -78,16 +78,16 @@ pub struct Options {
 pub struct FillResult {
     pub input: String,
     pub output: String,
-    /// Campos que o documento tem.
+    /// Fields the document has.
     pub fields: usize,
-    /// Campos que receberam valor.
+    /// Fields that received a value.
     pub filled: usize,
     pub flattened: bool,
-    /// Nomes que vieram na lista e não existem no PDF.
+    /// Names that came in the list and do not exist in the PDF.
     pub missing: Vec<String>,
 }
 
-// ── Leitura ────────────────────────────────────────────────────────────
+// ── Reading ────────────────────────────────────────────────────────────
 
 pub fn kind_of(ft: &str, ff: i64) -> &'static str {
     match ft {
@@ -144,7 +144,7 @@ fn rect_of(dict: &lopdf::Dictionary) -> [f32; 4] {
             };
         }
     }
-    // Normaliza: alguns geradores escrevem o retângulo de cabeça para baixo.
+    // Normalize: some generators write the rectangle upside down.
     [
         out[0].min(out[2]),
         out[1].min(out[3]),
@@ -153,7 +153,7 @@ fn rect_of(dict: &lopdf::Dictionary) -> [f32; 4] {
     ]
 }
 
-/// Estados que a aparência do widget aceita, tirando o "Off".
+/// States the widget's appearance accepts, minus "Off".
 fn on_states(doc: &Document, widget: &lopdf::Dictionary) -> Vec<String> {
     let Some(ap) = widget.get(b"AP").ok().and_then(|o| dict_of(doc, o)) else {
         return Vec::new();
@@ -167,7 +167,7 @@ fn on_states(doc: &Document, widget: &lopdf::Dictionary) -> Vec<String> {
         .collect()
 }
 
-/// Em que página cada anotação está.
+/// Which page each annotation is on.
 fn page_index(doc: &Document) -> HashMap<ObjectId, usize> {
     let mut map = HashMap::new();
     for (no, page_id) in doc.get_pages() {
@@ -193,8 +193,8 @@ fn acroform(doc: &Document) -> Option<lopdf::Dictionary> {
     root.get(b"AcroForm").ok().and_then(|o| dict_of(doc, o))
 }
 
-/// Percorre a árvore de campos. Um nó com `/Kids` que tenham `/T` é um grupo;
-/// sem `/T`, os filhos são só os widgets do mesmo campo.
+/// Walks the field tree. A node whose `/Kids` have `/T` is a group;
+/// without `/T`, the children are just the widgets of the same field.
 #[allow(clippy::too_many_arguments)]
 fn walk(
     doc: &Document,
@@ -260,7 +260,7 @@ fn walk(
         })
         .unwrap_or_default();
 
-    // Widgets: o próprio campo (quando é widget mesclado) ou os filhos sem /T.
+    // Widgets: the field itself (when it is a merged widget) or the children without /T.
     let widgets: Vec<ObjectId> = if kids.is_empty() {
         vec![id]
     } else {
@@ -305,10 +305,10 @@ fn load(input: &str, password: &str) -> anyhow::Result<Document> {
         let bytes = std::fs::read(input)?;
         Document::load_mem_with_options(&bytes, lopdf::LoadOptions::with_password(password))
     };
-    doc.map_err(|e| anyhow!("não abri o PDF: {}", e))
+    doc.map_err(|e| anyhow!("could not open the PDF: {}", e))
 }
 
-/// Lista os campos do formulário.
+/// Lists the form's fields.
 pub fn read_fields(input: &str, password: &str) -> anyhow::Result<Vec<Field>> {
     let doc = load(input, password)?;
     Ok(fields_of(&doc))
@@ -331,10 +331,10 @@ fn fields_of(doc: &Document) -> Vec<Field> {
     out
 }
 
-// ── Escrita ────────────────────────────────────────────────────────────
+// ── Writing ────────────────────────────────────────────────────────────
 
-/// Valor de caixa/rádio: o que o usuário digitou vira um estado que o widget
-/// conhece. "sim", "1", "x", "true", "on" ligam a caixa.
+/// Checkbox/radio value: what the user typed becomes a state the widget
+/// knows. "sim", "1", "x", "true", "on" switch the box on.
 pub fn button_state(value: &str, options: &[String]) -> String {
     let v = value.trim();
     if let Some(hit) = options.iter().find(|o| o.eq_ignore_ascii_case(v)) {
@@ -351,7 +351,7 @@ pub fn button_state(value: &str, options: &[String]) -> String {
     }
 }
 
-/// Quebra o valor nas linhas que cabem na largura dada.
+/// Breaks the value into the lines that fit the given width.
 pub fn wrap(text: &str, width: f32, size: f32) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for para in text.split(['\n', '\r']) {
@@ -381,7 +381,7 @@ pub fn wrap(text: &str, width: f32, size: f32) -> Vec<String> {
     out
 }
 
-/// Operações que desenham o valor dentro do retângulo do campo.
+/// Operations that draw the value inside the field's rectangle.
 pub fn draw_ops(text: &str, rect: [f32; 4], size: f32, multiline: bool) -> Vec<Operation> {
     let (w, h) = (rect[2] - rect[0], rect[3] - rect[1]);
     if text.trim().is_empty() || w <= 1.0 || h <= 1.0 {
@@ -400,7 +400,7 @@ pub fn draw_ops(text: &str, rect: [f32; 4], size: f32, multiline: bool) -> Vec<O
     };
     let mut ops = vec![
         Operation::new("q", vec![]),
-        // Recorta no campo: valor comprido não vaza para o resto da página.
+        // Clips to the field: a long value does not spill onto the rest of the page.
         Operation::new(
             "re",
             vec![
@@ -416,7 +416,7 @@ pub fn draw_ops(text: &str, rect: [f32; 4], size: f32, multiline: bool) -> Vec<O
         Operation::new("BT", vec![]),
         Operation::new("Tf", vec!["OGFFfont".into(), Object::Real(size)]),
     ];
-    // Uma linha só fica no meio da altura; várias começam no topo.
+    // A single line sits in the middle of the height; several start at the top.
     let mut y = if multiline && lines.len() > 1 {
         rect[3] - size - pad
     } else {
@@ -428,7 +428,7 @@ pub fn draw_ops(text: &str, rect: [f32; 4], size: f32, multiline: bool) -> Vec<O
             vec![Object::Real(rect[0] + pad), Object::Real(y)],
         ));
         ops.push(Operation::new("Tj", vec![Object::string_literal(line)]));
-        // O `Td` é relativo à linha anterior: volta o deslocamento aplicado.
+        // `Td` is relative to the previous line: undo the shift applied.
         ops.push(Operation::new(
             "Td",
             vec![Object::Real(-(rect[0] + pad)), Object::Real(-y)],
@@ -443,7 +443,7 @@ pub fn draw_ops(text: &str, rect: [f32; 4], size: f32, multiline: bool) -> Vec<O
     ops
 }
 
-/// Onde acrescentar recurso sem esconder o que a página herda.
+/// Where to add a resource without hiding what the page inherits.
 fn resource_dict_id(doc: &mut Document, page_id: ObjectId) -> Option<ObjectId> {
     let inline = doc
         .get_dictionary(page_id)
@@ -488,7 +488,7 @@ fn resource_dict_id(doc: &mut Document, page_id: ObjectId) -> Option<ObjectId> {
     }
 }
 
-/// Todos os widgets do campo, com a página de cada um.
+/// All the field's widgets, with each one's page.
 fn widgets_of(doc: &Document, id: ObjectId, pages: &HashMap<ObjectId, usize>) -> Vec<ObjectId> {
     let Ok(dict) = doc.get_dictionary(id) else {
         return Vec::new();
@@ -505,7 +505,7 @@ fn widgets_of(doc: &Document, id: ObjectId, pages: &HashMap<ObjectId, usize>) ->
     }
 }
 
-/// Índice nome-completo → objeto do campo.
+/// Index of full-name → field object.
 fn field_ids(doc: &Document) -> Vec<(String, ObjectId)> {
     let Some(form) = acroform(doc) else {
         return Vec::new();
@@ -567,7 +567,7 @@ fn out_path(opts: &Options) -> anyhow::Result<PathBuf> {
     let stem = inp
         .file_stem()
         .map(|s| s.to_string_lossy().to_string())
-        .unwrap_or_else(|| "documento".into());
+        .unwrap_or_else(|| "document".into());
     let suffix = if opts.suffix.trim().is_empty() {
         if opts.flatten {
             "-preenchido"
@@ -582,12 +582,12 @@ fn out_path(opts: &Options) -> anyhow::Result<PathBuf> {
 
 pub fn fill(opts: &Options, progress: &super::ProgressFn) -> anyhow::Result<FillResult> {
     if opts.input.trim().is_empty() {
-        return Err(anyhow!("escolha o PDF"));
+        return Err(anyhow!("choose the PDF"));
     }
     let mut doc = load(&opts.input, &opts.password)?;
     let known = fields_of(&doc);
     if known.is_empty() {
-        return Err(anyhow!("esse PDF não tem formulário (AcroForm)"));
+        return Err(anyhow!("this PDF has no form (AcroForm)"));
     }
     let index = field_ids(&doc);
     let pages = page_index(&doc);
@@ -595,7 +595,7 @@ pub fn fill(opts: &Options, progress: &super::ProgressFn) -> anyhow::Result<Fill
 
     let mut filled = 0usize;
     let mut missing: Vec<String> = Vec::new();
-    // O que desenhar quando achatar: (página, retângulo, texto, multilinha).
+    // What to draw when flattening: (page, rectangle, text, multiline).
     let mut stamps: Vec<(usize, [f32; 4], String, bool)> = Vec::new();
 
     for (i, v) in opts.values.iter().enumerate() {
@@ -659,7 +659,7 @@ pub fn fill(opts: &Options, progress: &super::ProgressFn) -> anyhow::Result<Fill
             _ => {
                 if let Ok(field) = doc.get_dictionary_mut(id) {
                     field.set("V", Object::string_literal(v.value.as_str()));
-                    // A aparência velha mostraria o valor antigo.
+                    // The old appearance would show the old value.
                     field.remove(b"AP");
                 }
                 for w in &widgets {
@@ -675,7 +675,7 @@ pub fn fill(opts: &Options, progress: &super::ProgressFn) -> anyhow::Result<Fill
         filled += 1;
     }
 
-    // O leitor tem que redesenhar a aparência com o valor novo.
+    // The reader has to redraw the appearance with the new value.
     if let Ok(root) = doc.catalog_mut() {
         if let Ok(Object::Reference(r)) = root.get(b"AcroForm").cloned() {
             if let Ok(Object::Dictionary(form)) = doc.get_object_mut(r) {
@@ -692,7 +692,7 @@ pub fn fill(opts: &Options, progress: &super::ProgressFn) -> anyhow::Result<Fill
 
     let output = out_path(opts)?;
     doc.save(&output)
-        .map_err(|e| anyhow!("não gravei {}: {}", output.display(), e))?;
+        .map_err(|e| anyhow!("could not save {}: {}", output.display(), e))?;
     super::report(progress, ID, "done", total, Some(total), None);
     Ok(FillResult {
         input: opts.input.clone(),
@@ -704,7 +704,7 @@ pub fn fill(opts: &Options, progress: &super::ProgressFn) -> anyhow::Result<Fill
     })
 }
 
-/// Desenha os valores nas páginas e apaga o formulário inteiro.
+/// Draws the values on the pages and deletes the whole form.
 fn flatten(
     doc: &mut Document,
     stamps: &[(usize, [f32; 4], String, bool)],
@@ -726,7 +726,7 @@ fn flatten(
         if !ops.is_empty() {
             let data = Content { operations: ops }
                 .encode()
-                .map_err(|e| anyhow!("conteúdo: {}", e))?;
+                .map_err(|e| anyhow!("content: {}", e))?;
             let stream_id = doc.add_object(Stream::new(dictionary! {}, data));
             if let Some(res_id) = resource_dict_id(doc, *page_id) {
                 if let Ok(res) = doc.get_dictionary_mut(res_id) {
@@ -785,9 +785,9 @@ fn flatten(
 mod tests {
     use super::*;
 
-    /// Formulário de teste: um campo de texto, uma caixa de marcar e um campo
-    /// filho dentro de um grupo. Montado com o próprio lopdf, sem arquivo
-    /// binário no repositório.
+    /// Test form: one text field, one checkbox and one child field
+    /// inside a group. Built with lopdf itself, with no binary file
+    /// in the repository.
     fn build_form(path: &Path) {
         let mut doc = Document::with_version("1.5");
         let pages_id = doc.new_object_id();
@@ -885,7 +885,7 @@ mod tests {
         assert_eq!(button_state("Yes", &opts), "Yes");
         assert_eq!(button_state("nao", &opts), "Off");
         assert_eq!(button_state("1", &[]), "Yes");
-        // Estado com nome próprio casa sem olhar a caixa.
+        // A state with its own name matches without looking at the box.
         assert_eq!(button_state("opcao2", &["Opcao2".into()]), "Opcao2");
     }
 
@@ -906,9 +906,9 @@ mod tests {
         let ops = draw_ops("Maria", [50.0, 600.0, 200.0, 620.0], 0.0, false);
         let dump = format!("{:?}", ops);
         assert!(dump.contains("Maria"), "{}", dump);
-        assert!(dump.contains("\"W\""), "sem recorte: {}", dump);
+        assert!(dump.contains("\"W\""), "no clipping: {}", dump);
         assert!(dump.contains("OGFFfont"), "{}", dump);
-        // Campo vazio não desenha nada.
+        // An empty field draws nothing.
         assert!(draw_ops("  ", [50.0, 600.0, 200.0, 620.0], 0.0, false).is_empty());
     }
 
@@ -974,7 +974,7 @@ mod tests {
         assert_eq!(by("nome").value, "Maria Souza");
         assert_eq!(by("aceito").value, "Yes");
         assert_eq!(by("endereco.cidade").value, "Recife");
-        // O formulário continua lá para o usuário editar.
+        // The form stays there for the user to edit.
         let doc = Document::load(&out.output).unwrap();
         assert!(acroform(&doc).is_some());
         let _ = std::fs::remove_dir_all(&dir);
@@ -1011,12 +1011,12 @@ mod tests {
         let page_id = doc.get_pages().into_values().next().unwrap();
         assert!(
             doc.get_dictionary(page_id).unwrap().get(b"Annots").is_err(),
-            "sobrou widget na página"
+            "widget left on the page"
         );
         let content = String::from_utf8_lossy(&doc.get_page_content(page_id)).to_string();
         assert!(content.contains("Maria Souza"), "{}", content);
-        assert!(content.contains("(X)"), "a caixa marcada não foi desenhada");
-        // E não há mais campo nenhum para ler.
+        assert!(content.contains("(X)"), "the checked box was not drawn");
+        // And there is no field left to read.
         assert!(read_fields(&out.output, "").unwrap().is_empty());
         let _ = std::fs::remove_dir_all(&dir);
     }

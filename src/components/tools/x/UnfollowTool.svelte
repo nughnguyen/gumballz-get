@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Quem não me segue de volta (estudo 67): auditoria, whitelist e unfollow com jitter e limite diário. */
+  /** Who doesn't follow me back (study 67): audit, whitelist and unfollow with jitter and a daily cap. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

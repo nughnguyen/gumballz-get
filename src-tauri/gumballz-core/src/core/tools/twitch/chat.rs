@@ -1,13 +1,13 @@
-//! Replay de chat de VOD/clipe → JSON, CSV e legenda (SRT/ASS).
+//! VOD/clip chat replay → JSON, CSV and subtitles (SRT/ASS).
 //!
-//! Usa a persisted query pública `VideoCommentsByOffsetOrCursor`, a mesma que
-//! o player usa quando você assiste a um VOD gravado. Sem login.
+//! Uses the public persisted query `VideoCommentsByOffsetOrCursor`, the same one
+//! the player uses when you watch a recorded VOD. No login.
 //!
-//! Duas formas de paginar: por `cursor` (uma página emenda na outra) e por
-//! `contentOffsetSeconds` (a Twitch devolve uma janela em volta do segundo
-//! pedido). O cursor é mais barato, mas hoje ele cai em `IntegrityCheckFailed`
-//! para cliente anônimo; então a gente tenta cursor, e ao primeiro erro de
-//! integridade passa a caminhar por offset e deduplicar por id da mensagem.
+//! Two ways to paginate: by `cursor` (one page joins the next) and by
+//! `contentOffsetSeconds` (Twitch returns a window around the requested
+//! second). The cursor is cheaper, but today it falls into `IntegrityCheckFailed`
+//! for an anonymous client; so we try the cursor, and at the first integrity
+//! error we switch to walking by offset and deduping by message id.
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -26,27 +26,27 @@ const OP: &str = "VideoCommentsByOffsetOrCursor";
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Options {
-    /// Link (ou id) de um VOD, ou link de um clipe.
+    /// Link (or id) of a VOD, or link of a clip.
     pub input: String,
     pub out_dir: String,
-    /// "json" | "csv" | "srt" | "ass"; vazio exporta JSON e CSV.
+    /// "json" | "csv" | "srt" | "ass"; empty exports JSON and CSV.
     #[serde(default)]
     pub formats: Vec<String>,
     #[serde(default)]
     pub start_seconds: f64,
-    /// 0 = até o fim do VOD.
+    /// 0 = to the end of the VOD.
     #[serde(default)]
     pub end_seconds: f64,
-    /// Janela de agrupamento da legenda, em segundos.
+    /// Subtitle grouping window, in seconds.
     #[serde(default = "def_window")]
     pub window_seconds: f64,
-    /// Máximo de linhas por bloco de legenda.
+    /// Maximum lines per subtitle block.
     #[serde(default = "def_lines")]
     pub max_lines: usize,
-    /// Pausa entre páginas, para não bater rápido demais.
+    /// Pause between pages, so it does not hit too fast.
     #[serde(default = "def_delay")]
     pub delay_ms: u64,
-    /// 0 = sem limite.
+    /// 0 = no limit.
     #[serde(default)]
     pub max_messages: usize,
 }
@@ -64,7 +64,7 @@ fn def_delay() -> u64 {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Fragment {
     pub text: String,
-    /// Id do emote nativo, quando o pedaço é um emote.
+    /// Native emote id, when the fragment is an emote.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub emote: Option<String>,
 }
@@ -72,7 +72,7 @@ pub struct Fragment {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Message {
     pub id: String,
-    /// Segundo do VOD em que a mensagem aparece.
+    /// VOD second at which the message appears.
     pub offset: f64,
     pub created_at: String,
     pub author: String,
@@ -104,15 +104,15 @@ pub struct Result {
     pub duration_seconds: f64,
     pub messages: usize,
     pub pages: usize,
-    /// Mensagens por minuto, do começo ao fim do trecho baixado.
+    /// Messages per minute, from the start to the end of the downloaded stretch.
     pub series: Vec<Peak>,
-    /// Os minutos mais movimentados, do maior para o menor.
+    /// The busiest minutes, largest first.
     pub top_peaks: Vec<Peak>,
     pub top_chatters: Vec<Chatter>,
     pub files: Vec<String>,
-    /// Ficou `true` quando a Twitch recusou a paginação por cursor.
+    /// Became `true` when Twitch refused the cursor pagination.
     pub offset_fallback: bool,
-    /// Amostra para a UI mostrar sem carregar tudo.
+    /// Sample for the UI to show without loading everything.
     pub sample: Vec<Message>,
 }
 
@@ -125,12 +125,12 @@ pub struct Page {
     pub has_next: bool,
 }
 
-/// Lê um elemento da resposta em lote da persisted query.
+/// Reads one element of the persisted query's batch response.
 pub fn parse_page(raw: &Value) -> anyhow::Result<Page> {
     let comments = raw
         .pointer("/data/video/comments")
         .filter(|v| !v.is_null())
-        .ok_or_else(|| anyhow!("resposta sem comentários (o VOD tem replay de chat?)"))?;
+        .ok_or_else(|| anyhow!("response without comments (does the VOD have chat replay?)"))?;
     let edges = comments
         .get("edges")
         .and_then(|v| v.as_array())
@@ -263,8 +263,8 @@ pub fn to_csv(msgs: &[Message]) -> String {
     out
 }
 
-/// Agrupa as mensagens em janelas de `window` segundos, guardando as últimas
-/// `max_lines` de cada janela (é o que cabe na tela quando queimar).
+/// Groups the messages into `window`-second windows, keeping the last
+/// `max_lines` of each window (that is what fits on screen when burning).
 pub fn to_cues(msgs: &[Message], window: f64, max_lines: usize) -> Vec<Cue> {
     let window = if window > 0.0 { window } else { 5.0 };
     let max_lines = max_lines.max(1);
@@ -300,7 +300,7 @@ pub fn to_cues(msgs: &[Message], window: f64, max_lines: usize) -> Vec<Cue> {
         .collect()
 }
 
-/// Mensagens por janela (por padrão, por minuto): o mapa de melhores momentos.
+/// Messages per window (by default, per minute): the highlights map.
 pub fn peaks(msgs: &[Message], bucket_seconds: f64) -> Vec<Peak> {
     let bucket = if bucket_seconds > 0.0 {
         bucket_seconds
@@ -349,8 +349,8 @@ pub fn top_chatters(msgs: &[Message], n: usize) -> Vec<Chatter> {
 
 // ───────────────────────── coleta ─────────────────────────
 
-/// Puxa a timeline inteira. Devolve as mensagens em ordem e quantas páginas
-/// custou; `offset_fallback` diz se a Twitch recusou o cursor no meio.
+/// Pulls the whole timeline. Returns the messages in order and how many pages
+/// it cost; `offset_fallback` says whether Twitch refused the cursor mid-way.
 pub async fn fetch_all(
     gql: &Gql,
     video_id: &str,
@@ -389,8 +389,8 @@ pub async fn fetch_all(
         if let Some(msg) = first_error(&raw) {
             let integrity = msg.to_lowercase().contains("integrity");
             if integrity && use_cursor {
-                // A Twitch fechou o cursor para cliente anônimo: segue por
-                // offset, deduplicando pelas mensagens que já vieram.
+                // Twitch closed the cursor for anonymous clients: continue by
+                // offset, deduping by the messages that already arrived.
                 use_cursor = false;
                 offset_fallback = true;
                 cursor = None;
@@ -442,8 +442,8 @@ pub async fn fetch_all(
         if use_cursor && page.cursor.is_some() {
             cursor = page.cursor;
         } else {
-            // A janela por offset vem em volta do segundo pedido, então ela
-            // repete o que já veio: avança e, se travar, empurra um segundo.
+            // The offset window comes around the requested second, so it
+            // repeats what already arrived: advance and, if stuck, push one second.
             let next = if fresh == 0 {
                 last_offset + 1.0
             } else {
@@ -482,10 +482,10 @@ pub async fn fetch_all(
 
 pub async fn export(opts: &Options, p: &ProgressFn) -> anyhow::Result<Result> {
     let gql = Gql::new()?;
-    report(p, ID, "progress", 0, None, Some("lendo o VOD".into()));
+    report(p, ID, "progress", 0, None, Some("reading the VOD".into()));
     let info: VideoInfo = gql.resolve_chat_target(&opts.input).await?;
 
-    // Clipe: já limita o trecho à janela do clipe, com uma folga de 5 s.
+    // Clip: already limits the stretch to the clip window, with a 5 s slack.
     let mut opts = opts.clone();
     if let (Some(off), Some(dur)) = (info.clip_offset, info.clip_duration) {
         if opts.start_seconds <= 0.0 {
@@ -499,7 +499,7 @@ pub async fn export(opts: &Options, p: &ProgressFn) -> anyhow::Result<Result> {
     let (messages, pages, offset_fallback) =
         fetch_all(&gql, &info.id, &opts, info.duration_seconds, p).await?;
     if messages.is_empty() {
-        bail!("esse VOD não devolveu nenhuma mensagem de chat");
+        bail!("this VOD returned no chat messages");
     }
 
     let formats: Vec<String> = if opts.formats.is_empty() {
@@ -548,7 +548,7 @@ pub async fn export(opts: &Options, p: &ProgressFn) -> anyhow::Result<Result> {
                 let cues = to_cues(&messages, opts.window_seconds, opts.max_lines);
                 (format.as_str(), subtitle::render(&cues, format))
             }
-            other => bail!("formato desconhecido: {}", other),
+            other => bail!("unknown format: {}", other),
         };
         let path = dir.join(format!("{}.{}", stem, ext));
         std::fs::write(&path, body)?;
@@ -622,12 +622,12 @@ mod tests {
     }
 
     fn msgs() -> Vec<Message> {
-        parse_page(&page_fixture()).expect("página válida").messages
+        parse_page(&page_fixture()).expect("valid page").messages
     }
 
     #[test]
     fn normaliza_a_pagina_de_comentarios() {
-        let page = parse_page(&page_fixture()).expect("página válida");
+        let page = parse_page(&page_fixture()).expect("valid page");
         assert!(page.has_next);
         assert_eq!(page.cursor.as_deref(), Some("cur-2"));
         assert_eq!(page.messages.len(), 2);
@@ -637,7 +637,7 @@ mod tests {
         assert_eq!(m1.offset, 9.0);
         assert_eq!(m1.author, "mangotree623");
         assert_eq!(m1.color, "#FFBF00");
-        // O badge sem setID é descartado.
+        // The badge without a setID is discarded.
         assert_eq!(m1.badges, vec!["premium/1".to_string()]);
         assert_eq!(m1.text, "LIVE  OOOO");
 
@@ -751,7 +751,7 @@ mod tests {
         let vod = data
             .pointer("/user/videos/edges/0/node/id")
             .and_then(|v| v.as_str())
-            .expect("um VOD público")
+            .expect("a public VOD")
             .to_string();
         let dir = super::super::super::temp_dir().join("tw-chat-teste");
         let _ = std::fs::remove_dir_all(&dir);
@@ -768,15 +768,15 @@ mod tests {
         };
         let out = export(&opts, &super::super::super::noop_progress())
             .await
-            .expect("exportação do chat");
-        assert!(out.messages >= 100, "poucas mensagens: {}", out.messages);
+            .expect("chat export");
+        assert!(out.messages >= 100, "too few messages: {}", out.messages);
         assert_eq!(out.files.len(), 3);
         for f in &out.files {
-            let meta = std::fs::metadata(f).expect("arquivo exportado");
-            assert!(meta.len() > 0, "arquivo vazio: {}", f);
+            let meta = std::fs::metadata(f).expect("exported file");
+            assert!(meta.len() > 0, "empty file: {}", f);
         }
         println!(
-            "VOD {} · {} mensagens em {} páginas · fallback por offset: {} · pico {:?}",
+            "VOD {} · {} messages in {} pages · offset fallback: {} · peak {:?}",
             out.video_id,
             out.messages,
             out.pages,
@@ -787,10 +787,10 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "rede: puxa a primeira página de chat de um VOD público"]
+    #[ignore = "network: pulls the first chat page of a public VOD"]
     async fn live_primeira_pagina_de_chat() {
-        let gql = Gql::new().expect("cliente");
-        // Último VOD público de um canal grande, para o teste não envelhecer.
+        let gql = Gql::new().expect("client");
+        // Last public VOD of a big channel, so the test does not go stale.
         let data = gql
             .query(r#"{ user(login: "xqc") { videos(first: 1) { edges { node { id } } } } }"#)
             .await
@@ -798,7 +798,7 @@ mod tests {
         let vod = data
             .pointer("/user/videos/edges/0/node/id")
             .and_then(|v| v.as_str())
-            .expect("um VOD público")
+            .expect("a public VOD")
             .to_string();
         let info = gql.video(&vod).await.expect("metadados do VOD");
         assert!(info.duration_seconds > 0.0);
@@ -810,14 +810,14 @@ mod tests {
                 json!({ "videoID": vod, "contentOffsetSeconds": 0 }),
             )
             .await
-            .expect("primeira página");
+            .expect("first page");
         assert!(
             first_error(&raw).is_none(),
-            "erro do GQL: {:?}",
+            "GQL error: {:?}",
             first_error(&raw)
         );
-        let page = parse_page(&raw).expect("página normalizada");
-        assert!(!page.messages.is_empty(), "primeira página veio vazia");
+        let page = parse_page(&raw).expect("normalized page");
+        assert!(!page.messages.is_empty(), "first page came empty");
         println!(
             "VOD {} ({}) · {} mensagens · hasNext={} · primeira: {:?}",
             vod,

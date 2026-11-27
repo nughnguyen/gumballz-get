@@ -678,7 +678,7 @@ impl RedditDownloader {
                 let url = &info
                     .available_qualities
                     .first()
-                    .ok_or_else(|| anyhow!("Nenhum URL GIF"))?
+                    .ok_or_else(|| anyhow!("No GIF URL"))?
                     .url;
                 let output = opts
                     .output_dir
@@ -703,7 +703,7 @@ impl RedditDownloader {
                 let quality = info
                     .available_qualities
                     .first()
-                    .ok_or_else(|| anyhow!("Nenhum URL de imagem"))?;
+                    .ok_or_else(|| anyhow!("No image URL"))?;
                 let ext = &quality.format;
                 let output = opts.output_dir.join(format!(
                     "{}.{}",

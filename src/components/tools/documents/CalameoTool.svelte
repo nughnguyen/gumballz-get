@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Calameo (estudos 48/49): páginas SVG/JPG numa pasta; PDF quando as páginas são JPEG. */
+  /** Calameo (studies 48/49): SVG/JPG pages in a folder; PDF when the pages are JPEG. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

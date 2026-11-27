@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Upscale com Real-ESRGAN ncnn Vulkan (estudo 37). */
+  /** Upscale with Real-ESRGAN ncnn Vulkan (study 37). */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

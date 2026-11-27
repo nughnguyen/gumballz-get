@@ -1,16 +1,16 @@
-//! Foto ou vídeo → figurinha de WhatsApp e Telegram.
+//! Photo or video → WhatsApp and Telegram sticker.
 //!
-//! Os dois apps aceitam WebP quadrado de 512 px, e é aí que a coisa aperta:
-//! o limite não é de resolução, é de **bytes**. WhatsApp quer 100 KB no
-//! estático e 500 KB no animado (até 10 s); o Telegram quer 512 KB no
-//! estático e, no animado, um `.webm` VP9 de até 3 s e 256 KB.
+//! Both apps accept square 512 px WebP, and that is where it gets tight:
+//! the limit is not resolution, it is **bytes**. WhatsApp wants 100 KB for
+//! static and 500 KB for animated (up to 10 s); Telegram wants 512 KB for
+//! static and, for animated, a VP9 `.webm` of up to 3 s and 256 KB.
 //!
-//! Como não dá para calcular o peso do WebP de cabeça, o módulo faz o mesmo
-//! que o `image_compress`: desce uma escada de qualidade/fps até caber e, se
-//! nem no degrau mais baixo couber, devolve `hit_target: false` em vez de
-//! fingir que deu certo. A transparência é preservada em todos os caminhos
-//! (`yuva420p`), e o enquadramento é `contain` (cabe inteiro, com folga em
-//! volta) ou `cover` (preenche e corta).
+//! Since the WebP weight cannot be worked out by hand, the module does the same
+//! as `image_compress`: it walks down a ladder of quality/fps until it fits and, if
+//! it does not fit even on the lowest rung, it returns `hit_target: false` instead of
+//! pretending it worked. Transparency is preserved on every path
+//! (`yuva420p`), and the framing is `contain` (fits whole, with slack
+//! around) or `cover` (fills and crops).
 
 use std::path::{Path, PathBuf};
 
@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 
 const ID: &str = "wa-sticker";
 
-/// Extensões que valem como fonte animada quando o modo é "auto".
+/// Extensions that count as an animated source when the mode is "auto".
 const ANIMATED_EXT: &[&str] = &[
     "mp4", "mov", "mkv", "webm", "avi", "m4v", "gif", "apng", "flv", "ts",
 ];
@@ -28,17 +28,17 @@ const ANIMATED_EXT: &[&str] = &[
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Spec {
-    /// Lado do quadro final, em pixels.
+    /// Frame side, in pixels.
     pub size: u32,
     pub max_bytes: u64,
-    /// 0 no estático.
+    /// 0 for static.
     pub max_seconds: f64,
     pub ext: &'static str,
     pub encoder: &'static str,
 }
 
-/// Limites oficiais. `target` é "whatsapp" ou "telegram"; qualquer outra
-/// coisa cai no WhatsApp, que é o mais apertado dos dois.
+/// Official limits. `target` is "whatsapp" or "telegram"; anything else
+/// falls to WhatsApp, which is the tighter of the two.
 pub fn spec(target: &str, animated: bool) -> Spec {
     match (target, animated) {
         ("telegram", false) => Spec {
@@ -81,8 +81,8 @@ pub fn is_animated_source(path: &str) -> bool {
 
 // ── Enquadramento ──
 
-/// Lado útil dentro do quadro depois da margem. Sempre par (o VP9 exige) e
-/// nunca menor que 16 px, senão uma margem absurda zeraria a figurinha.
+/// Usable side inside the frame after the margin. Always even (VP9 requires it) and
+/// never smaller than 16 px, otherwise an absurd margin would zero out the sticker.
 pub fn inner_size(size: u32, padding: u32) -> u32 {
     let size = size.max(16);
     let max_pad = (size - 16) / 2;
@@ -91,9 +91,9 @@ pub fn inner_size(size: u32, padding: u32) -> u32 {
     inner - inner % 2
 }
 
-/// Cadeia `-vf` do enquadramento. `contain` encaixa a imagem inteira e
-/// preenche o resto com transparente; `cover` preenche o quadro e corta o
-/// que sobra. Nos dois casos o resultado é `size`×`size` com alfa.
+/// The `-vf` chain of the framing. `contain` fits the whole image and
+/// fills the rest with transparency; `cover` fills the frame and crops what
+/// is left over. In both cases the result is `size`×`size` with alpha.
 pub fn fit_filter(fit: &str, size: u32, padding: u32) -> String {
     let inner = inner_size(size, padding);
     let core = if fit == "cover" {
@@ -118,15 +118,15 @@ pub fn fit_filter(fit: &str, size: u32, padding: u32) -> String {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct Attempt {
-    /// Qualidade do WebP (1-100); no VP9 vira o fator do bitrate.
+    /// WebP quality (1-100); in VP9 it becomes the bitrate factor.
     pub quality: u32,
-    /// 0 no estático.
+    /// 0 for static.
     pub fps: u32,
 }
 
-/// Degraus da busca, do melhor para o pior. Poucos e bem espaçados: cada
-/// degrau é uma chamada de ffmpeg, e vinte tentativas fariam a figurinha
-/// demorar mais que o vídeo.
+/// Search rungs, from best to worst. Few and well spaced: each
+/// rung is an ffmpeg call, and twenty attempts would make the sticker
+/// take longer than the video.
 pub fn attempts(animated: bool) -> Vec<Attempt> {
     if animated {
         vec![
@@ -195,8 +195,8 @@ pub fn attempts(animated: bool) -> Vec<Attempt> {
     }
 }
 
-/// Bitrate de vídeo para caber no alvo, em kbps. O `headroom` desconta o
-/// overhead do container WebM; mirar 100% estoura por alguns por cento.
+/// Video bitrate to fit the target, in kbps. `headroom` discounts the
+/// WebM container overhead; aiming at 100% overshoots by a few percent.
 pub fn plan_bitrate(target_bytes: u64, duration_s: f64, quality: u32) -> u32 {
     if duration_s <= 0.0 {
         return 256;
@@ -215,12 +215,12 @@ pub struct Job {
     pub fit: String,
     pub padding: u32,
     pub start: f64,
-    /// Duração pedida; 0 = o que couber no limite do alvo.
+    /// Requested duration; 0 = whatever fits in the target's limit.
     pub duration: f64,
 }
 
-/// Argumentos completos do ffmpeg para uma tentativa. Função pura: o teste
-/// confere a linha inteira sem rodar nada.
+/// Full ffmpeg arguments for one attempt. Pure function: the test
+/// checks the whole line without running anything.
 pub fn build_args(
     job: &Job,
     spec: &Spec,
@@ -257,7 +257,7 @@ pub fn build_args(
             a.push("libvpx-vp9".into());
             a.push("-pix_fmt".into());
             a.push("yuva420p".into());
-            // Alfa em VP9 só funciona com alt-ref desligado.
+            // Alpha in VP9 only works with alt-ref off.
             a.push("-auto-alt-ref".into());
             a.push("0".into());
             a.push("-b:v".into());
@@ -301,7 +301,7 @@ pub fn build_args(
     a
 }
 
-/// Duração final: o pedido do usuário, cortado no teto do alvo.
+/// Final duration: what the user asked for, cut at the target's cap.
 pub fn clamp_duration(wanted: f64, max_seconds: f64) -> f64 {
     let teto = if max_seconds > 0.0 { max_seconds } else { 10.0 };
     if wanted <= 0.0 {
@@ -338,27 +338,27 @@ pub struct StickerOptions {
     /// "contain" | "cover"
     #[serde(default = "default_fit")]
     pub fit: String,
-    /// Margem em pixels dentro do quadro de 512.
+    /// Margin in pixels inside the 512 frame.
     #[serde(default = "default_padding")]
     pub padding: u32,
     #[serde(default)]
     pub start: f64,
-    /// 0 = o máximo que o alvo permite.
+    /// 0 = the most the target allows.
     #[serde(default)]
     pub duration: f64,
-    /// 0 = o limite oficial do alvo.
+    /// 0 = the target's official limit.
     #[serde(default)]
     pub max_kb: u64,
     #[serde(default)]
     pub output_dir: String,
-    /// Gera o `pack.json` (e a bandeja) ao lado das figurinhas.
+    /// Generates the `pack.json` (and the tray) next to the stickers.
     #[serde(default)]
     pub pack: bool,
     #[serde(default)]
     pub pack_name: String,
     #[serde(default)]
     pub pack_author: String,
-    /// Emojis padrão de cada figurinha, separados por espaço.
+    /// Default emojis for each sticker, separated by spaces.
     #[serde(default)]
     pub emoji: String,
 }
@@ -420,7 +420,7 @@ async fn convert_one(
 ) -> anyhow::Result<StickerItem> {
     let inp = Path::new(input);
     if !inp.exists() {
-        return Err(anyhow!("arquivo não existe"));
+        return Err(anyhow!("file does not exist"));
     }
     let animated = wants_animated(opts, input);
     let mut spec = spec(&opts.target, animated);
@@ -484,17 +484,17 @@ async fn convert_one(
             .args(&args)
             .output()
             .await
-            .map_err(|e| anyhow!("ffmpeg nao iniciou: {}", e))?;
+            .map_err(|e| anyhow!("ffmpeg did not start: {}", e))?;
         if !out.status.success() {
             let msg = String::from_utf8_lossy(&out.stderr).trim().to_string();
-            // Falhar já no primeiro degrau é erro de verdade (codec ausente,
-            // arquivo corrompido); nos degraus seguintes já existe um arquivo
-            // bom na mão, então vale ficar com ele.
+            // Failing on the first rung is a real error (missing codec,
+            // corrupt file); on later rungs a good file is already in hand,
+            // so it is worth keeping it.
             if best.is_none() {
                 return Err(anyhow!("{}", msg));
             }
             tracing::warn!(
-                "[wa-sticker] tentativa q{} falhou: {}",
+                "[wa-sticker] attempt q{} failed: {}",
                 attempt.quality,
                 msg
             );
@@ -507,7 +507,7 @@ async fn convert_one(
         }
     }
 
-    let (bytes, attempt) = best.ok_or_else(|| anyhow!("nenhuma tentativa rodou"))?;
+    let (bytes, attempt) = best.ok_or_else(|| anyhow!("no attempt ran"))?;
     Ok(StickerItem {
         input: input.to_string(),
         output: Some(output.to_string_lossy().to_string()),
@@ -540,8 +540,8 @@ async fn make_tray(ffmpeg: &Path, source: &str, dir: &Path) -> Option<String> {
         .then(|| dest.to_string_lossy().to_string())
 }
 
-/// `pack.json` no formato que os apps de pacote leem (o mesmo `contents.json`
-/// do app de exemplo do WhatsApp).
+/// `pack.json` in the format the pack apps read (the same `contents.json`
+/// as the WhatsApp sample app).
 pub fn pack_json(
     name: &str,
     author: &str,
@@ -694,7 +694,7 @@ mod tests {
             (tg.max_bytes, tg.max_seconds, tg.ext),
             (256 * 1024, 3.0, "webm")
         );
-        // Alvo desconhecido cai no mais apertado.
+        // An unknown target falls to the tightest one.
         assert_eq!(spec("qualquer", false), spec("whatsapp", false));
     }
 
@@ -702,7 +702,7 @@ mod tests {
     fn padding_never_eats_the_whole_frame() {
         assert_eq!(inner_size(512, 8), 496);
         assert_eq!(inner_size(512, 0), 512);
-        assert_eq!(inner_size(512, 9999), 16, "margem absurda para no mínimo");
+        assert_eq!(inner_size(512, 9999), 16, "absurd margin for the minimum");
         assert_eq!(inner_size(512, 7) % 2, 0, "o VP9 exige lado par");
     }
 
@@ -710,7 +710,7 @@ mod tests {
     fn contain_fits_and_cover_crops() {
         let contain = fit_filter("contain", 512, 8);
         assert!(contain.contains("force_original_aspect_ratio=decrease"));
-        assert!(!contain.contains("crop="), "contain não corta");
+        assert!(!contain.contains("crop="), "contain does not crop");
         assert!(contain.contains("scale=496:496"));
         assert!(contain.ends_with("pad=512:512:(ow-iw)/2:(oh-ih)/2:color=#00000000"));
 
@@ -730,7 +730,7 @@ mod tests {
 
     #[test]
     fn duration_is_clamped_to_the_target_ceiling() {
-        assert_eq!(clamp_duration(0.0, 3.0), 3.0, "0 = o máximo que cabe");
+        assert_eq!(clamp_duration(0.0, 3.0), 3.0, "0 = the maximum that fits");
         assert_eq!(clamp_duration(1.5, 3.0), 1.5);
         assert_eq!(clamp_duration(30.0, 3.0), 3.0);
         assert_eq!(clamp_duration(30.0, 10.0), 10.0);
@@ -772,10 +772,10 @@ mod tests {
         assert_eq!(valor(&a, "-pix_fmt").as_deref(), Some("yuva420p"));
         assert_eq!(valor(&a, "-q:v").as_deref(), Some("92"));
         assert!(a.contains(&"-an".to_string()));
-        assert!(!a.contains(&"-t".to_string()), "estático não tem duração");
+        assert!(!a.contains(&"-t".to_string()), "static has no duration");
         assert!(
             !a.contains(&"-ss".to_string()),
-            "estático não busca no tempo"
+            "static does not seek in time"
         );
         assert_eq!(a.last().map(String::as_str), Some("saida"));
     }
@@ -818,7 +818,7 @@ mod tests {
                 );
                 assert!(
                     pair[0].fps >= pair[1].fps,
-                    "o fps não pode subir: {:?}",
+                    "fps cannot go up: {:?}",
                     pair
                 );
             }
@@ -828,10 +828,10 @@ mod tests {
 
     #[test]
     fn bitrate_follows_the_budget() {
-        // 256 KB em 3 s dá algo perto de 600 kbps com folga de container.
+        // 256 KB in 3 s gives something near 600 kbps with container slack.
         let b = plan_bitrate(256 * 1024, 3.0, 75);
-        assert!((550..=640).contains(&b), "bitrate fora da conta: {}", b);
-        // Metade do tempo, o dobro do bitrate.
+        assert!((550..=640).contains(&b), "bitrate off the mark: {}", b);
+        // Half the time, twice the bitrate.
         assert!(plan_bitrate(256 * 1024, 1.5, 75) > b);
         // Qualidade menor pede menos bits.
         assert!(plan_bitrate(256 * 1024, 3.0, 30) < b);
@@ -864,12 +864,12 @@ mod tests {
         assert_eq!(pack["tray_image_file"], "tray.png");
         assert_eq!(pack["animated_sticker_pack"], true);
         assert_eq!(pack["stickers"].as_array().map(Vec::len), Some(2));
-        // Só um emoji foi dado: vale para todas.
+        // Only one emoji was given: it counts for all of them.
         assert_eq!(pack["stickers"][1]["emojis"][0], "😀");
     }
 
-    /// Quadro declarado no cabeçalho WebP: `VP8X` traz o tamanho da tela em
-    /// dois inteiros de 24 bits little-endian, menos um.
+    /// Canvas declared in the WebP header: `VP8X` carries the screen size in
+    /// two 24-bit little-endian integers, minus one.
     fn webp_canvas(bytes: &[u8]) -> Option<(u32, u32)> {
         if bytes.len() < 30 || &bytes[0..4] != b"RIFF" || &bytes[8..12] != b"WEBP" {
             return None;
@@ -881,18 +881,18 @@ mod tests {
         Some((u24(&bytes[24..27]) + 1, u24(&bytes[27..30]) + 1))
     }
 
-    /// Gera figurinha de verdade a partir de uma imagem e de um clipe curtos.
+    /// Generates a real sticker from a short image and clip.
     /// `cargo test -p gumballz-core --lib -- --ignored live_sticker`
     #[tokio::test]
     #[ignore]
     async fn live_sticker_fits_the_limits() {
         let ffmpeg = crate::core::dependencies::ensure_ffmpeg()
             .await
-            .expect("ffmpeg gerido");
+            .expect("managed ffmpeg");
         let dir = std::env::temp_dir().join(format!("gumballz-get-sticker-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).expect("tempdir");
 
-        // Fonte estática: PNG com alfa e uma forma colorida.
+        // Static source: PNG with alpha and a coloured shape.
         let png = dir.join("foto.png");
         let mut img = image::RgbaImage::from_pixel(900, 600, image::Rgba([0, 0, 0, 0]));
         for (x, y, p) in img.enumerate_pixels_mut() {
@@ -904,7 +904,7 @@ mod tests {
             .save(&png)
             .expect("png");
 
-        // Fonte animada: clipe de 4 s.
+        // Animated source: a 4 s clip.
         let mp4 = dir.join("clipe.mp4");
         let gen = crate::core::process::command(&ffmpeg)
             .args([
@@ -957,9 +957,9 @@ mod tests {
             .await
             .expect("run");
             let item = &res.items[0];
-            assert!(item.ok, "{} {} falhou: {:?}", target, kind, item.error);
+            assert!(item.ok, "{} {} failed: {:?}", target, kind, item.error);
             eprintln!(
-                "{} {}: {} bytes (limite {}), q{} fps{} em {} tentativa(s) · {}",
+                "{} {}: {} bytes (limit {}), q{} fps{} in {} attempt(s) · {}",
                 target,
                 kind,
                 item.bytes,
@@ -971,18 +971,18 @@ mod tests {
             );
             assert!(
                 item.hit_target,
-                "{} {} ficou com {} bytes, acima do limite de {}",
+                "{} {} ended up with {} bytes, above the limit of {}",
                 target, kind, item.bytes, item.max_bytes
             );
-            let saida_path = item.output.clone().expect("saída");
-            // O ffprobe não sabe dizer o tamanho de um WebP animado; nesse
-            // caso o quadro sai do cabeçalho VP8X, que é a fonte da verdade.
+            let saida_path = item.output.clone().expect("output");
+            // ffprobe cannot tell the size of an animated WebP; in that
+            // case the canvas comes from the VP8X header, which is the source of truth.
             let dims = if saida_path.ends_with(".webp") {
-                webp_canvas(&std::fs::read(&saida_path).expect("ler webp"))
+                webp_canvas(&std::fs::read(&saida_path).expect("read webp"))
             } else {
                 let probe = crate::core::ffmpeg::probe(Path::new(&saida_path))
                     .await
-                    .expect("probe da figurinha");
+                    .expect("sticker probe");
                 probe
                     .streams
                     .iter()
@@ -992,12 +992,12 @@ mod tests {
             assert_eq!(
                 dims,
                 Some((512, 512)),
-                "{} {} não saiu 512×512",
+                "{} {} did not come out 512×512",
                 target,
                 kind
             );
-            assert!(res.pack.is_some(), "pack.json não saiu");
+            assert!(res.pack.is_some(), "pack.json did not come out");
         }
-        eprintln!("saída em {}", dir.display());
+        eprintln!("output in {}", dir.display());
     }
 }

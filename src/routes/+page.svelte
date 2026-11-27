@@ -767,9 +767,9 @@
     const currentUrl = url.trim();
     const platform = info.platform;
 
-    // B40: a regra do usuário decide antes de a gente perguntar de novo. Só
-    // preenche o que ele não escolheu explicitamente nesta sessão — uma regra
-    // não pode sobrescrever a escolha feita agora, na frente dele.
+    // B40: the user's rule decides before we ask again. It only
+    // fills in what he didn't explicitly choose this session — a rule
+    // can't override the choice made just now, in front of him.
     let ruleQuality = selectedQuality;
     try {
       const hit = await invoke<{ name: string; then: { output_dir?: string | null; quality?: string | null } } | null>(
@@ -782,7 +782,7 @@
         showToast("info", $t("downloadbox.rule_applied", { name: hit.name }) as string);
       }
     } catch {
-      // Regra é conveniência: se falhar, o download segue com as escolhas manuais.
+      // A rule is a convenience: if it fails, the download goes on with the manual choices.
     }
 
     // Spotify picks its artifact by `quality` ("30s preview" / "cover art"),
@@ -792,8 +792,8 @@
     const qualityForDownload =
       platform === "spotify" && selectedFormatId ? selectedFormatId : ruleQuality;
 
-    // B39: comparar com o que esta URL era da última vez, antes de sobrescrever.
-    // Depois do download é tarde: o arquivo antigo já foi.
+    // B39: compare with what this URL was last time, before overwriting.
+    // After the download it's too late: the old file is already gone.
     const snapshot = {
       duration_secs: mediaPreview?.duration_seconds ?? null,
       chapters: [],
@@ -809,7 +809,7 @@
         showToast("info", $t("downloadbox.media_changed", { summary: mudou }) as string);
       }
     } catch {
-      // Aviso é cortesia: se falhar, o download segue como sempre seguiu.
+      // The warning is a courtesy: if it fails, the download goes on as it always has.
     }
     void invoke("record_media_snapshot", { url: currentUrl, snapshot }).catch(() => {});
 
@@ -879,9 +879,9 @@
       outputDir = selected as string;
     }
 
-    // B34: conferir antes de enfileirar. Sem isto, uma URL sem suporte ou
-    // repetida entra na fila e so falha depois, uma por uma — o usuario
-    // descobre item a item o que dava para saber de uma vez.
+    // B34: check before queueing. Without this, an unsupported or
+    // duplicate URL enters the queue and only fails later, one by one — the user
+    // finds out item by item what could have been known all at once.
     let paraBaixar = batchUrls;
     try {
       const report = await invoke<PreflightReport>("preflight_batch", {
@@ -901,8 +901,8 @@
         }) as string);
       }
     } catch {
-      // A conferencia e uma cortesia, nao um portao: se ela falhar, o lote
-      // segue como seguia antes.
+      // The check is a courtesy, not a gate: if it fails, the batch
+      // goes on as it did before.
     }
 
     downloadboxState = { kind: "idle" };

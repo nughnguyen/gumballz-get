@@ -90,8 +90,8 @@ impl ThreadsDownloader {
         Ok(final_url)
     }
 
-    /// Estrae il post ID da vari formati URL di Threads
-    /// Supporta:
+    /// Extracts the post ID from various Threads URL formats
+    /// Supports:
     /// - https://www.threads.net/@user/post/POST_ID
     /// - https://www.threads.com/@user/post/POST_ID
     /// - https://www.threads.net/t/POST_ID
@@ -100,12 +100,12 @@ impl ThreadsDownloader {
         let parsed = url::Url::parse(url).ok()?;
         let segments: Vec<&str> = parsed.path().split('/').filter(|s| !s.is_empty()).collect();
 
-        // Formato: /@user/post/POST_ID
+        // Format: /@user/post/POST_ID
         if segments.len() >= 3 && segments[0].starts_with('@') && segments[1] == "post" {
             return Some(segments[2].to_string());
         }
 
-        // Formato: /t/POST_ID
+        // Format: /t/POST_ID
         if segments.len() >= 2 && segments[0] == "t" {
             return Some(segments[1].to_string());
         }
@@ -113,15 +113,15 @@ impl ThreadsDownloader {
         None
     }
 
-    /// Fetch della pagina e estrazione del post dal JSON bootstrap
+    /// Fetches the page and extracts the post from the bootstrap JSON
     async fn fetch_post(&self, url: &str, post_id: &str) -> anyhow::Result<serde_json::Value> {
         let html = self.fetch_page(url, USER_AGENT).await?;
         if let Some(post) = Self::find_post_in_html(&html, post_id) {
             return Ok(post);
         }
 
-        // Alcune richieste anonime vengono murate dal login; col UA crawler
-        // Threads serve la pagina completa
+        // Some anonymous requests get walled by login; with the crawler UA
+        // Threads serves the full page
         tracing::debug!("[threads] post not found with browser UA, retrying with crawler UA");
         let html = self.fetch_page(url, GOOGLEBOT_UA).await?;
         if let Some(post) = Self::find_post_in_html(&html, post_id) {
@@ -157,10 +157,10 @@ impl ThreadsDownloader {
         Ok(response.text().await?)
     }
 
-    /// Cerca il post nei <script data-sjs> della pagina. Threads cambia spesso
-    /// il nesting del bootstrap (require/__bbox/result/data/media), quindi invece
-    /// di un path fisso parsiamo ogni script e cerchiamo ricorsivamente
-    /// l'oggetto con il `code` del post e chiavi media.
+    /// Looks for the post in the page's <script data-sjs>. Threads changes the
+    /// bootstrap nesting often (require/__bbox/result/data/media), so instead
+    /// of a fixed path we parse every script and search recursively for
+    /// the object with the post's `code` and media keys.
     fn find_post_in_html(html: &str, post_id: &str) -> Option<serde_json::Value> {
         let re = Regex::new(r#"(?s)<script[^>]*data-sjs[^>]*>(.*?)</script>"#).ok()?;
 
@@ -183,7 +183,7 @@ impl ThreadsDownloader {
         None
     }
 
-    /// Cerca ricorsivamente l'oggetto post (code == post_id con chiavi media)
+    /// Recursively searches for the post object (code == post_id with media keys)
     pub(crate) fn find_post_recursive(
         value: &serde_json::Value,
         post_id: &str,
@@ -207,7 +207,7 @@ impl ThreadsDownloader {
         }
     }
 
-    /// Verifica se l'oggetto contiene media effettivamente scaricabili
+    /// Checks whether the object contains media that is actually downloadable
     fn has_usable_media(media: &serde_json::Value) -> bool {
         let video = media
             .get("video_versions")
@@ -224,9 +224,9 @@ impl ThreadsDownloader {
         video || carousel || image
     }
 
-    /// Per post di tipo share (media_type=19) i campi media diretti sono vuoti
-    /// e il media vive in text_post_app_info.linked_inline_media (o nel post
-    /// quotato/repostato). Ritorna l'oggetto che porta il media effettivo.
+    /// For share-type posts (media_type=19) the direct media fields are empty
+    /// and the media lives in text_post_app_info.linked_inline_media (or in the
+    /// quoted/reposted post). Returns the object that carries the actual media.
     pub(crate) fn resolve_media_container(post: &serde_json::Value) -> &serde_json::Value {
         if Self::has_usable_media(post) {
             return post;
@@ -250,11 +250,11 @@ impl ThreadsDownloader {
         post
     }
 
-    /// Estrae i media (video/immagini) dal post
+    /// Extracts the media (video/images) from the post
     pub(crate) fn extract_media_from_post(
         post: &serde_json::Value,
     ) -> anyhow::Result<ThreadsMedia> {
-        // Controlla se è un carousel
+        // Check whether it is a carousel
         if let Some(carousel_media) = post.get("carousel_media").and_then(|v| v.as_array()) {
             if !carousel_media.is_empty() {
                 let mut items = Vec::new();
@@ -271,7 +271,7 @@ impl ThreadsDownloader {
             }
         }
 
-        // Media singolo
+        // Single media
         if let Some(item) = Self::extract_single_media(post)? {
             return Ok(ThreadsMedia::Single {
                 url: item.url,
@@ -284,9 +284,9 @@ impl ThreadsDownloader {
         Err(anyhow!("No media found in Threads post"))
     }
 
-    /// Estrae un singolo elemento media (video o immagine)
+    /// Extracts a single media element (video or image)
     fn extract_single_media(media: &serde_json::Value) -> anyhow::Result<Option<CarouselItem>> {
-        // Le dimensioni stanno sul post, non sulle singole versioni
+        // The dimensions live on the post, not on the individual versions
         let original_width = media
             .get("original_width")
             .and_then(|w| w.as_u64())
@@ -296,7 +296,7 @@ impl ThreadsDownloader {
             .and_then(|h| h.as_u64())
             .unwrap_or(0) as u32;
 
-        // Video: video_versions ha entries {type, url}; type più basso = qualità migliore
+        // Video: video_versions has entries {type, url}; lowest type = best quality
         if let Some(video_versions) = media.get("video_versions").and_then(|v| v.as_array()) {
             if !video_versions.is_empty() {
                 if let Some(url) = video_versions
@@ -315,7 +315,7 @@ impl ThreadsDownloader {
             }
         }
 
-        // Immagini: candidates ordinati per risoluzione decrescente
+        // Images: candidates sorted by decreasing resolution
         if let Some(candidates) = media
             .pointer("/image_versions2/candidates")
             .and_then(|v| v.as_array())
@@ -347,7 +347,7 @@ impl ThreadsDownloader {
         Ok(None)
     }
 
-    /// Poster frame del video / migliore immagine come thumbnail
+    /// Video poster frame / best image as thumbnail
     fn best_thumbnail(media: &serde_json::Value) -> Option<String> {
         let candidates = media
             .pointer("/image_versions2/candidates")
@@ -363,7 +363,7 @@ impl ThreadsDownloader {
             .map(|s| s.to_string())
     }
 
-    /// Estrae metadata dal post (uploader, caption, etc.)
+    /// Extracts metadata from the post (uploader, caption, etc.)
     fn extract_metadata(post: &serde_json::Value) -> (String, Option<u64>) {
         let uploader = post
             .pointer("/user/username")
@@ -425,11 +425,11 @@ impl PlatformDownloader for ThreadsDownloader {
 
         let post = self.fetch_post(&canonical_url, &post_id).await?;
 
-        // Per post share/repost il media vive in un contenitore annidato
+        // For share/repost posts the media lives in a nested container
         let container = Self::resolve_media_container(&post);
         let thumbnail_url = Self::best_thumbnail(container);
 
-        // Estrai metadata
+        // Extract metadata
         let (uploader, _timestamp) = Self::extract_metadata(&post);
 
         // Estrai media
@@ -551,7 +551,7 @@ impl PlatformDownloader for ThreadsDownloader {
             });
         }
 
-        // Carousel: download di ogni elemento
+        // Carousel: download of every element
         let mut total_bytes = 0u64;
         let mut last_path = opts.output_dir.clone();
 

@@ -1,5 +1,5 @@
-//! Utilitários de CTF e análise de arquivo: hash, tipo de arquivo, cifras
-//! clássicas, XOR, codificações e análise de frequência. Tudo local.
+//! CTF utilities and file analysis: hash, file type, classic ciphers, XOR,
+//! encodings and frequency analysis. All local.
 
 use gumballz_core::core::tools::ctf;
 

@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Redimensionar em lote com FFmpeg (estudo 29). */
+  /** Bulk resize with FFmpeg (study 29). */
   import { invoke } from "@tauri-apps/api/core";
   import { t } from "$lib/i18n";
   import { showToast } from "$lib/stores/toast-store.svelte";

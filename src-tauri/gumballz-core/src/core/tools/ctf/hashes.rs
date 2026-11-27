@@ -1,4 +1,4 @@
-//! Hash de texto e de arquivo, e o palpite de que tipo é um hash dado.
+//! Hash of text and of files, plus a guess of what type a given hash is.
 
 use serde::{Deserialize, Serialize};
 
@@ -12,8 +12,8 @@ pub struct HashSet {
     pub bytes: u64,
 }
 
-/// CRC-32 (IEEE), a mesma do zip e do PNG. Tabela montada na hora — são 256
-/// entradas, não vale uma dependência.
+/// CRC-32 (IEEE), the same as zip and PNG. Table built on the spot — 256
+/// entries are not worth a dependency.
 pub fn crc32(data: &[u8]) -> u32 {
     let mut table = [0u32; 256];
     for (i, e) in table.iter_mut().enumerate() {
@@ -35,7 +35,7 @@ pub fn crc32(data: &[u8]) -> u32 {
 }
 
 pub fn hash_all(data: &[u8]) -> HashSet {
-    // md-5, sha1 e sha2 compartilham o mesmo trait `Digest` do RustCrypto.
+    // md5, sha1 and sha2 share the same RustCrypto `Digest` trait.
     use md5::Digest as _;
     HashSet {
         crc32: format!("{:08x}", crc32(data)),
@@ -86,7 +86,7 @@ pub fn hmac(data: &[u8], key: &[u8], algorithm: &str) -> String {
     }
 }
 
-// ── Que hash é esse? ───────────────────────────────────────────────────
+// ── What hash is this? ───────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize)]
 pub struct HashGuess {
@@ -96,8 +96,8 @@ pub struct HashGuess {
     pub note: String,
 }
 
-/// Palpites por prefixo, tamanho e alfabeto. Um hash cru de 32 hex é MD5 ou
-/// NTLM e não tem como distinguir — por isso a lista sai ordenada, não única.
+/// Guesses by prefix, size and alphabet. A raw 32-hex hash is MD5 or
+/// NTLM and there is no way to tell them apart — so the list comes out ordered, not unique.
 pub fn identify(input: &str) -> Vec<HashGuess> {
     let s = input.trim();
     let mut out = Vec::new();
@@ -107,18 +107,18 @@ pub fn identify(input: &str) -> Vec<HashGuess> {
         note: note.into(),
     };
 
-    // Formatos com prefixo são inequívocos.
+    // Formats with a prefix are unambiguous.
     for (prefix, name, note) in [
-        ("$2a$", "bcrypt", "senha, com custo embutido"),
-        ("$2b$", "bcrypt", "senha, com custo embutido"),
-        ("$2y$", "bcrypt", "senha, com custo embutido"),
-        ("$argon2i$", "Argon2i", "senha"),
-        ("$argon2id$", "Argon2id", "senha"),
-        ("$1$", "MD5-crypt", "/etc/shadow antigo"),
+        ("$2a$", "bcrypt", "password, with embedded cost"),
+        ("$2b$", "bcrypt", "password, with embedded cost"),
+        ("$2y$", "bcrypt", "password, with embedded cost"),
+        ("$argon2i$", "Argon2i", "password"),
+        ("$argon2id$", "Argon2id", "password"),
+        ("$1$", "MD5-crypt", "/etc/shadow (old)"),
         ("$5$", "SHA-256 crypt", "/etc/shadow"),
         ("$6$", "SHA-512 crypt", "/etc/shadow"),
-        ("$y$", "yescrypt", "/etc/shadow moderno"),
-        ("$pbkdf2", "PBKDF2", "senha"),
+        ("$y$", "yescrypt", "/etc/shadow (modern)"),
+        ("$pbkdf2", "PBKDF2", "password"),
         ("{SSHA}", "SSHA", "LDAP"),
         ("pbkdf2_sha256$", "PBKDF2-SHA256", "Django"),
     ] {
@@ -131,26 +131,26 @@ pub fn identify(input: &str) -> Vec<HashGuess> {
     let hex = !s.is_empty() && s.chars().all(|c| c.is_ascii_hexdigit());
     if hex {
         match s.len() {
-            8 => out.push(guess("CRC-32", "média", "8 hex também pode ser Adler-32")),
+            8 => out.push(guess("CRC-32", "medium", "8 hex could also be Adler-32")),
             16 => out.push(guess("CRC-64 / MySQL antigo", "baixa", "16 hex")),
             32 => {
-                out.push(guess("MD5", "média", "32 hex"));
-                out.push(guess("NTLM", "média", "mesmo tamanho do MD5"));
-                out.push(guess("MD4", "baixa", "mesmo tamanho do MD5"));
+                out.push(guess("MD5", "medium", "32 hex"));
+                out.push(guess("NTLM", "medium", "same size as MD5"));
+                out.push(guess("MD4", "baixa", "same size as MD5"));
             }
             40 => {
-                out.push(guess("SHA-1", "média", "40 hex"));
-                out.push(guess("RIPEMD-160", "baixa", "mesmo tamanho do SHA-1"));
+                out.push(guess("SHA-1", "medium", "40 hex"));
+                out.push(guess("RIPEMD-160", "baixa", "same size as SHA-1"));
             }
-            56 => out.push(guess("SHA-224", "média", "56 hex")),
+            56 => out.push(guess("SHA-224", "medium", "56 hex")),
             64 => {
-                out.push(guess("SHA-256", "média", "64 hex"));
-                out.push(guess("SHA3-256 / BLAKE2s", "baixa", "mesmo tamanho"));
+                out.push(guess("SHA-256", "medium", "64 hex"));
+                out.push(guess("SHA3-256 / BLAKE2s", "baixa", "same size"));
             }
-            96 => out.push(guess("SHA-384", "média", "96 hex")),
+            96 => out.push(guess("SHA-384", "medium", "96 hex")),
             128 => {
-                out.push(guess("SHA-512", "média", "128 hex"));
-                out.push(guess("BLAKE2b / Whirlpool", "baixa", "mesmo tamanho"));
+                out.push(guess("SHA-512", "medium", "128 hex"));
+                out.push(guess("BLAKE2b / Whirlpool", "baixa", "same size"));
             }
             _ => {}
         }
@@ -163,13 +163,13 @@ pub fn identify(input: &str) -> Vec<HashGuess> {
             out.push(guess(
                 "base64",
                 "baixa",
-                "parece codificação, não hash — decodifique antes",
+                "looks like an encoding, not a hash — decode it first",
             ));
         } else {
             out.push(guess(
                 "desconhecido",
                 "baixa",
-                "tamanho e alfabeto não batem com nenhum formato conhecido",
+                "size and alphabet do not match any known format",
             ));
         }
     }
@@ -201,7 +201,7 @@ mod tests {
 
     #[test]
     fn hmac_matches_rfc_4231() {
-        // RFC 4231, caso 2.
+        // RFC 4231, case 2.
         let mac = hmac(b"what do ya want for nothing?", b"Jefe", "sha256");
         assert_eq!(
             mac,

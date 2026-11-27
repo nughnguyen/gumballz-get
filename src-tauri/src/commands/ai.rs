@@ -8,10 +8,11 @@ pub fn ai_get_config() -> AiConfigView {
     ai::get().view()
 }
 
-// A tela manda o provedor da tabela (`kind`) junto do `provider` genérico, e a
-// intenção sobre a chave em `key_action`: "keep" mantém a guardada, "clear"
-// apaga (troca de provedor com o campo vazio) e "set" grava a digitada. O
-// segredo nunca volta para a UI, então a intenção precisa ser explícita.
+// The screen sends the provider from the table (`kind`) together with the generic
+// `provider`, and the intent about the key in `key_action`: "keep" keeps the
+// stored one, "clear" deletes it (switching provider with the field empty) and
+// "set" records the typed one. The secret never comes back to the UI, so the
+// intent has to be explicit.
 #[tauri::command]
 pub fn ai_set_config(
     provider: AiProvider,
@@ -34,7 +35,7 @@ pub fn ai_set_config(
     if provider == AiProvider::None || kind.trim() == "none" {
         return Ok(ai::clear().view());
     }
-    // Cliente antigo (sem `kind`): mantém o caminho de antes.
+    // Old client (no `kind`): keeps the previous path.
     if kind.trim().is_empty() {
         return Ok(ai::set(provider, model, local_base_url, None, None).view());
     }

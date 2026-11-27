@@ -1,5 +1,5 @@
-//! Análise local: heurística de IA (listas do Pinterest Power Menu, MIT),
-//! dHash para achar pins quase iguais e paleta de cores por k-means.
+//! Local analysis: AI heuristic (Pinterest Power Menu lists, MIT),
+//! dHash to find near-identical pins and a k-means colour palette.
 
 use std::collections::HashMap;
 
@@ -7,7 +7,7 @@ use serde::Serialize;
 
 // ───────────────────────── IA ─────────────────────────
 
-/// Frases explícitas (nível 3).
+/// Explicit phrases (level 3).
 const AI_EXPLICIT: &[&str] = &[
     "#aigenerated",
     "ai generated",
@@ -32,7 +32,7 @@ const AI_EXPLICIT: &[&str] = &[
     "inteligencia artificial",
     "inteligência artificial",
 ];
-/// Ferramentas e termos comuns (nível 2).
+/// Common tools and terms (level 2).
 const AI_TOOLS: &[&str] = &[
     "midjourney",
     "dall-e",
@@ -78,7 +78,7 @@ const AI_TOOLS: &[&str] = &[
     "ai fashion",
 ];
 
-/// Devolve (nível, termo que bateu). 1 = só a palavra "ai"/"ia" isolada.
+/// Returns (level, term that matched). 1 = only the word "ai"/"ia" alone.
 pub fn ai_keyword_level(text_lower: &str) -> (u8, Option<String>) {
     for p in AI_EXPLICIT {
         if text_lower.contains(p) {
@@ -102,7 +102,7 @@ pub fn ai_keyword_level(text_lower: &str) -> (u8, Option<String>) {
 
 // ───────────────────────── dHash ─────────────────────────
 
-/// dHash 64 bits (9×8, diferença horizontal). Aceita jpg/png/webp/gif.
+/// 64-bit dHash (9×8, horizontal difference). Accepts jpg/png/webp/gif.
 pub fn dhash(bytes: &[u8]) -> Option<u64> {
     let img = image::load_from_memory(bytes).ok()?;
     let g = image::imageops::resize(&img.to_luma8(), 9, 8, image::imageops::FilterType::Triangle);
@@ -123,14 +123,14 @@ pub fn hamming(a: u64, b: u64) -> u32 {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct DupeGroup {
-    /// "exact" (mesma image_signature) | "near" (dHash parecido)
+    /// "exact" (same image_signature) | "near" (similar dHash)
     pub kind: String,
     pub ids: Vec<String>,
-    /// maior distância dentro do grupo (0 para exatos)
+    /// largest distance inside the group (0 for exact)
     pub distance: u32,
 }
 
-/// Agrupa por assinatura igual e depois por dHash (união-busca).
+/// Groups by identical signature and then by dHash (union-find).
 pub fn group_dupes(
     items: &[(String, Option<String>, Option<u64>)],
     threshold: u32,
@@ -224,7 +224,7 @@ pub fn group_dupes(
 pub struct Swatch {
     pub hex: String,
     pub rgb: [u8; 3],
-    /// fração 0..1 dos pixels/amostras que caíram nessa cor
+    /// fraction 0..1 of the pixels/samples that fell in this colour
     pub share: f32,
 }
 
@@ -241,7 +241,7 @@ pub fn to_hex(c: [u8; 3]) -> String {
     format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2])
 }
 
-/// Amostra pixels de uma imagem (pula os quase brancos/pretos quando pedido).
+/// Samples pixels from an image (skips the near-white/black ones when asked).
 pub fn sample_pixels(bytes: &[u8], max_samples: usize, skip_extremes: bool) -> Vec<[u8; 3]> {
     let Ok(img) = image::load_from_memory(bytes) else {
         return Vec::new();
@@ -277,7 +277,7 @@ fn dist2(a: [f32; 3], b: [f32; 3]) -> f32 {
     (a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2) + (a[2] - b[2]).powi(2)
 }
 
-/// k-means simples em RGB, inicializado por k-means++ determinístico.
+/// Simple k-means in RGB, initialized by deterministic k-means++.
 pub fn kmeans_palette(samples: &[[u8; 3]], k: usize) -> Vec<Swatch> {
     if samples.is_empty() || k == 0 {
         return Vec::new();

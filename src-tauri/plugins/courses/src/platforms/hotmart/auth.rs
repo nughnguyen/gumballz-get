@@ -222,7 +222,7 @@ async fn extract_webview_cookies_for_uri(
 
     let cookies = tokio::time::timeout(Duration::from_secs(10), rx)
         .await
-        .map_err(|_| anyhow!("Timeout ao obter cookies do WebView."))?
+        .map_err(|_| anyhow!("Timeout getting cookies from the WebView."))?
         .map_err(|_| anyhow!("Canal de cookies fechado."))?;
 
     Ok(cookies)
@@ -411,7 +411,7 @@ pub async fn authenticate(
         true
     })
     .build()
-    .map_err(|e| anyhow!("Falha ao criar janela de login: {}", e))?;
+    .map_err(|e| anyhow!("Failed to create the login window: {}", e))?;
 
     let start = std::time::Instant::now();
     let timeout = Duration::from_secs(120);

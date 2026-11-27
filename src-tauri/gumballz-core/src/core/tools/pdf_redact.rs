@@ -1,14 +1,14 @@
-//! Tarja de verdade: apaga o texto e só depois pinta o retângulo. A tarja que
-//! só desenha uma barra preta por cima é o defeito que o `pdf-redaction-check`
-//! acusa — aqui o texto sai do content stream antes da tinta entrar.
+//! Real redaction: erases the text and only then paints the rectangle. The redaction that
+//! only draws a black bar on top is the defect `pdf-redaction-check`
+//! flags — here the text leaves the content stream before the ink goes in.
 //!
-//! O PDFium entrega a caixa de cada caractere da página (`pdf::read_raw_chars`)
-//! e o `lopdf` reescreve os operadores de texto sem os glifos que caem dentro
-//! da região. Quando o casamento glifo↔byte não fecha (texto dentro de Form
-//! XObject, PDFium velho sem `FPDFText_IsGenerated`, content stream que o lopdf
-//! não decodifica), a página cai para pixel: renderiza, pinta a tarja na imagem
-//! e troca o conteúdo da página pela imagem. É perda de texto, mas nunca deixa
-//! segredo escondido.
+//! PDFium delivers each character's box on the page (`pdf::read_raw_chars`)
+//! and `lopdf` rewrites the text operators without the glyphs that fall inside
+//! the region. When the glyph↔byte match does not close (text inside a Form
+//! XObject, old PDFium without `FPDFText_IsGenerated`, a content stream lopdf
+//! cannot decode), the page falls to pixels: render, paint the redaction on the image
+//! and swap the page's content for the image. It is a loss of text, but it never leaves
+//! a secret hidden.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -20,11 +20,11 @@ use serde::{Deserialize, Serialize};
 
 use super::pdf;
 
-/// Região a tarjar, em pontos do PDF e com a origem no canto inferior
-/// esquerdo da página — o mesmo sistema do `pdf-redaction-check`.
+/// Region to redact, in PDF points and with the origin at the page's bottom-left
+/// corner — the same system as `pdf-redaction-check`.
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 pub struct Area {
-    /// Página 1-based.
+    /// 1-based page.
     pub page: usize,
     pub x: f32,
     pub y: f32,
@@ -37,25 +37,25 @@ pub struct Options {
     pub input: String,
     #[serde(default)]
     pub password: String,
-    /// Regiões desenhadas pelo usuário.
+    /// Regions drawn by the user.
     #[serde(default)]
     pub areas: Vec<Area>,
-    /// Palavras ou frases a tarjar onde aparecerem (sem caixa, sem acento).
+    /// Words or phrases to redact wherever they show up (no case, no accent).
     #[serde(default)]
     pub terms: Vec<String>,
-    /// Limita a busca por termo a estas páginas ("1-3, 7"). Vazio = todas.
+    /// Limits the term search to these pages ("1-3, 7"). Empty = all.
     #[serde(default)]
     pub pages: String,
-    /// "text" (cirúrgico, cai para pixel quando não dá) | "raster" (tudo em pixel).
+    /// "text" (surgical, falls to pixels when it cannot) | "raster" (everything in pixels).
     #[serde(default)]
     pub mode: String,
-    /// Folga em pontos ao redor do termo encontrado.
+    /// Slack in points around the found term.
     #[serde(default)]
     pub padding: f32,
-    /// Pinta o retângulo por cima. Desligado deixa o buraco em branco.
+    /// Paints the rectangle on top. Off leaves the hole blank.
     #[serde(default = "yes")]
     pub bar: bool,
-    /// DPI da renderização quando a página cai para pixel.
+    /// DPI of the render when the page falls to pixels.
     #[serde(default)]
     pub dpi: u32,
     #[serde(default)]
@@ -74,9 +74,9 @@ fn yes() -> bool {
 pub struct PageReport {
     pub page: usize,
     pub areas: usize,
-    /// Quantos caracteres saíram do content stream.
+    /// How many characters left the content stream.
     pub chars_removed: usize,
-    /// "text" quando deu para apagar o texto, "raster" quando virou imagem.
+    /// "text" when the text could be erased, "raster" when it became an image.
     pub mode: String,
     pub note: String,
 }
@@ -88,12 +88,12 @@ pub struct RedactResult {
     pub pages: usize,
     pub areas: usize,
     pub chars_removed: usize,
-    /// Ocorrências de termo encontradas e tarjadas.
+    /// Term occurrences found and redacted.
     pub terms_found: usize,
-    /// Caracteres que ainda apareciam dentro de alguma região depois da
-    /// primeira passada — cada um vira uma página em pixel.
+    /// Characters that still showed up inside some region after the
+    /// first pass — each one becomes a page in pixels.
     pub leftovers: usize,
-    /// `true` quando a conferência final não achou nada escondido.
+    /// `true` when the final check found nothing hidden.
     pub verified: bool,
     pub bytes: u64,
     pub by_page: Vec<PageReport>,
@@ -101,10 +101,10 @@ pub struct RedactResult {
 
 type Rect = [f32; 4];
 
-// ── Região ─────────────────────────────────────────────────────────────
+// ── Region ─────────────────────────────────────────────────────────────
 
-/// Normaliza a área (largura/altura negativas viram retângulo certo) e já
-/// aplica a folga.
+/// Normalizes the area (negative width/height become a proper rectangle) and already
+/// applies the padding.
 pub fn rect_of(a: &Area, padding: f32) -> Rect {
     let x0 = a.x.min(a.x + a.width) - padding;
     let x1 = a.x.max(a.x + a.width) + padding;
@@ -121,7 +121,7 @@ fn any_inside(rects: &[Rect], x: f32, y: f32) -> bool {
     rects.iter().any(|r| inside(r, x, y))
 }
 
-/// Caixa que cobre todos os retângulos dados.
+/// Box covering all the given rectangles.
 pub fn union(rects: &[Rect]) -> Option<Rect> {
     rects.iter().copied().reduce(|a, b| {
         [
@@ -133,7 +133,7 @@ pub fn union(rects: &[Rect]) -> Option<Rect> {
     })
 }
 
-/// Minúscula sem acento, para casar termo com o texto da página.
+/// Lowercase without accents, to match a term against the page text.
 pub fn fold(c: char) -> char {
     let c = c.to_ascii_lowercase();
     match c {
@@ -153,8 +153,8 @@ pub fn fold_str(s: &str) -> String {
     s.chars().map(fold).collect()
 }
 
-/// Acha as ocorrências do termo na sequência de caracteres da página e
-/// devolve, para cada uma, os índices dos caracteres que a compõem.
+/// Finds the term's occurrences in the page's character sequence and
+/// returns, for each one, the indexes of the characters that make it up.
 pub fn find_term(chars: &[char], term: &str) -> Vec<(usize, usize)> {
     let needle: Vec<char> = fold_str(term.trim()).chars().collect();
     if needle.is_empty() || needle.len() > chars.len() {
@@ -174,12 +174,12 @@ pub fn find_term(chars: &[char], term: &str) -> Vec<(usize, usize)> {
     out
 }
 
-// ── Content stream: tirar glifo ────────────────────────────────────────
+// ── Content stream: removing a glyph ────────────────────────────────────────
 
-/// O que fazer com cada glifo da página, na ordem do content stream.
+/// What to do with each glyph on the page, in content-stream order.
 pub trait GlyphPlan {
-    /// `None` mantém o glifo; `Some(avanço em pontos)` tira ele e devolve a
-    /// largura que ele ocupava, para o texto seguinte não andar para trás.
+    /// `None` keeps the glyph; `Some(advance in points)` removes it and returns the
+    /// width it occupied, so the following text does not move backward.
     fn drop_at(&mut self, index: usize) -> Option<f32>;
 }
 
@@ -213,14 +213,14 @@ fn nums(op: &Operation) -> Vec<f64> {
 
 const ID: [f64; 6] = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
 
-/// Estado de texto que interessa para converter "largura em pontos" em
-/// número de ajuste do `TJ`.
+/// Text state that matters to convert "width in points" into a
+/// `TJ` adjustment number.
 struct TextState {
     ctm: [f64; 6],
     stack: Vec<[f64; 6]>,
     tm: [f64; 6],
     size: f64,
-    /// `Tz` em fração (100% = 1.0).
+    /// `Tz` as a fraction (100% = 1.0).
     hscale: f64,
     font: String,
 }
@@ -237,13 +237,13 @@ impl TextState {
         }
     }
 
-    /// Escala horizontal de "espaço de texto" para "ponto da página".
+    /// Horizontal scale from "text space" to "page point".
     fn scale(&self) -> f64 {
         let m = mul(self.tm, self.ctm);
         (m[0] * m[0] + m[1] * m[1]).sqrt()
     }
 
-    /// Número de `TJ` que devolve exatamente `width_pt` de avanço.
+    /// Number of `TJ` that returns exactly `width_pt` of advance.
     fn kern(&self, width_pt: f32) -> Option<f64> {
         let scale = self.scale();
         let denom = self.size * self.hscale;
@@ -298,7 +298,7 @@ impl TextState {
     }
 }
 
-/// Bytes de um código de glifo: fonte composta (Type0) usa 2, o resto usa 1.
+/// Bytes of a glyph code: a composite font (Type0) uses 2, the rest use 1.
 fn code_len(two_byte: &dyn Fn(&str) -> bool, font: &str) -> usize {
     if two_byte(font) {
         2
@@ -318,8 +318,8 @@ fn lit(bytes: Vec<u8>) -> Object {
     Object::String(bytes, lopdf::StringFormat::Literal)
 }
 
-/// Reescreve um texto mostrado, tirando os glifos que o plano mandou tirar.
-/// Devolve `None` quando nada mudou.
+/// Rewrites a shown text, removing the glyphs the plan told it to remove.
+/// Returns `None` when nothing changed.
 fn strip_string(
     bytes: &[u8],
     step: usize,
@@ -370,10 +370,10 @@ fn strip_string(
     changed
 }
 
-/// Passa por todas as operações da página e devolve a lista nova, sem os
-/// glifos marcados. O segundo valor é quantos glifos saíram; o terceiro é
-/// quantos glifos a página tem no total (para conferir o casamento com o
-/// PDFium antes de gravar).
+/// Goes through all the page's operations and returns the new list, without the
+/// marked glyphs. The second value is how many glyphs left; the third is
+/// how many glyphs the page has in total (to check the match against
+/// PDFium before writing).
 pub fn strip_glyphs(
     ops: &[Operation],
     two_byte: &dyn Fn(&str) -> bool,
@@ -457,15 +457,15 @@ pub fn strip_glyphs(
     (out, removed, glyph)
 }
 
-/// Só conta os glifos da página, sem mexer em nada.
+/// Only counts the page's glyphs, without touching anything.
 pub fn count_glyphs(ops: &[Operation], two_byte: &dyn Fn(&str) -> bool) -> usize {
     let mut plan = |_: usize| None;
     strip_glyphs(ops, two_byte, &mut plan).2
 }
 
-// ── Tinta ──────────────────────────────────────────────────────────────
+// ── Ink ──────────────────────────────────────────────────────────────
 
-/// Operações que pintam as tarjas por cima do que sobrou.
+/// Operations that paint the redactions on top of what is left.
 pub fn bar_ops(rects: &[Rect], color: [f32; 3]) -> Vec<Operation> {
     let mut ops = vec![Operation::new("q", vec![])];
     ops.push(Operation::new(
@@ -488,7 +488,7 @@ pub fn bar_ops(rects: &[Rect], color: [f32; 3]) -> Vec<Operation> {
     ops
 }
 
-// ── Documento ──────────────────────────────────────────────────────────
+// ── Document ──────────────────────────────────────────────────────────
 
 fn out_path(opts: &Options) -> anyhow::Result<PathBuf> {
     let inp = Path::new(opts.input.trim());
@@ -501,7 +501,7 @@ fn out_path(opts: &Options) -> anyhow::Result<PathBuf> {
     let stem = inp
         .file_stem()
         .map(|s| s.to_string_lossy().to_string())
-        .unwrap_or_else(|| "documento".into());
+        .unwrap_or_else(|| "document".into());
     let suffix = if opts.suffix.trim().is_empty() {
         "-tarjado"
     } else {
@@ -517,10 +517,10 @@ fn load(input: &str, password: &str) -> anyhow::Result<Document> {
         let bytes = std::fs::read(input)?;
         Document::load_mem_with_options(&bytes, lopdf::LoadOptions::with_password(password))
     };
-    doc.map_err(|e| anyhow!("não abri o PDF: {}", e))
+    doc.map_err(|e| anyhow!("could not open the PDF: {}", e))
 }
 
-/// Fontes da página que usam código de 2 bytes (Type0/Identity).
+/// The page's fonts that use a 2-byte code (Type0/Identity).
 fn two_byte_fonts(doc: &Document, page_id: lopdf::ObjectId) -> Vec<String> {
     let mut out = Vec::new();
     let Ok((_, res_ids)) = doc.get_page_resources(page_id) else {
@@ -593,7 +593,7 @@ fn media_box(doc: &Document, page_id: lopdf::ObjectId, w: f32, h: f32) -> [f32; 
     [0.0, 0.0, w, h]
 }
 
-/// Troca o conteúdo da página por uma imagem que já vem com a tarja pintada.
+/// Swaps the page's content for an image that already comes with the redaction painted.
 fn rasterize_page(
     doc: &mut Document,
     page_id: lopdf::ObjectId,
@@ -641,22 +641,22 @@ fn rasterize_page(
     };
     let stream_id = doc.add_object(Stream::new(
         dictionary! {},
-        content.encode().map_err(|e| anyhow!("conteúdo: {}", e))?,
+        content.encode().map_err(|e| anyhow!("content: {}", e))?,
     ));
     let res_id = doc.add_object(Object::Dictionary(dictionary! {
         "XObject" => dictionary! { "OGRXimg" => Object::Reference(img_id) },
     }));
     let page = doc
         .get_dictionary_mut(page_id)
-        .map_err(|e| anyhow!("página: {}", e))?;
+        .map_err(|e| anyhow!("page: {}", e))?;
     page.set("Contents", Object::Reference(stream_id));
     page.set("Resources", Object::Reference(res_id));
     page.remove(b"Annots");
     Ok(())
 }
 
-/// Tira as anotações que encostam na região: um campo de formulário ou uma
-/// nota grudada ali carrega o texto de novo.
+/// Removes the annotations that touch the region: a form field or a
+/// note stuck there carries the text back in.
 fn drop_annots(doc: &mut Document, page_id: lopdf::ObjectId, rects: &[Rect]) {
     let annots = match doc.get_dictionary(page_id).and_then(|p| p.get(b"Annots")) {
         Ok(Object::Array(a)) => a.clone(),
@@ -714,11 +714,11 @@ fn set_content(
 ) -> anyhow::Result<()> {
     let data = Content { operations: ops }
         .encode()
-        .map_err(|e| anyhow!("conteúdo: {}", e))?;
+        .map_err(|e| anyhow!("content: {}", e))?;
     let stream_id = doc.add_object(Stream::new(dictionary! {}, data));
     let page = doc
         .get_dictionary_mut(page_id)
-        .map_err(|e| anyhow!("página: {}", e))?;
+        .map_err(|e| anyhow!("page: {}", e))?;
     page.set("Contents", Object::Reference(stream_id));
     Ok(())
 }
@@ -727,7 +727,7 @@ fn report(p: &super::ProgressFn, stage: &str, done: u64, total: u64, msg: Option
     super::report(p, "pdf-redact", stage, done, Some(total), msg);
 }
 
-/// Regiões por página: as áreas pedidas mais o que os termos acharem.
+/// Regions per page: the requested areas plus what the terms find.
 fn plan_rects(
     pages: &[pdf::RawPage],
     opts: &Options,
@@ -775,9 +775,9 @@ fn plan_rects(
     (map, found)
 }
 
-/// Apaga da página os glifos que caem dentro das regiões e pinta a tarja.
-/// Devolve `(deu certo, glifos apagados, nota)`; `false` quer dizer que a
-/// página tem que cair para pixel.
+/// Erases from the page the glyphs that fall inside the regions and paints the redaction.
+/// Returns `(worked, glyphs erased, note)`; `false` means the
+/// page has to fall to pixels.
 fn redact_page(
     doc: &mut Document,
     page_id: lopdf::ObjectId,
@@ -786,9 +786,9 @@ fn redact_page(
     bar: bool,
 ) -> anyhow::Result<(bool, usize, String)> {
     if !raw.generated_known {
-        return Ok((false, 0, "PDFium sem FPDFText_IsGenerated".into()));
+        return Ok((false, 0, "PDFium without FPDFText_IsGenerated".into()));
     }
-    // Centro e largura de cada glifo real, na ordem do content stream.
+    // Center and width of each real glyph, in content-stream order.
     let visible: Vec<(f32, f32, f32)> = raw
         .chars
         .iter()
@@ -802,7 +802,7 @@ fn redact_page(
     let is_two = |name: &str| two.iter().any(|f| f == name);
     let data = doc.get_page_content(page_id);
     let Ok(content) = Content::decode(&data) else {
-        return Ok((false, 0, "content stream que o lopdf não decodifica".into()));
+        return Ok((false, 0, "content stream that lopdf cannot decode".into()));
     };
     let ops = content.operations;
     let count = count_glyphs(&ops, &is_two);
@@ -827,12 +827,12 @@ fn redact_page(
     }
     set_content(doc, page_id, new_ops)?;
     drop_annots(doc, page_id, rects);
-    Ok((true, removed, format!("{} caracteres apagados", removed)))
+    Ok((true, removed, format!("{} characters erased", removed)))
 }
 
 pub fn run(opts: &Options, progress: &super::ProgressFn) -> anyhow::Result<RedactResult> {
     if opts.input.trim().is_empty() {
-        return Err(anyhow!("escolha o PDF"));
+        return Err(anyhow!("choose the PDF"));
     }
     let pw = if opts.password.is_empty() {
         None
@@ -849,7 +849,7 @@ pub fn run(opts: &Options, progress: &super::ProgressFn) -> anyhow::Result<Redac
     let (rects, terms_found) = plan_rects(&pages, opts, &wanted);
     if rects.is_empty() {
         return Err(anyhow!(
-            "nada para tarjar: marque uma região ou digite um termo"
+            "nothing to redact: mark a region or type a term"
         ));
     }
     let areas_total: usize = rects.values().map(Vec::len).sum();
@@ -869,11 +869,11 @@ pub fn run(opts: &Options, progress: &super::ProgressFn) -> anyhow::Result<Redac
         };
         let raw = pages.iter().find(|p| p.number == *no);
         let (surgical, removed, note) = if force_raster {
-            (false, 0, "modo pixel".to_string())
+            (false, 0, "pixel mode".to_string())
         } else {
             match raw {
                 Some(raw) => redact_page(&mut doc, page_id, raw, rs, opts.bar)?,
-                None => (false, 0, "página não abriu no PDFium".to_string()),
+                None => (false, 0, "page did not open in PDFium".to_string()),
             }
         };
         if !surgical {
@@ -890,10 +890,10 @@ pub fn run(opts: &Options, progress: &super::ProgressFn) -> anyhow::Result<Redac
     }
 
     doc.save(&output)
-        .map_err(|e| anyhow!("não gravei {}: {}", output.display(), e))?;
+        .map_err(|e| anyhow!("could not save {}: {}", output.display(), e))?;
 
-    // Conferência: o que ainda aparece dentro da região tem que virar pixel.
-    report(progress, "progress", 2, 4, Some("conferindo".into()));
+    // Check: what still shows up inside the region has to become pixels.
+    report(progress, "progress", 2, 4, Some("verifying".into()));
     let mut leftovers = 0usize;
     let out_s = output.to_string_lossy().to_string();
     if let Ok(after) = pdf::read_raw_chars(&out_s, None, "") {
@@ -925,7 +925,7 @@ pub fn run(opts: &Options, progress: &super::ProgressFn) -> anyhow::Result<Redac
             "progress",
             3,
             4,
-            Some(format!("{} página(s) em pixel", fallback.len())),
+            Some(format!("{} page(s) as pixels", fallback.len())),
         );
         let mut doc2 = load(&out_s, "")?;
         let ids2: BTreeMap<u32, lopdf::ObjectId> = doc2.get_pages();
@@ -936,8 +936,8 @@ pub fn run(opts: &Options, progress: &super::ProgressFn) -> anyhow::Result<Redac
             let raw = pages.iter().find(|p| p.number == *no);
             let (w, h) = raw.map(|p| (p.width, p.height)).unwrap_or((595.0, 842.0));
             let media = media_box(&doc2, page_id, w, h);
-            // Renderiza do original: a tarja entra na imagem, então nada do que
-            // estava por baixo sobrevive.
+            // Renders from the original: the redaction goes into the image, so nothing that
+            // was underneath survives.
             let (jpeg, _, _) = pdf::page_jpeg(&opts.input, pw, *no, dpi, quality)?;
             let jpeg = if opts.bar {
                 paint_bars(
@@ -953,12 +953,12 @@ pub fn run(opts: &Options, progress: &super::ProgressFn) -> anyhow::Result<Redac
             if let Some(r) = by_page.iter_mut().find(|r| r.page == *no) {
                 r.mode = "raster".into();
                 if r.note.is_empty() {
-                    r.note = "página virou imagem".into();
+                    r.note = "page became an image".into();
                 }
             }
         }
         doc2.save(&output)
-            .map_err(|e| anyhow!("não gravei {}: {}", output.display(), e))?;
+            .map_err(|e| anyhow!("could not save {}: {}", output.display(), e))?;
     }
 
     let verified = match pdf::read_raw_chars(&out_s, None, "") {
@@ -989,7 +989,7 @@ pub fn run(opts: &Options, progress: &super::ProgressFn) -> anyhow::Result<Redac
     })
 }
 
-/// Pinta as tarjas na imagem da página (pixel), convertendo ponto → pixel.
+/// Paints the redactions on the page image (pixels), converting point → pixel.
 fn paint_bars(
     jpeg: &[u8],
     rects: &[Rect],
@@ -1009,7 +1009,7 @@ fn paint_bars(
     for r in rects {
         let x0 = ((r[0] - media[0]) / w * pw).floor().max(0.0) as u32;
         let x1 = ((r[2] - media[0]) / w * pw).ceil().min(pw) as u32;
-        // O eixo Y da página cresce para cima; o da imagem, para baixo.
+        // The page's Y axis grows upward; the image's, downward.
         let y0 = ((media[3] - r[3]) / h * ph).floor().max(0.0) as u32;
         let y1 = ((media[3] - r[1]) / h * ph).ceil().min(ph) as u32;
         for y in y0..y1 {
@@ -1071,16 +1071,16 @@ mod tests {
     fn conta_glifos_do_fluxo() {
         let ops = ops_of("BT /F1 12 Tf (ABC) Tj [(DE) -120 (F)] TJ ET");
         assert_eq!(count_glyphs(&ops, &one_byte), 6);
-        // Fonte composta: dois bytes por glifo.
+        // Composite font: two bytes per glyph.
         let two = |_: &str| true;
         let ops2 = ops_of("BT /F1 12 Tf <00410042> Tj ET");
         assert_eq!(count_glyphs(&ops2, &two), 2);
     }
 
     #[test]
-    fn tira_so_o_glifo_marcado_e_compensa_o_avanco() {
+    fn removes_only_the_marked_glyph_and_compensates_the_advance() {
         let ops = ops_of("BT /F1 10 Tf 0 0 Td (SEGREDO ok) Tj ET");
-        // Tira "SEGREDO" (7 primeiros glifos), cada um com 6 pt de largura.
+        // Removes "SEGREDO" (first 7 glyphs), each 6 pt wide.
         let mut plan = |i: usize| if i < 7 { Some(6.0f32) } else { None };
         let (new, removed, total) = strip_glyphs(&ops, &one_byte, &mut plan);
         assert_eq!((removed, total), (7, 10));
@@ -1092,8 +1092,8 @@ mod tests {
             .collect::<String>();
         assert!(text.contains("ok"), "{}", text);
         assert!(!text.contains("SEGREDO"), "{}", text);
-        // 7 glifos x 6 pt / 10 pt de corpo = 4.2 em espaço de texto → -4200.
-        assert!(text.contains("-4200"), "sem o ajuste de avanço: {}", text);
+        // 7 glyphs x 6 pt / 10 pt of body = 4.2 in text space → -4200.
+        assert!(text.contains("-4200"), "without the advance adjustment: {}", text);
     }
 
     #[test]
@@ -1125,7 +1125,7 @@ mod tests {
         assert!(dump.contains("\"rg\""), "{}", dump);
         assert!(dump.contains("\"re\""), "{}", dump);
         assert!(dump.contains("\"f\""), "{}", dump);
-        // largura 30, altura 10
+        // width 30, height 10
         assert_eq!(
             ops.iter()
                 .find(|o| o.operator == "re")
@@ -1141,8 +1141,8 @@ mod tests {
         assert_eq!(union(&[]), None);
     }
 
-    /// PDF montado à mão, tarjado de verdade, e depois passado pelo próprio
-    /// `pdf-redaction-check`: ele não pode achar nada escondido.
+    /// Hand-built PDF, really redacted, and then passed through the
+    /// `pdf-redaction-check` itself: it must not find anything hidden.
     /// `cargo test -p gumballz-core --lib -- --ignored live_redact`
     #[test]
     #[ignore]
@@ -1190,9 +1190,9 @@ mod tests {
         };
         let out = run(&opts, &super::super::noop_progress()).expect("tarjar");
         eprintln!("{:?}", out);
-        assert!(out.verified, "sobrou texto dentro da região: {:?}", out);
+        assert!(out.verified, "text left inside the region: {:?}", out);
 
-        // E o juiz de verdade: o próprio conferidor de tarja.
+        // And the real judge: the redaction checker itself.
         let report = pdf::redaction_check(&out.output, 110, "").unwrap();
         let found: Vec<&str> = report.runs.iter().map(|r| r.text.as_str()).collect();
         assert!(
@@ -1200,8 +1200,8 @@ mod tests {
             "o check ainda acha o segredo: {:?}",
             found
         );
-        assert_eq!(report.chars_hidden, 0, "escondeu {:?}", found);
-        // O texto que estava fora da tarja continua lá.
+        assert_eq!(report.chars_hidden, 0, "hid {:?}", found);
+        // The text that was outside the redaction stays there.
         let txt = pdf::to_text(&out.output, "", false, "").unwrap();
         assert!(txt.text.contains("VISIVEL"), "{}", txt.text);
         assert!(!txt.text.contains("SEGREDO"), "{}", txt.text);

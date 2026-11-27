@@ -1,8 +1,8 @@
-//! Limpar caches (estudo 10, Kudu): regras declarativas por sistema, cada uma
-//! apontando pastas de cache/temporários/logs de apps, navegadores, jogos e
-//! ferramentas de desenvolvimento. Fluxo "varrer → revisar → limpar": nada é
-//! apagado sem a lista ter sido mostrada com tamanhos. Só o conteúdo das pastas
-//! é removido, nunca a pasta em si (os apps a recriam).
+//! Clean caches (study 10, Kudu): declarative rules per system, each one
+//! pointing at cache/temp/log folders of apps, browsers, games and
+//! developer tools. "scan → review → clean" flow: nothing is
+//! deleted before the list has been shown with sizes. Only the contents of folders
+//! are removed, never the folder itself (the apps recreate it).
 
 use std::path::{Path, PathBuf};
 
@@ -14,7 +14,7 @@ pub struct CleanRule {
     /// "system" | "browsers" | "apps" | "dev" | "gaming"
     pub group: String,
     pub name: String,
-    /// "safe": cache que o app recria; "review": pode conter algo que o usuário queira.
+    /// "safe": cache the app recreates; "review": may contain something the user wants.
     pub risk: String,
     pub paths: Vec<String>,
     pub bytes: u64,
@@ -45,14 +45,14 @@ const fn d(
     }
 }
 
-// Caminhos: `~` = home; `%X%` = variável de ambiente; `*` num componente = glob.
+// Paths: `~` = home; `%X%` = environment variable; `*` in a component = glob.
 #[cfg(target_os = "macos")]
 const DEFS: &[Def] = &[
-    d("user-caches", "system", "Caches do usuário (~/Library/Caches)", "review", &["~/Library/Caches"]),
-    d("user-logs", "system", "Logs do usuário", "safe", &["~/Library/Logs"]),
-    d("crash-reports", "system", "Relatórios de erro", "safe", &["~/Library/Logs/DiagnosticReports", "~/Library/Application Support/CrashReporter"]),
+    d("user-caches", "system", "User caches (~/Library/Caches)", "review", &["~/Library/Caches"]),
+    d("user-logs", "system", "User logs", "safe", &["~/Library/Logs"]),
+    d("crash-reports", "system", "Error reports", "safe", &["~/Library/Logs/DiagnosticReports", "~/Library/Application Support/CrashReporter"]),
     d("quicklook", "system", "Miniaturas do Quick Look", "safe", &["~/Library/Caches/com.apple.QuickLook.thumbnailcache"]),
-    d("mail-downloads", "system", "Anexos temporários do Mail", "review", &["~/Library/Containers/com.apple.mail/Data/Library/Mail Downloads"]),
+    d("mail-downloads", "system", "Temporary Mail attachments", "review", &["~/Library/Containers/com.apple.mail/Data/Library/Mail Downloads"]),
     d("chrome", "browsers", "Google Chrome", "safe", &["~/Library/Caches/Google/Chrome", "~/Library/Application Support/Google/Chrome/*/Cache", "~/Library/Application Support/Google/Chrome/*/Code Cache", "~/Library/Application Support/Google/Chrome/*/GPUCache"]),
     d("brave", "browsers", "Brave", "safe", &["~/Library/Caches/BraveSoftware", "~/Library/Application Support/BraveSoftware/Brave-Browser/*/Cache", "~/Library/Application Support/BraveSoftware/Brave-Browser/*/Code Cache"]),
     d("edge", "browsers", "Microsoft Edge", "safe", &["~/Library/Caches/Microsoft Edge", "~/Library/Application Support/Microsoft Edge/*/Cache", "~/Library/Application Support/Microsoft Edge/*/Code Cache"]),
@@ -68,7 +68,7 @@ const DEFS: &[Def] = &[
     d("adobe", "apps", "Adobe (Media Cache)", "review", &["~/Library/Application Support/Adobe/Common/Media Cache Files", "~/Library/Application Support/Adobe/Common/Media Cache", "~/Library/Application Support/Adobe/Common/Peak Files"]),
     d("telegram", "apps", "Telegram", "review", &["~/Library/Group Containers/6N38VWS5BX.ru.keepcoder.Telegram/appstore/account-*/postbox/media", "~/Library/Application Support/Telegram Desktop/tdata/user_data/cache"]),
     d("whatsapp", "apps", "WhatsApp", "safe", &["~/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/Message/Media/tmp", "~/Library/Containers/net.whatsapp.WhatsApp/Data/Library/Caches"]),
-    d("gumballz-get-tmp", "apps", "GumballZ Get (temporários das tools)", "safe", &["~/Library/Application Support/com.gumballz.get/tools/tmp"]),
+    d("gumballz-get-tmp", "apps", "GumballZ Get (tool temp files)", "safe", &["~/Library/Application Support/com.gumballz.get/tools/tmp"]),
     d("xcode-derived", "dev", "Xcode DerivedData", "safe", &["~/Library/Developer/Xcode/DerivedData"]),
     d("xcode-device-support", "dev", "Xcode iOS DeviceSupport", "review", &["~/Library/Developer/Xcode/iOS DeviceSupport", "~/Library/Developer/Xcode/watchOS DeviceSupport", "~/Library/Developer/Xcode/tvOS DeviceSupport"]),
     d("simulator-caches", "dev", "Simulator caches", "safe", &["~/Library/Developer/CoreSimulator/Caches"]),
@@ -92,14 +92,14 @@ const DEFS: &[Def] = &[
     d(
         "temp-user",
         "system",
-        "Temporários do usuário (%TEMP%)",
+        "User temp files (%TEMP%)",
         "safe",
         &["%TEMP%"],
     ),
     d(
         "temp-windows",
         "system",
-        "Temporários do Windows (precisa de administrador)",
+        "Windows temp files (needs administrator)",
         "safe",
         &["%SystemRoot%\\Temp"],
     ),
@@ -144,7 +144,7 @@ const DEFS: &[Def] = &[
     d(
         "delivery-opt",
         "system",
-        "Otimização de Entrega",
+        "Delivery Optimization",
         "safe",
         &["%SystemRoot%\\SoftwareDistribution\\DeliveryOptimization"],
     ),
@@ -341,7 +341,7 @@ const DEFS: &[Def] = &[
     d(
         "gumballz-get-tmp",
         "apps",
-        "GumballZ Get (temporários das tools)",
+        "GumballZ Get (tool temp files)",
         "safe",
         &["%APPDATA%\\com.gumballz.get\\tools\\tmp"],
     ),
@@ -467,7 +467,7 @@ const DEFS: &[Def] = &[
     d(
         "user-cache",
         "system",
-        "Cache do usuário (~/.cache)",
+        "User cache (~/.cache)",
         "review",
         &["~/.cache"],
     ),
@@ -493,7 +493,7 @@ const DEFS: &[Def] = &[
     d(
         "crash",
         "system",
-        "Relatórios de erro",
+        "Error reports",
         "safe",
         &["~/.cache/abrt", "~/.local/share/apport"],
     ),
@@ -618,7 +618,7 @@ const DEFS: &[Def] = &[
     d(
         "gumballz-get-tmp",
         "apps",
-        "GumballZ Get (temporários das tools)",
+        "GumballZ Get (tool temp files)",
         "safe",
         &[
             "~/.local/share/com.gumballz.get/tools/tmp",
@@ -736,7 +736,7 @@ fn expand_vars(p: &str) -> String {
     out
 }
 
-/// Expande `~`, `%VAR%` e `*` (um nível) em caminhos existentes.
+/// Expands `~`, `%VAR%` and `*` (one level) into existing paths.
 pub fn expand(pattern: &str) -> Vec<PathBuf> {
     let home = dirs::home_dir().unwrap_or_default();
     let p = if let Some(rest) = pattern.strip_prefix("~/") {
@@ -807,7 +807,7 @@ fn glob_match(pat: &str, name: &str) -> bool {
     true
 }
 
-/// Tamanho e número de arquivos abaixo de um caminho (sem seguir links).
+/// Size and file count below a path (without following links).
 pub fn measure(path: &Path) -> (u64, u64) {
     let mut bytes = 0u64;
     let mut files = 0u64;
@@ -902,7 +902,7 @@ fn remove_entry(path: &Path, to_trash: bool, result: &mut CleanResult) {
     }
 }
 
-/// Apaga o conteúdo das pastas das regras escolhidas (não as pastas).
+/// Deletes the contents of the folders of the chosen rules (not the folders).
 pub fn clean(req: &CleanRequest, progress: &super::ProgressFn) -> CleanResult {
     let mut result = CleanResult::default();
     let defs: Vec<&Def> = DEFS

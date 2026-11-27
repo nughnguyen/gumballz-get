@@ -1,24 +1,24 @@
-//! Checagem de lote antes de baixar qualquer coisa.
+//! Batch check before downloading anything.
 //!
-//! Hoje um lote de 80 links comeca a baixar e voce descobre de manha que 12
-//! falharam por falta de espaco ou por exigirem login. O pre-flight resolve
-//! tudo antes, mostra o que vai falhar, e deixa o usuario decidir com a
-//! informacao na mao.
+//! Today a batch of 80 links starts downloading and you find out in the morning
+//! that 12 failed for lack of space or because they need a login. Pre-flight
+//! resolves everything first, shows what is going to fail, and lets the user
+//! decide with the information in hand.
 //!
-//! A decisao e separada da coleta de proposito: o que **fazer** com N URLs, um
-//! tamanho estimado e o espaco livre e logica pura e testavel; buscar metadado
-//! e checar disco e I/O que so a integracao exercita.
+//! The decision is kept separate from the collection on purpose: what to **do**
+//! with N URLs, an estimated size and the free space is pure, testable logic;
+//! fetching metadata and checking disk is I/O that only integration exercises.
 //!
-//! Origem: checklist pre-voo. Nao decola com problema conhecido em terra.
+//! Origin: the pre-flight checklist. Do not take off with a known problem on the ground.
 
 use serde::Serialize;
 
-/// O que se descobriu sobre uma URL do lote.
+/// What was found out about one URL in the batch.
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct ItemCheck {
     pub url: String,
     pub title: Option<String>,
-    /// Tamanho estimado em bytes, quando o extractor informou.
+    /// Estimated size in bytes, when the extractor reported it.
     pub estimated_bytes: Option<u64>,
     pub problem: Option<Problem>,
 }
@@ -26,21 +26,21 @@ pub struct ItemCheck {
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum Problem {
-    /// Nenhum downloader reconhece a URL.
+    /// No downloader recognises the URL.
     Unsupported,
     /// O conteudo existe mas exige sessao — curso pago, video privado.
     NeedsAuth,
-    /// O extractor respondeu que nao existe.
+    /// The extractor answered that it does not exist.
     NotFound,
-    /// Ja esta na fila ou no archive.
+    /// Already in the queue or in the archive.
     AlreadyHave,
 }
 
 impl Problem {
-    /// Problema que o usuario consegue resolver antes de comecar.
+    /// A problem the user can solve before starting.
     ///
-    /// A distincao importa para a copy: "importe seus cookies" e acionavel,
-    /// "nenhum downloader cobre este site" nao e.
+    /// The distinction matters for the copy: "import your cookies" is actionable,
+    /// "no downloader covers this site" is not.
     pub fn is_actionable(self) -> bool {
         matches!(self, Problem::NeedsAuth)
     }
@@ -51,7 +51,7 @@ pub struct PreflightReport {
     pub total: usize,
     pub ready: usize,
     pub estimated_bytes: u64,
-    /// `None` quando nao foi possivel ler o espaco livre.
+    /// `None` when the free space could not be read.
     pub available_bytes: Option<u64>,
     pub problems: Vec<ItemCheck>,
     pub verdict: Verdict,
@@ -60,26 +60,26 @@ pub struct PreflightReport {
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum Verdict {
-    /// Tudo resolvido e cabe no disco.
+    /// Everything resolved and fits on disk.
     Go,
-    /// Alguns itens tem problema, mas o resto pode baixar.
+    /// Some items have a problem, but the rest can download.
     GoWithSkips,
-    /// Nada resolveu, ou nao cabe no disco.
+    /// Nothing resolved, or it does not fit on disk.
     Stop,
 }
 
 /// Margem exigida acima do tamanho estimado.
 ///
-/// Dez por cento: a estimativa do extractor erra para baixo com frequencia
-/// (bitrate variavel), e encher o disco ate o ultimo byte quebra o proprio
-/// sistema do usuario, nao so o download.
+/// Ten percent: the extractor's estimate often errs low (variable bitrate),
+/// and filling the disk to the last byte breaks the user's own system, not just
+/// the download.
 pub const HEADROOM: f64 = 1.10;
 
-/// Monta o relatorio a partir do que ja foi coletado.
+/// Builds the report from what was already collected.
 ///
-/// `available_bytes = None` significa "nao consegui medir" e **nao** bloqueia:
-/// impedir o download porque a leitura de disco falhou trocaria um problema
-/// possivel por um problema certo.
+/// `available_bytes = None` means "could not measure" and does **not** block:
+/// refusing the download because the disk read failed would trade a possible
+/// problem for a certain one.
 pub fn build_report(checks: Vec<ItemCheck>, available_bytes: Option<u64>) -> PreflightReport {
     let total = checks.len();
     let ready = checks.iter().filter(|c| c.problem.is_none()).count();
@@ -95,8 +95,8 @@ pub fn build_report(checks: Vec<ItemCheck>, available_bytes: Option<u64>) -> Pre
         None => true,
     };
 
-    // Dois motivos distintos para parar: nada resolveu, ou o que resolveu nao
-    // cabe. A copy da tela precisa distinguir os dois, mas o veredito e o mesmo.
+    // Two distinct reasons to stop: nothing resolved, or what resolved does not
+    // fit. The screen copy needs to tell the two apart, but the verdict is the same.
     let verdict = if ready == 0 || !fits {
         Verdict::Stop
     } else if ready < total {
@@ -115,7 +115,7 @@ pub fn build_report(checks: Vec<ItemCheck>, available_bytes: Option<u64>) -> Pre
     }
 }
 
-/// Espaco livre no volume de `path`, em bytes.
+/// Free space on the volume of `path`, in bytes.
 pub fn available_space(path: &std::path::Path) -> Option<u64> {
     fs4::available_space(path).ok()
 }
@@ -155,8 +155,8 @@ mod tests {
 
     #[test]
     fn alguns_com_problema_ainda_libera_o_resto() {
-        // O lote nao para inteiro por causa de um link privado: o usuario
-        // baixa o que da e resolve o resto depois.
+        // The batch does not stop entirely because of one private link: the user
+        // downloads what works and sorts out the rest later.
         let r = build_report(
             vec![ok("a", GB), bad("b", Problem::NeedsAuth), ok("c", GB)],
             Some(10 * GB),
@@ -164,7 +164,7 @@ mod tests {
         assert_eq!(r.verdict, Verdict::GoWithSkips);
         assert_eq!(r.ready, 2);
         assert_eq!(r.problems.len(), 1);
-        // Tamanho estimado conta so o que vai baixar de verdade.
+        // The estimated size counts only what will actually download.
         assert_eq!(r.estimated_bytes, 2 * GB);
     }
 
@@ -180,22 +180,22 @@ mod tests {
 
     #[test]
     fn nao_cabe_no_disco_para_antes_de_comecar() {
-        // O caso que originou o item: o lote nao pode comecar para descobrir
-        // no meio que o disco acabou.
-        // 10 GB estimados exigem 11 GB com a margem, e nao cabem em 10 GB.
+        // The case that started this item: the batch must not begin only to find
+        // out halfway that the disk ran out.
+        // 10 GB estimated need 11 GB with the margin, and do not fit in 10 GB.
         let r = build_report(vec![ok("a", 10 * GB)], Some(10 * GB));
-        assert_eq!(r.verdict, Verdict::Stop, "10GB + 10% nao cabe em 10GB");
+        assert_eq!(r.verdict, Verdict::Stop, "10GB + 10% does not fit in 10GB");
 
-        // 9 GB exigem 9,9 GB e cabem — a margem nao pode ser tao conservadora
-        // a ponto de recusar lote que cabe.
+        // 9 GB need 9.9 GB and fit — the margin must not be so conservative
+        // that it refuses a batch that fits.
         let r2 = build_report(vec![ok("a", 9 * GB)], Some(10 * GB));
         assert_eq!(r2.verdict, Verdict::Go, "9GB + 10% cabe em 10GB");
     }
 
     #[test]
     fn espaco_ilegivel_nao_bloqueia() {
-        // Impedir o download porque a leitura de disco falhou trocaria um
-        // problema possivel por um problema certo.
+        // Refusing the download because the disk read failed would trade a
+        // possible problem for a certain one.
         let r = build_report(vec![ok("a", 500 * GB)], None);
         assert_eq!(r.verdict, Verdict::Go);
         assert_eq!(r.available_bytes, None);
@@ -203,9 +203,9 @@ mod tests {
 
     #[test]
     fn item_sem_tamanho_estimado_nao_zera_a_conta() {
-        // Live e alguns extractors nao informam tamanho. Nao pode virar 0 e
-        // fazer um lote de 50 GB parecer caber em qualquer lugar — mas tambem
-        // nao pode inventar numero. Conta o que sabe, e segue.
+        // Live and some extractors report no size. It must not become 0 and
+        // make a 50 GB batch look like it fits anywhere — but it also must
+        // not invent a number. Count what it knows, and carry on.
         let sem_tamanho = ItemCheck {
             url: "live".into(),
             title: None,
@@ -230,8 +230,8 @@ mod tests {
 
     #[test]
     fn so_falta_de_auth_e_acionavel_pelo_usuario() {
-        // Guia a copy: "importe seus cookies" resolve, "nenhum downloader
-        // cobre este site" nao.
+        // Guides the copy: "import your cookies" resolves it, "no downloader
+        // covers this site" does not.
         assert!(Problem::NeedsAuth.is_actionable());
         for p in [
             Problem::Unsupported,
@@ -251,10 +251,10 @@ mod tests {
 
     #[test]
     fn espaco_livre_do_volume_atual_e_legivel() {
-        // Nao afirma um numero — so que a leitura funciona e nao devolve zero
-        // no diretorio temporario, o que indicaria erro silencioso.
+        // Asserts no number — only that the read works and does not return zero
+        // in the temp directory, which would indicate a silent error.
         let livre = available_space(&std::env::temp_dir());
-        assert!(livre.is_some(), "nao conseguiu ler espaco livre");
+        assert!(livre.is_some(), "could not read free space");
         assert!(livre.unwrap() > 0);
     }
 }

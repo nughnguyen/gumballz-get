@@ -1,24 +1,24 @@
-//! Etiquetas de música (ID3v2 / Vorbis Comments / MP4 ilst) em Rust puro.
+//! Music tags (ID3v2 / Vorbis Comments / MP4 ilst) in pure Rust.
 //!
-//! Toda a leitura e escrita passa pelo `lofty`, que normaliza os três mundos
-//! num `Tag` genérico: o mesmo código serve MP3, FLAC, M4A, OGG, Opus e WAV,
-//! sem ffmpeg e sem binário externo.
+//! All reading and writing goes through `lofty`, which normalizes the three worlds
+//! into a generic `Tag`: the same code serves MP3, FLAC, M4A, OGG, Opus and WAV,
+//! with no ffmpeg and no external binary.
 //!
-//! São três etapas, na ordem em que a UI usa:
+//! There are three steps, in the order the UI uses them:
 //!
-//! 1. `scan` — lê uma pasta (ou uma lista de arquivos) e devolve uma tabela
-//!    com formato, duração, bitrate e os campos de cada faixa.
-//! 2. diagnóstico — `diagnose` aponta o que está errado em cada arquivo:
-//!    campo obrigatório vazio, título e artista trocados, faixa gravada como
-//!    "3/12" em texto, ano inválido, mojibake (UTF-8 lido como latin-1),
-//!    capa faltando, capa gigante, capa duplicada, tag de formato errado.
-//! 3. `edit` — aplica as correções em lote. O padrão é `dry_run`: a função
-//!    devolve o diff campo a campo e NÃO toca no arquivo. Só grava quando o
-//!    usuário manda `dry_run: false`.
+//! 1. `scan` — reads a folder (or a list of files) and returns a table
+//!    with format, duration, bitrate and each track's fields.
+//! 2. diagnosis — `diagnose` points out what is wrong in each file:
+//!    empty required field, swapped title and artist, track stored as
+//!    "3/12" text, invalid year, mojibake (UTF-8 read as latin-1),
+//!    missing cover, huge cover, duplicate cover, wrong-format tag.
+//! 3. `edit` — applies the corrections in batch. The default is `dry_run`: the function
+//!    returns the field-by-field diff and does NOT touch the file. It only writes when the
+//!    user sends `dry_run: false`.
 //!
-//! Não há identificação por impressão digital (AcoustID/MusicBrainz) aqui:
-//! isso mandaria dado do usuário para fora da máquina e ficou de fora de
-//! propósito.
+//! There is no fingerprint identification (AcoustID/MusicBrainz) here:
+//! that would send user data off the machine and was left out on
+//! purpose.
 
 use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -34,33 +34,33 @@ use walkdir::WalkDir;
 
 use super::{report, ProgressFn};
 
-/// Identificador que a UI escuta no evento de progresso.
+/// Identifier the UI listens for in the progress event.
 const TOOL_ID: &str = "audio-tag";
 
-/// Acima disso a capa embutida atrapalha mais do que ajuda: infla cada
-/// arquivo do álbum e trava aparelho antigo.
+/// Above this, the embedded cover hurts more than it helps: it inflates each
+/// album file and stalls old devices.
 const COVER_HUGE_BYTES: u64 = 2 * 1024 * 1024;
 
-/// Extensões que o `lofty` sabe abrir.
+/// Extensions that `lofty` knows how to open.
 const AUDIO_EXTS: &[&str] = &[
     "mp3", "m4a", "m4b", "m4p", "mp4", "flac", "ogg", "oga", "opus", "spx", "wav", "wave", "aiff",
     "aif", "aifc", "aac", "ape", "wv", "mpc", "mp2", "mp1",
 ];
 
-// ─────────────────────────── entrada e saída ────────────────────────────
+// ─────────────────────────── input and output ────────────────────────────
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct ScanOptions {
-    /// Pastas a varrer.
+    /// Folders to scan.
     #[serde(default)]
     pub dirs: Vec<String>,
-    /// Arquivos avulsos (somados às pastas).
+    /// Loose files (added to the folders).
     #[serde(default)]
     pub files: Vec<String>,
-    /// Entrar nas subpastas.
+    /// Go into subfolders.
     #[serde(default)]
     pub recursive: bool,
-    /// Teto de arquivos, para não travar a UI numa biblioteca inteira.
+    /// File cap, so the UI does not stall on a whole library.
     #[serde(default)]
     pub max_files: Option<usize>,
 }
@@ -78,14 +78,13 @@ pub struct TrackTags {
     pub disc_total: Option<u32>,
     pub genre: Option<String>,
     pub comment: Option<String>,
-    /// O que está gravado no campo de faixa, sem interpretar ("3/12").
+    /// What is stored in the track field, uninterpreted ("3/12").
     pub track_raw: Option<String>,
-    /// Idem para o disco.
+    /// Same for the disc.
     pub disc_raw: Option<String>,
 }
 
-/// Um problema achado num arquivo. `fixable` diz se o `edit` desta mesma
-/// tool resolve sozinho.
+/// A problem found in a file. `fixable` says whether this same tool's `edit` fixes it on its own.
 #[derive(Debug, Clone, Serialize)]
 pub struct Issue {
     pub code: String,
@@ -112,9 +111,9 @@ pub struct CoverInfo {
     pub count: usize,
     pub bytes: u64,
     pub mime: Option<String>,
-    /// Quantas capas frontais existem (mais de uma é duplicata).
+    /// How many front covers exist (more than one is a duplicate).
     pub front_count: usize,
-    /// Duas imagens com bytes idênticos dentro da mesma tag.
+    /// Two images with identical bytes inside the same tag.
     pub duplicated: bool,
 }
 
@@ -123,9 +122,9 @@ pub struct TrackRow {
     pub path: String,
     pub file_name: String,
     pub format: String,
-    /// Tag lida, no vocabulário do lofty ("Id3v2", "VorbisComments"…).
+    /// Tag read, in lofty's vocabulary ("Id3v2", "VorbisComments"…).
     pub tag_type: Option<String>,
-    /// Tag que o contêiner espera.
+    /// Tag the container expects.
     pub primary_tag_type: String,
     pub bytes: u64,
     pub duration_secs: f64,
@@ -142,20 +141,20 @@ pub struct TrackRow {
 pub struct ScanResult {
     pub scanned: usize,
     pub failed: usize,
-    /// Arquivos com pelo menos um problema.
+    /// Files with at least one problem.
     pub with_issues: usize,
-    /// Contagem por código de problema, para a UI mostrar o resumo.
+    /// Count per problem code, for the UI to show the summary.
     pub issue_counts: BTreeMap<String, usize>,
     pub tracks: Vec<TrackRow>,
 }
 
-/// Uma mudança de campo, do jeito que o `dry_run` mostra ao usuário.
+/// A field change, the way `dry_run` shows it to the user.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FieldDiff {
     pub field: String,
     pub from: Option<String>,
     pub to: Option<String>,
-    /// Qual operação pediu a mudança ("set", "renumber", "mojibake"…).
+    /// Which operation asked for the change ("set", "renumber", "mojibake"…).
     pub reason: String,
 }
 
@@ -173,7 +172,7 @@ pub struct FileChange {
     pub file_name: String,
     pub diffs: Vec<FieldDiff>,
     pub cover: Option<CoverDiff>,
-    /// Campos que o formato do arquivo não aceita (ex.: ano em AIFF).
+    /// Fields the file format does not accept (e.g. year in AIFF).
     pub unsupported: Vec<String>,
     pub written: bool,
     pub backup: Option<String>,
@@ -188,52 +187,52 @@ fn default_one() -> u32 {
     1
 }
 
-/// Edição em lote. O padrão é não gravar: `dry_run` só vira `false` quando o
-/// front manda o campo explicitamente.
+/// Batch edit. The default is not to write: `dry_run` only becomes `false` when the
+/// frontend sends the field explicitly.
 #[derive(Debug, Clone, Deserialize)]
 pub struct EditOptions {
-    /// Ordem importa: é ela que a renumeração usa quando `sort_by_name` é
-    /// falso.
+    /// Order matters: it is what renumbering uses when `sort_by_name` is
+    /// false.
     pub files: Vec<String>,
-    /// Campo → valor. String vazia limpa o campo.
+    /// Field → value. An empty string clears the field.
     #[serde(default)]
     pub set: BTreeMap<String, String>,
-    /// Campos a limpar.
+    /// Fields to clear.
     #[serde(default)]
     pub clear: Vec<String>,
-    /// Reordenar a lista pelo nome do arquivo antes de renumerar.
+    /// Reorder the list by filename before renumbering.
     #[serde(default = "default_true")]
     pub sort_by_name: bool,
-    /// Regravar a faixa como 1, 2, 3… na ordem da lista.
+    /// Rewrite the track as 1, 2, 3… in list order.
     #[serde(default)]
     pub renumber: bool,
     #[serde(default = "default_one")]
     pub renumber_start: u32,
-    /// Escrever também o total de faixas.
+    /// Also write the track total.
     #[serde(default)]
     pub set_track_total: bool,
-    /// Copiar o artista para o artista do álbum quando este estiver vazio.
+    /// Copy the artist to the album artist when the latter is empty.
     #[serde(default)]
     pub album_artist_from_artist: bool,
-    /// Consertar texto UTF-8 que foi lido como latin-1.
+    /// Fix UTF-8 text that was read as latin-1.
     #[serde(default)]
     pub fix_mojibake: bool,
-    /// Quebrar "3/12" em faixa 3 e total 12.
+    /// Split "3/12" into track 3 and total 12.
     #[serde(default)]
     pub split_track_slash: bool,
-    /// Trocar título e artista de lugar.
+    /// Swap title and artist around.
     #[serde(default)]
     pub swap_title_artist: bool,
-    /// Imagem a embutir como capa frontal.
+    /// Image to embed as the front cover.
     #[serde(default)]
     pub cover_path: Option<String>,
-    /// Tirar todas as capas.
+    /// Remove all covers.
     #[serde(default)]
     pub remove_cover: bool,
-    /// Deixar só uma capa quando houver repetida.
+    /// Keep only one cover when there are duplicates.
     #[serde(default)]
     pub dedupe_cover: bool,
-    /// Copiar o arquivo para `<nome>.bak` antes de gravar.
+    /// Copy the file to `<name>.bak` before writing.
     #[serde(default)]
     pub backup: bool,
     #[serde(default = "default_true")]
@@ -266,16 +265,16 @@ impl Default for EditOptions {
 #[derive(Debug, Clone, Serialize)]
 pub struct EditResult {
     pub dry_run: bool,
-    /// Arquivos com pelo menos uma mudança planejada.
+    /// Files with at least one planned change.
     pub changed: usize,
     pub written: usize,
     pub failed: usize,
     pub files: Vec<FileChange>,
 }
 
-// ───────────────────────────── campos ───────────────────────────────────
+// ───────────────────────────── fields ───────────────────────────────────
 
-/// Campos que a tool edita, na ordem em que a tabela mostra.
+/// Fields the tool edits, in the order the table shows them.
 pub const FIELDS: &[&str] = &[
     "title",
     "artist",
@@ -290,7 +289,7 @@ pub const FIELDS: &[&str] = &[
     "comment",
 ];
 
-/// Campos de texto livre — os que podem sofrer mojibake.
+/// Free-text fields — the ones that can suffer mojibake.
 const TEXT_FIELDS: &[&str] = &[
     "title",
     "artist",
@@ -317,15 +316,15 @@ fn item_key(field: &str) -> Option<ItemKey> {
     })
 }
 
-// ───────────────────────── helpers puros (testados) ─────────────────────
+// ───────────────────────── tested pure helpers ─────────────────────
 
-/// Byte que gerou este caractere quando bytes CP1252/latin-1 viraram texto.
+/// Byte that produced this character when CP1252/latin-1 bytes became text.
 fn cp1252_byte(c: char) -> Option<u8> {
     let code = c as u32;
     if code < 0x80 {
         return Some(code as u8);
     }
-    // Faixa C1: no CP1252 esses bytes são pontuação tipográfica.
+    // C1 range: in CP1252 these bytes are typographic punctuation.
     const C1: &[(char, u8)] = &[
         ('\u{20AC}', 0x80),
         ('\u{201A}', 0x82),
@@ -364,13 +363,13 @@ fn cp1252_byte(c: char) -> Option<u8> {
     None
 }
 
-/// Texto UTF-8 que foi decodificado como latin-1/CP1252 ("MÃºsica").
-/// Devolve o texto consertado, ou `None` quando não é mojibake.
+/// UTF-8 text that was decoded as latin-1/CP1252 ("MÃºsica").
+/// Returns the fixed text, or `None` when it is not mojibake.
 ///
-/// O teste é o próprio round-trip: só devolve algo se cada caractere couber
-/// num byte CP1252 **e** a sequência resultante for UTF-8 válido. Texto que
-/// já está certo ("Música") não sobrevive a esse round-trip, então não há
-/// falso positivo silencioso.
+/// The test is the round-trip itself: it only returns something if every character fits
+/// in one CP1252 byte **and** the resulting sequence is valid UTF-8. Text that
+/// is already right ("Música") does not survive that round-trip, so there is
+/// no silent false positive.
 pub fn fix_mojibake(s: &str) -> Option<String> {
     if s.is_ascii() || s.is_empty() {
         return None;
@@ -392,13 +391,13 @@ pub fn fix_mojibake(s: &str) -> Option<String> {
     Some(fixed)
 }
 
-/// Texto que perdeu bytes na conversão (virou `U+FFFD`) — dá para avisar,
-/// mas não dá para consertar: a informação não existe mais no arquivo.
+/// Text that lost bytes in conversion (became `U+FFFD`) — it can be warned about,
+/// but not fixed: the information no longer exists in the file.
 pub fn has_lost_bytes(s: &str) -> bool {
     s.contains('\u{FFFD}')
 }
 
-/// "3/12", "3 of 12", "03-12", "3" → (faixa, total).
+/// "3/12", "3 of 12", "03-12", "3" → (track, total).
 pub fn parse_track_pair(s: &str) -> (Option<u32>, Option<u32>) {
     let lower = s.trim().to_lowercase();
     let norm = lower.replace(" of ", "/").replace(" de ", "/");
@@ -416,9 +415,9 @@ fn leading_number(s: &str) -> Option<u32> {
     digits.parse::<u32>().ok()
 }
 
-/// Ano plausível dentro de um campo de data. Aceita "1998",
-/// "1998-05-03", "1998-05-03T10:00:00" e "03/05/1998"; recusa "98", "0000"
-/// e qualquer coisa sem quatro dígitos seguidos.
+/// A plausible year inside a date field. Accepts "1998",
+/// "1998-05-03", "1998-05-03T10:00:00" and "03/05/1998"; refuses "98", "0000"
+/// and anything without four consecutive digits.
 pub fn normalize_year(s: &str) -> Option<u16> {
     let chars: Vec<char> = s.trim().chars().collect();
     let mut i = 0usize;
@@ -443,7 +442,7 @@ pub fn normalize_year(s: &str) -> Option<u16> {
     None
 }
 
-/// Tira "01 - " / "01. " / "01 " do começo do nome do arquivo.
+/// Strips "01 - " / "01. " / "01 " from the start of the filename.
 fn strip_leading_number(s: &str) -> &str {
     let t = s.trim_start();
     let digits = t.chars().take_while(char::is_ascii_digit).count();
@@ -470,8 +469,8 @@ fn loose_eq(a: &str, b: &str) -> bool {
     !a.is_empty() && a == b
 }
 
-/// Nome de arquivo no padrão "Artista - Título" que bate ao contrário com o
-/// que está gravado na tag: título e artista foram trocados.
+/// A filename in the "Artist - Title" pattern that matches the tag backwards:
+/// title and artist were swapped.
 pub fn looks_swapped(file_stem: &str, title: Option<&str>, artist: Option<&str>) -> bool {
     let (Some(title), Some(artist)) = (title, artist) else {
         return false;
@@ -483,8 +482,8 @@ pub fn looks_swapped(file_stem: &str, title: Option<&str>, artist: Option<&str>)
     if right.contains(" - ") {
         return false;
     }
-    // O nome diz "esquerda = artista, direita = título". Se a tag guarda o
-    // contrário, e não é o caso de os dois serem iguais, está trocado.
+    // The name says "left = artist, right = title". If the tag stores the
+    // opposite, and it is not the case that both are equal, it is swapped.
     loose_eq(left, title) && loose_eq(right, artist) && !loose_eq(title, artist)
 }
 
@@ -494,7 +493,7 @@ enum NatPart {
     Text(String),
 }
 
-/// Chave de ordenação "natural": "track2" vem antes de "track10".
+/// "Natural" sort key: "track2" comes before "track10".
 fn natural_key(name: &str) -> Vec<NatPart> {
     let mut out = Vec::new();
     let mut buf = String::new();
@@ -530,7 +529,7 @@ fn file_name_of(path: &str) -> String {
         .unwrap_or_else(|| path.to_string())
 }
 
-/// Ordena caminhos pelo nome do arquivo, em ordem natural.
+/// Sorts paths by filename, in natural order.
 pub fn sort_paths_by_name(paths: &mut [String]) {
     paths.sort_by(|a, b| {
         let (ka, kb) = (natural_key(&file_name_of(a)), natural_key(&file_name_of(b)));
@@ -538,7 +537,7 @@ pub fn sort_paths_by_name(paths: &mut [String]) {
     });
 }
 
-// ───────────────────────────── leitura ──────────────────────────────────
+// ───────────────────────────── reading ──────────────────────────────────
 
 fn format_label(ft: FileType) -> String {
     match ft {
@@ -645,8 +644,8 @@ fn empty_cover() -> CoverInfo {
     }
 }
 
-/// Lê um arquivo. Erro de leitura vira uma linha com `error` preenchido —
-/// arquivo corrompido no meio da pasta é caso normal, não motivo de parar.
+/// Reads a file. A read error becomes a row with `error` filled in —
+/// a corrupted file in the middle of a folder is a normal case, not a reason to stop.
 pub fn read_track(path: &Path) -> TrackRow {
     let path_str = path.to_string_lossy().to_string();
     let file_name = file_name_of(&path_str);
@@ -702,11 +701,11 @@ pub fn read_track(path: &Path) -> TrackRow {
     row
 }
 
-// ─────────────────────────── diagnóstico ────────────────────────────────
+// ─────────────────────────── diagnosis ────────────────────────────────
 
-/// Lista de problemas de uma faixa. `no_primary` diz que o arquivo tem tag,
-/// mas não a que o contêiner espera; `other_tags` são as tags "estrangeiras"
-/// que ficaram no arquivo.
+/// List of a track's problems. `no_primary` says the file has a tag,
+/// but not the one the container expects; `other_tags` are the "foreign" tags
+/// left in the file.
 pub fn diagnose(row: &TrackRow, no_primary: bool, other_tags: &[TagType]) -> Vec<Issue> {
     let mut out = Vec::new();
     let t = &row.tags;
@@ -716,7 +715,7 @@ pub fn diagnose(row: &TrackRow, no_primary: bool, other_tags: &[TagType]) -> Vec
             "no_tag",
             None,
             "error",
-            "arquivo sem nenhuma tag".into(),
+            "file without any tags".into(),
             false,
         ));
         return out;
@@ -732,7 +731,7 @@ pub fn diagnose(row: &TrackRow, no_primary: bool, other_tags: &[TagType]) -> Vec
                 "missing_field",
                 Some(field),
                 if field == "album" { "warn" } else { "error" },
-                format!("campo {field} vazio"),
+                format!("field {field} empty"),
                 false,
             ));
         }
@@ -743,7 +742,7 @@ pub fn diagnose(row: &TrackRow, no_primary: bool, other_tags: &[TagType]) -> Vec
             "missing_album_artist",
             Some("album_artist"),
             "info",
-            "artista do álbum vazio; dá para copiar do artista".into(),
+            "empty album artist; can copy from artist".into(),
             true,
         ));
     }
@@ -757,7 +756,7 @@ pub fn diagnose(row: &TrackRow, no_primary: bool, other_tags: &[TagType]) -> Vec
             "swapped_title_artist",
             Some("title"),
             "warn",
-            "o nome do arquivo indica que título e artista estão trocados".into(),
+            "the file name suggests title and artist are swapped".into(),
             true,
         ));
     }
@@ -769,7 +768,7 @@ pub fn diagnose(row: &TrackRow, no_primary: bool, other_tags: &[TagType]) -> Vec
                     "pair_in_text",
                     Some(field),
                     "warn",
-                    format!("{field} gravado como texto \"{raw}\""),
+                    format!("{field} stored as text \"{raw}\""),
                     true,
                 ));
             }
@@ -782,7 +781,7 @@ pub fn diagnose(row: &TrackRow, no_primary: bool, other_tags: &[TagType]) -> Vec
                 "bad_year",
                 Some("year"),
                 "warn",
-                format!("ano \"{year}\" não tem um ano de quatro dígitos"),
+                format!("year \"{year}\" has no four-digit year"),
                 false,
             ));
         }
@@ -811,7 +810,7 @@ pub fn diagnose(row: &TrackRow, no_primary: bool, other_tags: &[TagType]) -> Vec
                 "lost_bytes",
                 Some(field),
                 "warn",
-                format!("\"{value}\" perdeu caracteres na gravação"),
+                format!("\"{value}\" lost characters when written"),
                 false,
             ));
         }
@@ -822,7 +821,7 @@ pub fn diagnose(row: &TrackRow, no_primary: bool, other_tags: &[TagType]) -> Vec
             "no_cover",
             Some("cover"),
             "info",
-            "sem capa embutida".into(),
+            "no embedded cover".into(),
             true,
         ));
     } else {
@@ -832,7 +831,7 @@ pub fn diagnose(row: &TrackRow, no_primary: bool, other_tags: &[TagType]) -> Vec
                 Some("cover"),
                 "warn",
                 format!(
-                    "capa de {} KB embutida em cada faixa",
+                    "a {} KB cover embedded in every track",
                     row.cover.bytes / 1024
                 ),
                 false,
@@ -843,7 +842,7 @@ pub fn diagnose(row: &TrackRow, no_primary: bool, other_tags: &[TagType]) -> Vec
                 "cover_dupe",
                 Some("cover"),
                 "warn",
-                format!("{} capas na mesma tag", row.cover.count),
+                format!("{} covers in the same tag", row.cover.count),
                 true,
             ));
         }
@@ -856,7 +855,7 @@ pub fn diagnose(row: &TrackRow, no_primary: bool, other_tags: &[TagType]) -> Vec
             None,
             "warn",
             format!(
-                "{} guarda {} em vez de {}",
+                "{} stores {} instead of {}",
                 row.format,
                 names.join(", "),
                 row.primary_tag_type
@@ -912,7 +911,7 @@ fn collect_paths(opts: &ScanOptions) -> Vec<PathBuf> {
     sorted
 }
 
-/// Lê tudo o que a UI pediu e devolve a tabela com o diagnóstico junto.
+/// Reads everything the UI asked for and returns the table with the diagnosis attached.
 pub fn scan(opts: &ScanOptions, progress: &ProgressFn) -> anyhow::Result<ScanResult> {
     let paths = collect_paths(opts);
     let total = paths.len() as u64;
@@ -955,9 +954,9 @@ pub fn scan(opts: &ScanOptions, progress: &ProgressFn) -> anyhow::Result<ScanRes
     })
 }
 
-// ─────────────────────────── plano de edição ────────────────────────────
+// ─────────────────────────── edit plan ────────────────────────────
 
-/// Estado de trabalho: campo → valor atual, como texto.
+/// Working state: field → current value, as text.
 fn state_of(row: &TrackRow) -> BTreeMap<String, Option<String>> {
     let t = &row.tags;
     let num = |v: Option<u32>| v.map(|n| n.to_string());
@@ -967,8 +966,8 @@ fn state_of(row: &TrackRow) -> BTreeMap<String, Option<String>> {
     m.insert("album_artist".into(), t.album_artist.clone());
     m.insert("album".into(), t.album.clone());
     m.insert("year".into(), t.year.clone());
-    // Faixa e disco entram com o texto cru: é ele que o usuário vê no diff
-    // quando o arquivo guarda "3/12".
+    // Track and disc go in with the raw text: it is what the user sees in the diff
+    // when the file stores "3/12".
     m.insert("track".into(), t.track_raw.clone().or_else(|| num(t.track)));
     m.insert("track_total".into(), num(t.track_total));
     m.insert("disc".into(), t.disc_raw.clone().or_else(|| num(t.disc)));
@@ -978,11 +977,11 @@ fn state_of(row: &TrackRow) -> BTreeMap<String, Option<String>> {
     m
 }
 
-/// Diff de uma faixa, sem tocar em disco. É esta função que o `dry_run`
-/// mostra e que o gravador aplica — as duas leem exatamente o mesmo plano.
+/// Diff of one track, without touching disk. This is the function `dry_run`
+/// shows and the writer applies — both read exactly the same plan.
 ///
-/// `position` é o número que a renumeração vai gravar; `total` é o total de
-/// faixas do lote.
+/// `position` is the number renumbering will write; `total` is the total of
+/// tracks in the batch.
 pub fn plan_for(row: &TrackRow, position: u32, total: u32, opts: &EditOptions) -> Vec<FieldDiff> {
     let before = state_of(row);
     let mut after = before.clone();
@@ -1115,7 +1114,7 @@ pub fn plan_for(row: &TrackRow, position: u32, total: u32, opts: &EditOptions) -
     diffs
 }
 
-// ─────────────────────────────── capa ───────────────────────────────────
+// ─────────────────────────────── cover ───────────────────────────────────
 
 fn mime_of(bytes: &[u8]) -> Option<MimeType> {
     if bytes.starts_with(&[0x89, b'P', b'N', b'G']) {
@@ -1131,8 +1130,8 @@ fn mime_of(bytes: &[u8]) -> Option<MimeType> {
     }
 }
 
-/// Deixa só a primeira imagem de cada conteúdo (bytes iguais) e no máximo
-/// uma capa frontal. Devolve quantas saíram.
+/// Keeps only the first image of each content (identical bytes) and at most
+/// one front cover. Returns how many were removed.
 fn dedupe_pictures(tag: &mut Tag) -> usize {
     let before = tag.pictures().len();
     let mut seen: HashSet<Vec<u8>> = HashSet::new();
@@ -1162,7 +1161,7 @@ fn dedupe_pictures(tag: &mut Tag) -> usize {
     before - tag.pictures().len()
 }
 
-// ────────────────────────────── gravação ────────────────────────────────
+// ────────────────────────────── writing ────────────────────────────────
 
 fn apply_diffs(tag: &mut Tag, diffs: &[FieldDiff]) -> Vec<String> {
     let mut unsupported = Vec::new();
@@ -1173,7 +1172,7 @@ fn apply_diffs(tag: &mut Tag, diffs: &[FieldDiff]) -> Vec<String> {
         match &diff.to {
             None => {
                 tag.remove_key(key);
-                // Faixa e disco no ID3v2 moram no mesmo frame do total.
+                // Track and disc in ID3v2 live in the same frame as the total.
                 if diff.field == "track" {
                     tag.remove_key(ItemKey::TrackNumber);
                 } else if diff.field == "disc" {
@@ -1186,7 +1185,7 @@ fn apply_diffs(tag: &mut Tag, diffs: &[FieldDiff]) -> Vec<String> {
             Some(value) => {
                 let ok = tag.insert_text(key, value.clone());
                 if !ok {
-                    // O ID3v2 não tem "Year" — a data vai no TDRC.
+                    // ID3v2 has no "Year" — the date goes in TDRC.
                     let fallback = if diff.field == "year" {
                         tag.insert_text(ItemKey::RecordingDate, value.clone())
                     } else {
@@ -1196,8 +1195,8 @@ fn apply_diffs(tag: &mut Tag, diffs: &[FieldDiff]) -> Vec<String> {
                         unsupported.push(diff.field.clone());
                     }
                 } else if diff.field == "year" {
-                    // Mantém as duas leituras coerentes quando o formato
-                    // aceita os dois campos.
+                    // Keeps both readings consistent when the format
+                    // accepts both fields.
                     let _ = tag.insert_text(ItemKey::RecordingDate, value.clone());
                 }
             }
@@ -1227,9 +1226,9 @@ fn edit_one(path: &Path, diffs: &[FieldDiff], opts: &EditOptions) -> anyhow::Res
 
     let cover_bytes = if let Some(cover) = opts.cover_path.as_deref().filter(|s| !s.is_empty()) {
         let data =
-            std::fs::read(cover).with_context(|| format!("não consegui ler a capa em {cover}"))?;
+            std::fs::read(cover).with_context(|| format!("could not read the cover at {cover}"))?;
         let mime =
-            mime_of(&data).ok_or_else(|| anyhow!("a capa {cover} não é PNG, JPEG, GIF ou BMP"))?;
+            mime_of(&data).ok_or_else(|| anyhow!("cover {cover} is not PNG, JPEG, GIF or BMP"))?;
         Some((data, mime))
     } else {
         None
@@ -1242,7 +1241,7 @@ fn edit_one(path: &Path, diffs: &[FieldDiff], opts: &EditOptions) -> anyhow::Res
     }
     let tag = tagged
         .primary_tag_mut()
-        .ok_or_else(|| anyhow!("o formato não aceita a tag {tag_type:?}"))?;
+        .ok_or_else(|| anyhow!("the format does not accept tag {tag_type:?}"))?;
 
     let before_cover = tag.pictures().len();
     let before_bytes: u64 = tag.pictures().iter().map(|p| p.data().len() as u64).sum();
@@ -1291,7 +1290,7 @@ fn edit_one(path: &Path, diffs: &[FieldDiff], opts: &EditOptions) -> anyhow::Res
     if opts.backup {
         let dest = backup_path(path);
         std::fs::copy(path, &dest)
-            .with_context(|| format!("não consegui salvar a cópia em {}", dest.display()))?;
+            .with_context(|| format!("could not save the copy to {}", dest.display()))?;
         change.backup = Some(dest.to_string_lossy().to_string());
     }
     tagged
@@ -1301,8 +1300,8 @@ fn edit_one(path: &Path, diffs: &[FieldDiff], opts: &EditOptions) -> anyhow::Res
     Ok(change)
 }
 
-/// Aplica (ou apenas simula) a edição em lote. Com `dry_run` — o padrão —
-/// nenhum byte do arquivo muda: o retorno é só o diff.
+/// Applies (or just simulates) the batch edit. With `dry_run` — the default —
+/// no byte of the file changes: the return is just the diff.
 pub fn edit(opts: &EditOptions, progress: &ProgressFn) -> anyhow::Result<EditResult> {
     let mut files = opts.files.clone();
     if opts.sort_by_name {
@@ -1380,7 +1379,7 @@ pub fn edit(opts: &EditOptions, progress: &ProgressFn) -> anyhow::Result<EditRes
     })
 }
 
-/// Capa de um arquivo, em `data:` URL, para a UI mostrar a miniatura.
+/// A file's cover, as a `data:` URL, for the UI to show the thumbnail.
 pub fn cover_data_url(path: &str) -> anyhow::Result<Option<String>> {
     use base64::Engine as _;
     let tagged = lofty::read_from_path(path).map_err(|e| anyhow!(e.to_string()))?;
@@ -1399,30 +1398,30 @@ pub fn cover_data_url(path: &str) -> anyhow::Result<Option<String>> {
     Ok(Some(format!("data:{mime};base64,{b64}")))
 }
 
-// ─────────────────────────────── testes ─────────────────────────────────
+// ─────────────────────────────── tests ─────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use lofty::prelude::TagExt;
 
-    /// FLAC mínimo válido: marcador + um bloco STREAMINFO de 1 segundo e
-    /// nenhum quadro de áudio. É o bastante para o lofty abrir, ler as
-    /// propriedades e gravar Vorbis Comments — sem binário no repositório.
+    /// A minimal valid FLAC: marker + one 1-second STREAMINFO block and
+    /// no audio frames. Enough for lofty to open it, read the
+    /// properties and write Vorbis Comments — no binary in the repo.
     fn minimal_flac() -> Vec<u8> {
         let mut v = Vec::new();
         v.extend_from_slice(b"fLaC");
-        v.push(0x80); // último bloco de metadado, tipo 0 (STREAMINFO)
+        v.push(0x80); // last metadata block, type 0 (STREAMINFO)
         v.extend_from_slice(&[0x00, 0x00, 0x22]); // 34 bytes
-        v.extend_from_slice(&4096u16.to_be_bytes()); // blocksize mínimo
-        v.extend_from_slice(&4096u16.to_be_bytes()); // blocksize máximo
-        v.extend_from_slice(&[0, 0, 0]); // framesize mínimo
-        v.extend_from_slice(&[0, 0, 0]); // framesize máximo
+        v.extend_from_slice(&4096u16.to_be_bytes()); // minimum blocksize
+        v.extend_from_slice(&4096u16.to_be_bytes()); // maximum blocksize
+        v.extend_from_slice(&[0, 0, 0]); // minimum framesize
+        v.extend_from_slice(&[0, 0, 0]); // maximum framesize
                                          // 20 bits de taxa, 3 de canais (valor-1), 5 de bits (valor-1),
                                          // 36 de total de amostras.
         let packed: u64 = (44_100u64 << 44) | (1u64 << 41) | (15u64 << 36) | 44_100u64;
         v.extend_from_slice(&packed.to_be_bytes());
-        v.extend_from_slice(&[0u8; 16]); // MD5 do áudio: zerado = desconhecido
+        v.extend_from_slice(&[0u8; 16]); // audio MD5: zeroed = unknown
         v
     }
 
@@ -1430,13 +1429,13 @@ mod tests {
         let dir =
             std::env::temp_dir().join(format!("gumballz-get-audio-tag-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("criar tempdir do teste");
+        std::fs::create_dir_all(&dir).expect("create test tempdir");
         dir
     }
 
     fn write_flac(dir: &Path, name: &str) -> PathBuf {
         let p = dir.join(name);
-        std::fs::write(&p, minimal_flac()).expect("gravar o flac do teste");
+        std::fs::write(&p, minimal_flac()).expect("write the test flac");
         p
     }
 
@@ -1466,7 +1465,7 @@ mod tests {
         assert_eq!(fix_mojibake("MÃºsica").as_deref(), Some("Música"));
         assert_eq!(fix_mojibake("CoraÃ§Ã£o").as_deref(), Some("Coração"));
         assert_eq!(fix_mojibake("BeyoncÃ©").as_deref(), Some("Beyoncé"));
-        // Aspas tipográficas passam pela faixa C1 do CP1252.
+        // Typographic quotes go through the CP1252 C1 range.
         assert_eq!(fix_mojibake("Donâ€™t").as_deref(), Some("Don’t"));
     }
 
@@ -1485,7 +1484,7 @@ mod tests {
         assert!(!has_lost_bytes("Musica"));
     }
 
-    // ── faixa "3/12" ──
+    // ── track "3/12" ──
 
     #[test]
     fn parse_de_faixa_com_total() {
@@ -1509,7 +1508,7 @@ mod tests {
         assert_eq!(normalize_year("sem ano"), None);
     }
 
-    // ── título/artista trocados ──
+    // ── swapped title/artist ──
 
     #[test]
     fn detecta_titulo_e_artista_trocados() {
@@ -1523,7 +1522,7 @@ mod tests {
             Some("Radiohead"),
             Some("Creep")
         ));
-        // Certo: o nome diz artista à esquerda e a tag concorda.
+        // Right: the name says artist on the left and the tag agrees.
         assert!(!looks_swapped(
             "Radiohead - Creep",
             Some("Creep"),
@@ -1533,7 +1532,7 @@ mod tests {
         assert!(!looks_swapped("Radiohead - Creep", None, Some("Radiohead")));
     }
 
-    // ── ordem natural ──
+    // ── natural order ──
 
     #[test]
     fn ordena_por_nome_em_ordem_natural() {
@@ -1567,7 +1566,7 @@ mod tests {
         ];
         for (i, row) in rows.iter().enumerate() {
             let diffs = plan_for(row, i as u32 + 1, 3, &opts);
-            let track = diffs.iter().find(|d| d.field == "track").expect("faixa");
+            let track = diffs.iter().find(|d| d.field == "track").expect("track");
             assert_eq!(track.to.as_deref(), Some((i + 1).to_string().as_str()));
             assert_eq!(track.reason, "renumber");
             let total = diffs
@@ -1578,7 +1577,7 @@ mod tests {
         }
     }
 
-    // ── diff do dry_run ──
+    // ── dry_run diff ──
 
     #[test]
     fn diff_mostra_so_o_que_muda() {
@@ -1591,7 +1590,7 @@ mod tests {
         let row = row_with(tags, "01 - Radiohead - Creep.flac");
 
         let mut set = BTreeMap::new();
-        // Mesmo valor: não pode virar diff.
+        // Same value: it must not become a diff.
         set.insert("album".to_string(), "Pablo Honey".to_string());
         set.insert("genre".to_string(), "Rock".to_string());
         let opts = EditOptions {
@@ -1599,7 +1598,7 @@ mod tests {
             ..Default::default()
         };
         let diffs = plan_for(&row, 1, 1, &opts);
-        assert_eq!(diffs.len(), 1, "só o gênero mudou: {diffs:?}");
+        assert_eq!(diffs.len(), 1, "only the genre changed: {diffs:?}");
         assert_eq!(diffs[0].field, "genre");
         assert_eq!(diffs[0].from, None);
         assert_eq!(diffs[0].to.as_deref(), Some("Rock"));
@@ -1622,7 +1621,7 @@ mod tests {
         let diffs = plan_for(&row, 3, 12, &opts);
         let by = |f: &str| diffs.iter().find(|d| d.field == f).cloned();
 
-        let track = by("track").expect("faixa");
+        let track = by("track").expect("track");
         assert_eq!(track.from.as_deref(), Some("3/12"));
         assert_eq!(track.to.as_deref(), Some("3"));
         assert_eq!(track.reason, "split_pair");
@@ -1654,7 +1653,7 @@ mod tests {
             by("artist").and_then(|d| d.to).as_deref(),
             Some("Radiohead")
         );
-        let comment = by("comment").expect("comentário");
+        let comment = by("comment").expect("comment");
         assert_eq!(comment.to, None);
         assert_eq!(comment.reason, "clear");
     }
@@ -1677,7 +1676,7 @@ mod tests {
         assert_eq!(diffs[0].reason, "mojibake");
     }
 
-    // ── diagnóstico ──
+    // ── diagnosis ──
 
     #[test]
     fn diagnostico_lista_os_problemas_da_faixa() {
@@ -1691,7 +1690,7 @@ mod tests {
         let row = row_with(tags, "Radiohead - Creep.flac");
         let issues = diagnose(&row, false, &[]);
         let codes: Vec<&str> = issues.iter().map(|i| i.code.as_str()).collect();
-        assert!(codes.contains(&"missing_field"), "{codes:?}"); // álbum
+        assert!(codes.contains(&"missing_field"), "{codes:?}"); // album
         assert!(codes.contains(&"swapped_title_artist"), "{codes:?}");
         assert!(codes.contains(&"pair_in_text"), "{codes:?}");
         assert!(codes.contains(&"bad_year"), "{codes:?}");
@@ -1706,7 +1705,7 @@ mod tests {
         assert!(issues.iter().any(|i| i.code == "wrong_tag_type"));
     }
 
-    // ── ida e volta pelo lofty, num FLAC montado à mão ──
+    // ── round trip via lofty, on a hand-built FLAC ──
 
     #[test]
     fn le_um_flac_montado_a_mao() {
@@ -1725,15 +1724,15 @@ mod tests {
         let dir = temp_dir("scan");
         write_flac(&dir, "01 a.flac");
         write_flac(&dir, "02 b.flac");
-        std::fs::write(dir.join("leia-me.txt"), b"nao e audio").expect("gravar txt");
+        std::fs::write(dir.join("leia-me.txt"), b"nao e audio").expect("write txt");
         let opts = ScanOptions {
             dirs: vec![dir.to_string_lossy().to_string()],
             ..Default::default()
         };
         let out = scan(&opts, &super::super::noop_progress()).expect("scan");
-        assert_eq!(out.scanned, 2, "o .txt não pode entrar");
+        assert_eq!(out.scanned, 2, "the .txt cannot get in");
         assert_eq!(out.failed, 0);
-        // Arquivo sem tag nenhuma.
+        // File with no tag at all.
         assert!(out.tracks.iter().all(|t| t.tag_type.is_none()));
         assert!(out.issue_counts.contains_key("no_tag"));
         let _ = std::fs::remove_dir_all(&dir);
@@ -1763,9 +1762,9 @@ mod tests {
         assert_eq!(seco.written, 0);
         assert_eq!(seco.changed, 1);
         assert_eq!(
-            std::fs::read(&p).expect("ler depois do dry run"),
+            std::fs::read(&p).expect("read after the dry run"),
             antes,
-            "dry_run não pode escrever byte nenhum"
+            "dry_run cannot write a single byte"
         );
         let campos: Vec<&str> = seco.files[0]
             .diffs
@@ -1777,7 +1776,7 @@ mod tests {
         assert!(campos.contains(&"track"), "{campos:?}");
 
         opts.dry_run = false;
-        let gravado = edit(&opts, &super::super::noop_progress()).expect("gravar");
+        let gravado = edit(&opts, &super::super::noop_progress()).expect("write");
         assert_eq!(gravado.written, 1, "{:?}", gravado.files[0].error);
 
         let row = read_track(&p);
@@ -1787,8 +1786,8 @@ mod tests {
         assert_eq!(row.tags.track, Some(1));
         assert_eq!(row.tags.track_total, Some(1));
 
-        // Rodar de novo com o mesmo plano não tem mais o que mudar.
-        let repetido = edit(&opts, &super::super::noop_progress()).expect("segunda passada");
+        // Running again with the same plan has nothing left to change.
+        let repetido = edit(&opts, &super::super::noop_progress()).expect("second pass");
         let restantes: Vec<&str> = repetido.files[0]
             .diffs
             .iter()
@@ -1796,7 +1795,7 @@ mod tests {
             .collect();
         assert!(
             !restantes.contains(&"title"),
-            "título já está certo: {restantes:?}"
+            "title is already right: {restantes:?}"
         );
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -1806,7 +1805,7 @@ mod tests {
         let dir = temp_dir("cover");
         let p = write_flac(&dir, "01 capa.flac");
         let path = p.to_string_lossy().to_string();
-        // PNG 1x1 mínimo.
+        // Minimal 1x1 PNG.
         let png: Vec<u8> = vec![
             0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48,
             0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00,
@@ -1829,8 +1828,8 @@ mod tests {
         assert_eq!(row.cover.count, 1);
         assert_eq!(row.cover.mime.as_deref(), Some("image/png"));
 
-        // Embutir de novo troca a capa frontal em vez de empilhar outra.
-        let r = edit(&opts, &super::super::noop_progress()).expect("embutir de novo");
+        // Embedding again swaps the front cover instead of stacking another one.
+        let r = edit(&opts, &super::super::noop_progress()).expect("embed again");
         assert_eq!(r.written, 1);
         assert_eq!(read_track(&p).cover.count, 1);
 

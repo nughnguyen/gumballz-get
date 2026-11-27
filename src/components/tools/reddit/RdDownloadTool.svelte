@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Mídia de um post do Reddit: vídeo do v.redd.it com áudio, galeria, imagem e link de fora. */
+  /** Media from a Reddit post: v.redd.it video with audio, gallery, image and external link. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

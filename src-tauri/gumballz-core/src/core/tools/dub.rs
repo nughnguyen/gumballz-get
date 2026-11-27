@@ -1,7 +1,7 @@
-//! Dublagem a partir de uma legenda (estudo 06, planner do KrillinAI em
-//! versão curta): cada cue vira um MP3 do Edge TTS, o áudio é acelerado até
-//! caber no slot (`atempo` ≤ 1,3) e tudo é montado com um único `ffmpeg`
-//! (`adelay` + `amix`). Com vídeo de entrada, a faixa nova substitui a
+//! Dubbing from a subtitle (study 06, the KrillinAI planner in
+//! short form): each cue becomes an Edge TTS MP3, the audio is sped up until
+//! it fits the slot (`atempo` ≤ 1.3) and everything is assembled with a single `ffmpeg`
+//! (`adelay` + `amix`). With an input video, the new track replaces the
 //! original (`-map 0:v -map 1:a`).
 
 use std::path::{Path, PathBuf};
@@ -20,12 +20,12 @@ pub struct DubOptions {
     pub voice: String,
     #[serde(default = "default_rate")]
     pub rate: String,
-    /// Aceleração máxima antes de deixar a fala invadir o próximo cue.
+    /// Maximum speed-up before the speech invades the next cue.
     #[serde(default = "default_speed")]
     pub max_speed: f64,
     #[serde(default)]
     pub output_dir: String,
-    /// Volume da trilha original mantida por baixo (0 = remove).
+    /// Volume of the original track kept underneath (0 = remove).
     #[serde(default)]
     pub keep_original_volume: f64,
 }
@@ -45,7 +45,7 @@ pub struct DubResult {
     pub sped_up: usize,
 }
 
-/// `atempo` só aceita 0,5–2,0 por filtro; encadeia como o KrillinAI/pyvideotrans.
+/// `atempo` only accepts 0.5–2.0 per filter; chain it like KrillinAI/pyvideotrans.
 pub fn atempo_chain(speed: f64) -> String {
     let mut parts = Vec::new();
     let mut s = speed;
@@ -69,7 +69,7 @@ pub async fn dub(opts: DubOptions, progress: super::ProgressFn) -> anyhow::Resul
         .filter(|c| !c.text.trim().is_empty())
         .collect();
     if cues.is_empty() {
-        return Err(anyhow!("a legenda nao tem falas"));
+        return Err(anyhow!("the subtitle has no speech"));
     }
     let ffmpeg = crate::core::dependencies::ensure_ffmpeg().await?;
     let work = super::temp_dir().join(format!("dub-{}", uuid::Uuid::new_v4()));
@@ -121,7 +121,7 @@ pub async fn dub(opts: DubOptions, progress: super::ProgressFn) -> anyhow::Resul
         ));
     }
 
-    // 2) mede duração real e decide a velocidade
+    // 2) measure the real duration and decide the speed
     let mut sped_up = 0usize;
     let mut speeds = Vec::with_capacity(pieces.len());
     for (mp3, _, slot) in &pieces {
@@ -171,7 +171,7 @@ pub async fn dub(opts: DubOptions, progress: super::ProgressFn) -> anyhow::Resul
         let output = cmd.output().await?;
         if !output.status.success() {
             return Err(anyhow!(
-                "ffmpeg (mix) falhou: {}",
+                "ffmpeg (mix) failed: {}",
                 String::from_utf8_lossy(&output.stderr).trim()
             ));
         }
@@ -206,13 +206,13 @@ pub async fn dub(opts: DubOptions, progress: super::ProgressFn) -> anyhow::Resul
         let output = cmd.output().await?;
         if !output.status.success() {
             return Err(anyhow!(
-                "ffmpeg (final) falhou: {}",
+                "ffmpeg (final) failed: {}",
                 String::from_utf8_lossy(&output.stderr).trim()
             ));
         }
     }
 
-    // 4) opcional: troca o áudio do vídeo
+    // 4) optional: swap the video's audio
     let mut video_out = None;
     if !opts.video_path.trim().is_empty() {
         super::report(&progress, id, "mux", 0, Some(1), None);
@@ -241,7 +241,7 @@ pub async fn dub(opts: DubOptions, progress: super::ProgressFn) -> anyhow::Resul
         let output = cmd.output().await?;
         if !output.status.success() {
             return Err(anyhow!(
-                "ffmpeg (mux) falhou: {}",
+                "ffmpeg (mux) failed: {}",
                 String::from_utf8_lossy(&output.stderr).trim()
             ));
         }

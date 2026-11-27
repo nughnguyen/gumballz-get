@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Arquivo pessoal das newsletters do Substack: cada post em Markdown, HTML e JSON. */
+  /** Personal archive of Substack newsletters: each post in Markdown, HTML and JSON. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

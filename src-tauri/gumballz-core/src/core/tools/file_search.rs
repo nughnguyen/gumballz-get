@@ -1,5 +1,5 @@
-//! Busca instantânea de arquivos (estudos 26, 27): Everything (`es.exe`) no
-//! Windows, Spotlight (`mdfind`) no macOS, `fd`/`find` no Linux.
+//! Instant file search (studies 26, 27): Everything (`es.exe`) on
+//! Windows, Spotlight (`mdfind`) on macOS, `fd`/`find` on Linux.
 
 #[allow(unused_imports)]
 use std::path::PathBuf;
@@ -88,7 +88,7 @@ pub async fn search(query: &str, folder: &str, limit: usize) -> anyhow::Result<V
     {
         let es = es_path()
             .await
-            .ok_or_else(|| anyhow!("Everything (es.exe) nao encontrado"))?;
+            .ok_or_else(|| anyhow!("Everything (es.exe) not found"))?;
         let mut cmd = crate::core::process::command(&es);
         cmd.args(["-n", &limit.to_string()]);
         if !folder.trim().is_empty() {

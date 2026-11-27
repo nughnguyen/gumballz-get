@@ -1,13 +1,13 @@
-//! Verificação ao vivo da categoria Instagram com uma sessão real. Ignorado
-//! por padrão; roda com um cookies.txt (Netscape) do instagram.com:
+//! Live check of the Instagram category with a real session. Ignored
+//! by default; runs with a cookies.txt (Netscape) from instagram.com:
 //!
 //! ```text
 //! GUMBALLZ_IG_COOKIES="$HOME/Library/Application Support/com.gumballz.get/cookies/instagram.com/_default.txt" \
 //!   cargo test -p gumballz-core --test instagram_live -- --ignored --nocapture
 //! ```
 //!
-//! Só faz leituras (perfil, posts, reels, stories, highlights, seguidores,
-//! comentários, curtidas, hashtag). Nada de unfollow nem publicação.
+//! It only reads (profile, posts, reels, stories, highlights, followers,
+//! comments, likes, hashtag). No unfollow and no publication.
 
 use std::sync::atomic::AtomicBool;
 
@@ -26,7 +26,7 @@ async fn ig_live_read_only() {
 
     let me = profile::whoami(&client).await.expect("whoami");
     println!(
-        "logado como @{} ({} seguidores)",
+        "logged in as @{} ({} followers)",
         me.username, me.follower_count
     );
 
@@ -35,7 +35,7 @@ async fn ig_live_read_only() {
         .await
         .expect("resolve_user");
     println!(
-        "@{} pk={} posts={} privado={}",
+        "@{} pk={} posts={} private={}",
         user.username, user.pk, user.media_count, user.is_private
     );
 
@@ -43,12 +43,12 @@ async fn ig_live_read_only() {
         .await
         .expect("user_posts (graphql)");
     println!(
-        "posts: {} (primeiro {} · {} arquivos)",
+        "posts: {} (first {} · {} files)",
         posts.len(),
         posts.first().map(|x| x.code.as_str()).unwrap_or("-"),
         posts.first().map(|x| x.files.len()).unwrap_or(0)
     );
-    assert!(posts.len() > 12, "paginação do GraphQL devia passar de 12");
+    assert!(posts.len() > 12, "GraphQL pagination should exceed 12");
 
     let reels = profile::user_reels(&client, &user.pk, 5, &flag, &p, "t")
         .await
@@ -58,7 +58,7 @@ async fn ig_live_read_only() {
     let tagged = profile::user_tagged(&client, &user.pk, 5, &flag, &p, "t")
         .await
         .expect("user_tagged");
-    println!("marcados: {}", tagged.len());
+    println!("tagged: {}", tagged.len());
 
     let hls = profile::highlights(&client, &user.pk)
         .await
@@ -68,19 +68,19 @@ async fn ig_live_read_only() {
         let items = profile::highlight_items(&client, &h.id)
             .await
             .expect("highlight_items");
-        println!("  '{}' com {} itens", h.title, items.len());
+        println!("  '{}' with {} items", h.title, items.len());
     }
     let stories = profile::stories_of(&client, &user.pk)
         .await
         .expect("stories_of");
-    println!("stories ativos: {}", stories.len());
+    println!("active stories: {}", stories.len());
 
     if let Some(post) = posts.first() {
         let item = media::post_info(&client, &post.code)
             .await
             .expect("post_info");
         println!(
-            "post_info ok: {} likes, {} comentarios",
+            "post_info ok: {} likes, {} comments",
             item.like_count, item.comment_count
         );
         let comments = social::comments(&client, &item.pk, 30, &flag, &p, "t")
@@ -88,7 +88,7 @@ async fn ig_live_read_only() {
             .expect("comments");
         let (likes, likers) = social::likers(&client, &item.pk).await.expect("likers");
         println!(
-            "comentarios: {} · likers: {} de {}",
+            "comments: {} · likers: {} of {}",
             comments.len(),
             likers.len(),
             likes
@@ -103,7 +103,7 @@ async fn ig_live_read_only() {
         .expect("followers");
     let a = follow::analyze(followers, following, &Default::default());
     println!(
-        "seguidores {} · seguindo {} · nao seguem de volta (amostra) {}",
+        "followers {} · following {} · not following back (sample) {}",
         a.followers_count,
         a.following_count,
         a.not_following_back.len()
@@ -114,5 +114,5 @@ async fn ig_live_read_only() {
     let tag_media = social::tag_media(&client, "sunset", "recent", 10, &flag, &p, "t")
         .await
         .unwrap_or_default();
-    println!("#sunset recentes: {}", tag_media.len());
+    println!("#sunset recent: {}", tag_media.len());
 }

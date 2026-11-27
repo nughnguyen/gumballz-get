@@ -1,16 +1,16 @@
-//! Listas e diários de consumo (categoria `lists`). A regra da casa aqui é
-//! uma só: quando a plataforma já tem um export oficial, a ferramenta aperta
-//! o botão que já existe em vez de raspar página. Sobra scraping só para o
-//! que o export não cobre (ID do TMDB, texto de review por prateleira).
+//! Consumption lists and diaries (`lists` category). The house rule here is
+//! just one: when the platform already has an official export, the tool presses
+//! the button that already exists instead of scraping pages. Scraping is left only for what
+//! the export does not cover (TMDB id, review text per shelf).
 //!
-//! - `letterboxd.rs`: baixa o ZIP de `/data/export/` com a sessão do usuário
-//!   e normaliza diário, notas, reviews, watchlist e listas.
-//! - `trakt.rs`: API oficial com device flow de OAuth; histórico, notas,
-//!   watchlist e listas no plano gratuito.
-//! - `goodreads.rs`: dispara o "Export Library" oficial, espera o CSV ficar
-//!   pronto e enriquece por prateleira.
-//! - `merge.rs`: junta os três (mais o export do Spotify) numa linha do
-//!   tempo única de leu/assistiu/ouviu.
+//! - `letterboxd.rs`: downloads the ZIP from `/data/export/` with the user's session
+//!   and normalizes diary, ratings, reviews, watchlist and lists.
+//! - `trakt.rs`: official API with OAuth device flow; history, ratings,
+//!   watchlist and lists on the free plan.
+//! - `goodreads.rs`: fires the official "Export Library", waits for the CSV to be
+//!   ready and enriches it per shelf.
+//! - `merge.rs`: joins the three (plus the Spotify export) into a single
+//!   read/watched/listened timeline.
 
 pub mod goodreads;
 pub mod letterboxd;
@@ -24,17 +24,17 @@ use std::time::{Duration, Instant};
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 
-/// Leitor de CSV do export do Reddit: mesmo dialeto (RFC 4180 com aspas
-/// duplicadas), então não vale reescrever.
+/// Reddit export CSV reader: same dialect (RFC 4180 with doubled quotes),
+/// so it is not worth rewriting.
 pub use crate::core::tools::reddit::gdpr::parse_csv;
 
-// ── Esquema comum ───────────────────────────────────────────────────────
+// ── Common schema ───────────────────────────────────────────────────────
 
-/// Uma linha da linha do tempo, venha de que serviço vier. É o formato que
-/// `merge.rs` consome e que cada módulo produz.
+/// One timeline line, whichever service it came from. It is the format that
+/// `merge.rs` consumes and each module produces.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Entry {
-    /// `YYYY-MM-DD` quando o serviço dá a data; vazio quando não dá.
+    /// `YYYY-MM-DD` when the service gives the date; empty when it does not.
     #[serde(default)]
     pub date: String,
     /// `filme` | `serie` | `livro` | `musica`.
@@ -42,10 +42,10 @@ pub struct Entry {
     pub title: String,
     #[serde(default)]
     pub year: Option<i32>,
-    /// Diretor, autor ou artista — o que a origem souber dizer.
+    /// Director, author or artist — whatever the source can say.
     #[serde(default)]
     pub creator: String,
-    /// Já na escala de 0 a 10 (Letterboxd 0–5 vira 0–10, Goodreads 0–5 idem).
+    /// Already on the 0 to 10 scale (Letterboxd 0–5 becomes 0–10, Goodreads 0–5 likewise).
     #[serde(default)]
     pub rating: Option<f32>,
     #[serde(default)]
@@ -54,7 +54,7 @@ pub struct Entry {
     pub source: String,
     #[serde(default)]
     pub url: String,
-    /// Que lista/prateleira/atividade gerou a linha (`diary`, `watchlist`,
+    /// Which list/shelf/activity produced the line (`diary`, `watchlist`,
     /// `read`, `lista: Favoritos`…).
     #[serde(default)]
     pub list: String,
@@ -66,7 +66,7 @@ pub struct Entry {
     pub imdb_id: String,
     #[serde(default)]
     pub isbn: String,
-    /// Quantas vezes a mesma coisa apareceu depois da deduplicação.
+    /// How many times the same thing appeared after deduplication.
     #[serde(default)]
     pub times: u32,
 }
@@ -82,7 +82,7 @@ impl Entry {
         }
     }
 
-    /// Chave de deduplicação: tipo + título normalizado + ano.
+    /// Deduplication key: type + normalized title + year.
     pub fn dedup_key(&self) -> String {
         format!(
             "{}|{}|{}",
@@ -92,7 +92,7 @@ impl Entry {
         )
     }
 
-    /// `YYYY-MM` da linha, ou vazio se não tem data utilizável.
+    /// `YYYY-MM` of the line, or empty if it has no usable date.
     pub fn month(&self) -> String {
         if self.date.len() >= 7 {
             self.date[..7].to_string()
@@ -110,27 +110,27 @@ impl Entry {
     }
 }
 
-// ── Normalização de título ──────────────────────────────────────────────
+// ── Title normalization ──────────────────────────────────────────────
 
-/// Artigos iniciais que só atrapalham o casamento entre serviços: o mesmo
-/// filme é "The Thing" no Trakt e "Thing, The" em export antigo, e o mesmo
-/// livro é "O Nome do Vento" e "Nome do Vento, O".
+/// Leading articles that only get in the way of matching across services: the same
+/// movie is "The Thing" on Trakt and "Thing, The" in an old export, and the same
+/// book is "O Nome do Vento" and "Nome do Vento, O".
 const ARTICLES: &[&str] = &[
     "the ", "a ", "an ", "o ", "os ", "as ", "um ", "uma ", "el ", "la ", "los ", "las ", "le ",
     "les ", "il ", "lo ", "der ", "die ", "das ",
 ];
 
-/// Título comparável: sem acento, sem caixa, sem artigo inicial, sem
-/// subtítulo depois de `:` ou ` - `, sem pontuação e sem espaço sobrando.
+/// Comparable title: no accents, no case, no leading article, no
+/// subtitle after `:` or ` - `, no punctuation and no leftover space.
 ///
-/// O subtítulo cai fora porque é onde os serviços mais divergem ("Duna" vs
-/// "Duna: Parte Um" vs "Dune - Part One"), e o parêntese junto com ele — é
-/// nele que vêm o ano ("Duna (2021)") e a série ("Duna (Duna, #1)"), que são
-/// campo próprio no esquema. O que sobra ainda separa obras diferentes
-/// porque o ano entra na chave de deduplicação junto.
+/// The subtitle drops out because that is where services diverge most ("Duna" vs
+/// "Duna: Parte Um" vs "Dune - Part One"), and the parenthesis along with it — that is
+/// where the year ("Duna (2021)") and the series ("Duna (Duna, #1)") come from, which are
+/// their own fields in the schema. What is left still separates different works
+/// because the year enters the dedup key along with it.
 pub fn normalize_title(input: &str) -> String {
     let s = crate::core::tools::music::norm::strip_accents(input).to_lowercase();
-    // Subtítulo: só corta se sobra alguma coisa antes.
+    // Subtitle: only cut if something is left before it.
     let mut base = s.as_str();
     for sep in [": ", " - ", " — ", " – ", " ("] {
         if let Some(pos) = base.find(sep) {
@@ -140,7 +140,7 @@ pub fn normalize_title(input: &str) -> String {
         }
     }
     let base = base.strip_suffix(':').unwrap_or(base);
-    // Sufixo "..., The" que alguns exports antigos ainda usam.
+    // "..., The" suffix that some old exports still use.
     let mut s = base.to_string();
     for art in ARTICLES {
         let tail = format!(", {}", art.trim());
@@ -149,7 +149,7 @@ pub fn normalize_title(input: &str) -> String {
             break;
         }
     }
-    // Pontuação vira espaço; dígito e letra ficam.
+    // Punctuation becomes a space; digits and letters stay.
     let cleaned: String = s
         .chars()
         .map(|c| if c.is_alphanumeric() { c } else { ' ' })
@@ -164,8 +164,8 @@ pub fn normalize_title(input: &str) -> String {
     out.trim().to_string()
 }
 
-/// Ano dentro do título ("Duna (2021)") ou de um campo solto. Aceita de 1870
-/// (primeiros registros de cinema) até o ano que vem.
+/// Year inside the title ("Duna (2021)") or from a loose field. Accepts from 1870
+/// (first cinema records) up to next year.
 pub fn parse_year(s: &str) -> Option<i32> {
     let digits: String = s.chars().filter(|c| c.is_ascii_digit()).collect();
     if digits.len() == 4 {
@@ -188,8 +188,8 @@ pub fn parse_year(s: &str) -> Option<i32> {
     None
 }
 
-/// `2021-05-13T14:33:00Z`, `2021-05-13 14:33`, `2021/05/13` e `13/05/2021`
-/// viram todos `2021-05-13`. Devolve vazio quando não dá para ler.
+/// `2021-05-13T14:33:00Z`, `2021-05-13 14:33`, `2021/05/13` and `13/05/2021`
+/// all become `2021-05-13`. Returns empty when it cannot be read.
 pub fn iso_date(input: &str) -> String {
     let s = input.trim();
     if s.is_empty() {
@@ -206,7 +206,7 @@ pub fn iso_date(input: &str) -> String {
                 }
             }
         } else if c.len() == 4 {
-            // dd/mm/yyyy — o Goodreads escreve mm/dd/yyyy, tratado lá.
+            // dd/mm/yyyy — Goodreads writes mm/dd/yyyy, handled there.
             if let (Ok(d), Ok(m), Ok(y)) = (a.parse::<u32>(), b.parse::<u32>(), c.parse::<i32>()) {
                 if (1..=12).contains(&m) && (1..=31).contains(&d) {
                     return format!("{:04}-{:02}-{:02}", y, m, d);
@@ -214,7 +214,7 @@ pub fn iso_date(input: &str) -> String {
             }
         }
     }
-    // Data por extenso do Goodreads: "May 13, 2021" / "Sep 2021".
+    // Goodreads spelled-out date: "May 13, 2021" / "Sep 2021".
     if let Some(d) = parse_long_date(s) {
         return d;
     }
@@ -262,7 +262,7 @@ fn parse_long_date(s: &str) -> Option<String> {
     Some(format!("{:04}-{:02}-{:02}", y, m, day.unwrap_or(1)))
 }
 
-// ── CSV de saída ────────────────────────────────────────────────────────
+// ── Output CSV ────────────────────────────────────────────────────────
 
 pub fn csv_cell(s: &str) -> String {
     if s.contains([',', '"', '\n', '\r']) {
@@ -277,8 +277,8 @@ pub fn csv_line(cells: &[String]) -> String {
     format!("{}\n", row.join(","))
 }
 
-/// Índice de cada coluna pelo nome do cabeçalho, sem depender de ordem nem
-/// de caixa — o Letterboxd já mudou a ordem das colunas mais de uma vez.
+/// Index of each column by header name, without depending on order or
+/// case — Letterboxd has already changed the column order more than once.
 pub fn header_index(header: &[String]) -> std::collections::HashMap<String, usize> {
     header
         .iter()
@@ -287,8 +287,8 @@ pub fn header_index(header: &[String]) -> std::collections::HashMap<String, usiz
         .collect()
 }
 
-/// Célula pelo nome da coluna, aceitando apelidos (o mesmo campo mudou de
-/// nome entre versões do export).
+/// Cell by column name, accepting aliases (the same field changed name
+/// between export versions).
 pub fn cell<'a>(
     row: &'a [String],
     idx: &std::collections::HashMap<String, usize>,
@@ -307,7 +307,7 @@ pub fn cell<'a>(
     ""
 }
 
-/// Escreve as linhas em CSV com o cabeçalho do esquema comum.
+/// Writes the lines as CSV with the common-schema header.
 pub fn entries_csv(entries: &[Entry]) -> String {
     let mut out = String::from(
         "date,kind,title,year,creator,rating,review,source,list,tags,tmdb_id,imdb_id,isbn,times\n",
@@ -333,7 +333,7 @@ pub fn entries_csv(entries: &[Entry]) -> String {
     out
 }
 
-/// Grava os formatos pedidos (`json`, `csv`, `md`) e devolve os caminhos.
+/// Writes the requested formats (`json`, `csv`, `md`) and returns the paths.
 pub fn write_exports(
     dir: &std::path::Path,
     stem: &str,
@@ -362,11 +362,11 @@ pub fn write_exports(
     Ok(files)
 }
 
-// ── Cliente com sessão ──────────────────────────────────────────────────
+// ── Session client ──────────────────────────────────────────────────
 
-/// Filtra os cookies de um domínio do arquivo Netscape e monta o pote. O
-/// gerenciador grava um arquivo por (domínio, conta) e um mesmo arquivo pode
-/// carregar cookie de vizinho, então o filtro não é decoração.
+/// Filters the cookies of one domain from the Netscape file and builds the jar. The
+/// manager writes one file per (domain, account) and one file can
+/// carry a neighbour's cookie, so the filter is not decoration.
 pub fn jar_from_netscape(content: &str, domain: &str) -> (Arc<reqwest::cookie::Jar>, usize) {
     let jar = reqwest::cookie::Jar::default();
     let suffix = format!(".{}", domain);
@@ -412,11 +412,11 @@ fn cookie_client(session: Option<&str>, domain: &str) -> Result<(reqwest::Client
     Ok((client, seeded > 0))
 }
 
-/// Cliente com freio, no mesmo desenho do `Fetcher` do Reddit: uma
-/// requisição por vez, espera configurável entre elas e recuo crescente
-/// quando o servidor reclama. Letterboxd e Goodreads não têm API pública e
-/// respondem mal a rajada — o freio é o que mantém a conta do usuário fora
-/// de encrenca.
+/// Client with a brake, in the same shape as the Reddit `Fetcher`: one
+/// request at a time, configurable wait between them and growing backoff
+/// when the server complains. Letterboxd and Goodreads have no public API and
+/// respond badly to bursts — the brake is what keeps the user's account out of
+/// trouble.
 pub struct Fetcher {
     client: reqwest::Client,
     delay: Duration,
@@ -460,7 +460,7 @@ impl Fetcher {
         *last = Some(Instant::now());
     }
 
-    /// GET com o corpo em texto. Repete em 429 e em erro de servidor.
+    /// GET with the body as text. Retries on 429 and on server errors.
     pub async fn get_text(&self, url: &str) -> Result<String> {
         const TRIES: u32 = 4;
         let mut wait = Duration::from_secs(3);
@@ -473,7 +473,7 @@ impl Fetcher {
                 Ok(r) if r.status().as_u16() == 429 || r.status().is_server_error() => {
                     if attempt == TRIES {
                         return Err(anyhow!(
-                            "o servidor está limitando o acesso (HTTP {}). Tente de novo daqui a pouco",
+                            "the server is limiting access (HTTP {}). Try again in a bit",
                             r.status()
                         ));
                     }
@@ -488,34 +488,34 @@ impl Fetcher {
                 }
                 Ok(r) if r.status().as_u16() == 401 || r.status().as_u16() == 403 => {
                     return Err(anyhow!(
-                        "o site respondeu {} — a sessão salva no gerenciador de cookies expirou ou não tem acesso a isso",
+                        "the site answered {} — the session saved in the cookie manager expired or has no access to this",
                         r.status()
                     ));
                 }
                 Ok(r) if r.status().as_u16() == 404 => {
-                    return Err(anyhow!("não encontrado ({})", url));
+                    return Err(anyhow!("not found ({})", url));
                 }
                 Ok(r) => return Err(anyhow!("HTTP {} em {}", r.status(), url)),
                 Err(e) if attempt < TRIES => {
                     tokio::time::sleep(wait).await;
                     wait *= 2;
-                    tracing::debug!("lists: tentativa {} falhou: {}", attempt, e);
+                    tracing::debug!("lists: attempt {} failed: {}", attempt, e);
                 }
                 Err(e) => return Err(e.into()),
             }
         }
-        Err(anyhow!("não consegui buscar {}", url))
+        Err(anyhow!("could not fetch {}", url))
     }
 
-    /// HEAD só para saber se um arquivo já existe. É como o Goodreads avisa
-    /// que terminou de gerar o CSV: enquanto não está pronto, responde 404.
+    /// HEAD just to know whether a file already exists. It is how Goodreads says
+    /// it finished generating the CSV: while it is not ready, it answers 404.
     pub async fn head_status(&self, url: &str) -> Result<u16> {
         self.pace().await;
         self.requests.fetch_add(1, Ordering::Relaxed);
         Ok(self.client.head(url).send().await?.status().as_u16())
     }
 
-    /// GET que devolve os bytes crus (o ZIP do Letterboxd, o CSV do Goodreads).
+    /// GET that returns the raw bytes (the Letterboxd ZIP, the Goodreads CSV).
     pub async fn get_bytes(&self, url: &str) -> Result<(Vec<u8>, String)> {
         self.pace().await;
         self.requests.fetch_add(1, Ordering::Relaxed);
@@ -535,9 +535,9 @@ impl Fetcher {
 
 // ── HTML mínimo ─────────────────────────────────────────────────────────
 
-/// Valor de um atributo dentro de uma tag, sem trazer um parser de HTML
-/// inteiro para achar dois números. Procura `attr="valor"` a partir de
-/// `anchor` e devolve o primeiro que aparecer.
+/// Value of an attribute inside a tag, without bringing in a whole HTML parser
+/// to find two numbers. Looks for `attr="value"` from
+/// `anchor` and returns the first one that shows up.
 pub fn attr_after(html: &str, anchor: &str, attr: &str) -> Option<String> {
     let start = html.find(anchor)?;
     let rest = &html[start..];
@@ -547,15 +547,15 @@ pub fn attr_after(html: &str, anchor: &str, attr: &str) -> Option<String> {
     Some(rest[at..end].to_string())
 }
 
-/// Tira as tags de um pedaço de HTML e resolve as entidades mais comuns.
+/// Strips the tags from a piece of HTML and resolves the most common entities.
 pub fn strip_html(html: &str) -> String {
     let mut out = String::with_capacity(html.len());
     let mut inside = false;
     for c in html.chars() {
         match c {
             '<' => inside = true,
-            // A tag vira espaço: sem isso um `<br />` entre duas frases as
-            // gruda numa palavra só.
+            // A tag becomes a space: without this, a `<br />` between two sentences
+            // glues them into a single word.
             '>' => {
                 inside = false;
                 out.push(' ');
@@ -596,7 +596,7 @@ mod tests {
             "blade runner 2049"
         );
         assert_eq!(normalize_title("WALL·E"), "wall e");
-        // Ano e série moram em campo próprio; no título são ruído.
+        // Year and series live in their own field; in the title they are noise.
         assert_eq!(normalize_title("Duna (2021)"), "duna");
         assert_eq!(normalize_title("Duna (Duna, #1)"), "duna");
         assert_eq!(normalize_title("Blade Runner 2049"), "blade runner 2049");
@@ -656,7 +656,7 @@ mod tests {
     }
 
     #[test]
-    fn cabecalho_indexa_sem_caixa_e_aceita_apelido() {
+    fn header_indexes_case_insensitively_and_accepts_alias() {
         let rows = parse_csv("Date,Name,Letterboxd URI\n2021-05-13,Duna,https://x\n");
         let idx = header_index(&rows[0]);
         assert_eq!(cell(&rows[1], &idx, &["name"]), "Duna");

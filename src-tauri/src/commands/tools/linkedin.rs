@@ -1,5 +1,5 @@
-//! Categoria LinkedIn: quatro leitores do export oficial de dados. Tudo roda
-//! em cima de arquivo local, sem nenhuma chamada de rede.
+//! LinkedIn category: four readers of the official data export. Everything runs
+//! on top of local files, with no network call at all.
 
 use gumballz_core::core::tools::linkedin::{checklist, connections, messages, overview};
 

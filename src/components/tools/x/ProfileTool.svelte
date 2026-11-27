@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Raio-X de perfil (estudo 67): engajamento, melhor horário, top posts, hashtags. */
+  /** Profile X-ray (study 67): engagement, best time, top posts, hashtags. */
   import { invoke } from "@tauri-apps/api/core";
   import { t } from "$lib/i18n";
   import { showToast } from "$lib/stores/toast-store.svelte";

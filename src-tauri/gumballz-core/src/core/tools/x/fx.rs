@@ -1,7 +1,7 @@
-//! FxTwitter API v2 (estudo 67): a via pública, sem login nem chave.
-//! `https://api.fxtwitter.com/2/...`, 1000 req/min por IP. Tudo que é
-//! público no X (post, thread, perfil, posts e mídia de um perfil, busca,
-//! trends) sai daqui; a sessão só entra para dados privados.
+//! FxTwitter API v2 (study 67): the public route, no login or key.
+//! `https://api.fxtwitter.com/2/...`, 1000 req/min per IP. Everything that is
+//! public on X (post, thread, profile, a profile's posts and media, search,
+//! trends) comes from here; the session only steps in for private data.
 
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
@@ -43,27 +43,27 @@ async fn get(path: &str, query: &[(&str, String)]) -> anyhow::Result<Value> {
     let body: Value = resp
         .json()
         .await
-        .map_err(|e| anyhow!("FxTwitter: resposta invalida ({})", e))?;
+        .map_err(|e| anyhow!("FxTwitter: invalid response ({})", e))?;
     let code = body
         .get("code")
         .and_then(|c| c.as_u64())
         .unwrap_or(status.as_u16() as u64);
     if code == 404 {
-        return Err(anyhow!("nao encontrado no X (ou o post e privado)"));
+        return Err(anyhow!("not found on X (or the post is private)"));
     }
     if code == 401 {
-        return Err(anyhow!("post ou perfil privado"));
+        return Err(anyhow!("private post or profile"));
     }
     if code == 429 {
         return Err(anyhow!(
-            "FxTwitter: limite de requisicoes atingido, tente de novo em instantes"
+            "FxTwitter: request limit reached, try again in a moment"
         ));
     }
     if code >= 400 {
         let msg = body
             .get("message")
             .and_then(|m| m.as_str())
-            .unwrap_or("erro");
+            .unwrap_or("error");
         return Err(anyhow!("FxTwitter: {} ({})", msg, code));
     }
     Ok(body)
@@ -147,7 +147,7 @@ fn media_from(v: &Value) -> Vec<XMedia> {
         .into_iter()
         .flatten()
     {
-        // o melhor mp4 e o de maior bitrate; `url` ja costuma ser ele
+        // the best mp4 is the highest-bitrate one; `url` usually already is
         let mut best = s(vd, "url");
         let mut best_rate = 0u64;
         for f in vd
@@ -304,17 +304,16 @@ pub async fn status(id: &str) -> anyhow::Result<XPost> {
     let v = get(&format!("status/{}", id), &[]).await?;
     v.get("status")
         .and_then(post_from)
-        .ok_or_else(|| anyhow!("post indisponivel"))
+        .ok_or_else(|| anyhow!("post unavailable"))
 }
 
-/// Thread do autor (o proprio FxTwitter monta a sequencia). Devolve o post
-/// focal e a lista completa (vazia quando nao e thread).
+/// The author's thread (FxTwitter itself assembles the sequence). Returns the focal post and the full list (empty when it is not a thread).
 pub async fn thread(id: &str) -> anyhow::Result<(XPost, Vec<XPost>, bool)> {
     let v = get(&format!("thread/{}", id), &[]).await?;
     let focal = v
         .get("status")
         .and_then(post_from)
-        .ok_or_else(|| anyhow!("post indisponivel"))?;
+        .ok_or_else(|| anyhow!("post unavailable"))?;
     let (posts, truncated) = match v.get("thread") {
         Some(t) if t.is_object() => (
             t.get("statuses")
@@ -359,7 +358,7 @@ pub async fn profile(handle: &str) -> anyhow::Result<XUser> {
     let v = get(&format!("profile/{}", handle), &[]).await?;
     v.get("user")
         .map(user_from)
-        .ok_or_else(|| anyhow!("perfil indisponivel"))
+        .ok_or_else(|| anyhow!("profile unavailable"))
 }
 
 pub async fn profile_statuses(
@@ -421,7 +420,7 @@ pub async fn profile_relationship(
     })
 }
 
-/// `feed`: "latest" | "top" (o que a busca do X chama de Latest/Top).
+/// `feed`: "latest" | "top" (what X search calls Latest/Top).
 pub async fn search(q: &str, feed: &str, cursor: Option<&str>) -> anyhow::Result<Page<XPost>> {
     let v = get(
         "search",

@@ -1,20 +1,20 @@
-//! Análise de frequência: histograma, índice de coincidência e a pontuação
-//! que diz "isso aqui parece texto" — é o que faz a força bruta escolher
-//! sozinha a resposta certa em vez de despejar 256 alternativas.
+//! Frequency analysis: histogram, index of coincidence and the score
+//! that says "this looks like text" — what makes brute force pick
+//! the right answer on its own instead of dumping 256 alternatives.
 
 use serde::Serialize;
 
-/// Frequência das letras em inglês, em porcentagem, na ordem A-Z.
+/// Frequency of English letters, in percent, in A-Z order.
 const ENGLISH_FREQ: [f64; 26] = [
     8.17, 1.49, 2.78, 4.25, 12.70, 2.23, 2.02, 6.09, 6.97, 0.15, 0.77, 4.03, 2.41, 6.75, 7.51,
     1.93, 0.10, 5.99, 6.33, 9.06, 2.76, 0.98, 2.36, 0.15, 1.97, 0.07,
 ];
 
-/// Quanto o texto se parece com linguagem natural. Quanto maior, melhor.
+/// How much the text looks like natural language. Higher is better.
 ///
-/// Qui-quadrado invertido contra a frequência do inglês, com desconto pesado
-/// para byte não imprimível — sem isso a força bruta de XOR escolhe lixo
-/// binário que por acaso tem letras.
+/// Inverted chi-squared against English letter frequency, with a heavy discount
+/// for non-printable bytes — without it, XOR brute force picks binary
+/// junk that happens to contain letters.
 pub fn english_score(text: &str) -> f64 {
     let bytes = text.as_bytes();
     if bytes.is_empty() {
@@ -44,7 +44,7 @@ pub fn english_score(text: &str) -> f64 {
         .sum();
     let printable_ratio = printable / total;
     let space_ratio = bytes.iter().filter(|b| **b == b' ').count() as f64 / total;
-    // Texto de verdade tem ~15% de espaço; lixo binário não tem nenhum.
+    // Real text is ~15% spaces; binary junk has none.
     -chi / letters + printable_ratio * 20.0 + (space_ratio * 10.0).min(2.0)
 }
 
@@ -61,8 +61,8 @@ pub struct FreqReport {
     pub total: u64,
     pub distinct: usize,
     pub entropy: f64,
-    /// Índice de coincidência. ~0,067 = inglês (ou cifra de substituição
-    /// simples); ~0,038 = aleatório ou Vigenère com chave longa.
+    /// Index of coincidence. ~0.067 = English (or a simple substitution
+    /// cipher); ~0.038 = random or Vigenère with a long key.
     pub index_of_coincidence: f64,
     pub top: Vec<FreqEntry>,
     pub looks_like: String,
@@ -120,13 +120,13 @@ pub fn analyze(data: &[u8], top_n: usize) -> FreqReport {
     let looks_like = if entropy > 7.5 {
         "comprimido ou cifrado".into()
     } else if ic > 0.06 {
-        "texto natural ou substituição simples".into()
+        "natural text or simple substitution".into()
     } else if ic > 0.045 {
         "texto com alfabeto misturado".into()
     } else if distinct <= 20 {
-        "alfabeto pequeno — talvez codificação (base32/64, hex)".into()
+        "small alphabet — maybe an encoding (base32/64, hex)".into()
     } else {
-        "aleatório, Vigenère de chave longa ou binário".into()
+        "random, long-key Vigenère or binary".into()
     };
 
     FreqReport {
@@ -147,14 +147,14 @@ mod tests {
     fn real_text_scores_above_noise() {
         let real = english_score("the quick brown fox jumps over the lazy dog");
         let noise = english_score("zzqxjkvwzzqxjkvwzzqxjkvw");
-        assert!(real > noise, "real {} vs ruído {}", real, noise);
+        assert!(real > noise, "real {} vs noise {}", real, noise);
     }
 
     #[test]
     fn binary_junk_scores_worse_than_text() {
         let text = english_score("hello world this is a normal sentence");
         let junk = english_score("h\u{1}e\u{2}l\u{3}l\u{4}o\u{5}w\u{6}o\u{7}r\u{8}l\u{9}d");
-        assert!(text > junk, "texto {} vs lixo {}", text, junk);
+        assert!(text > junk, "text {} vs junk {}", text, junk);
     }
 
     #[test]
@@ -167,7 +167,7 @@ mod tests {
     fn ioc_separates_english_from_random() {
         let english = "the index of coincidence is a statistic used in cryptanalysis of text";
         let ic = index_of_coincidence(english);
-        assert!((0.055..0.085).contains(&ic), "IC do inglês foi {}", ic);
+        assert!((0.055..0.085).contains(&ic), "English IC was {}", ic);
         let flat = "abcdefghijklmnopqrstuvwxyz".repeat(8);
         assert!(index_of_coincidence(&flat) < 0.045, "alfabeto plano");
     }
@@ -180,18 +180,18 @@ mod tests {
 
     #[test]
     fn report_calls_out_what_it_sees() {
-        // Frase comum, não pangrama: pangrama tem distribuição plana de
-        // propósito e derruba o índice de coincidência.
+        // A common sentence, not a pangram: a pangram has a deliberately flat distribution
+        // and drags the index of coincidence down.
         let text = analyze(
             b"the index of coincidence is a statistic used in the analysis of text",
             5,
         );
         assert!(
             text.index_of_coincidence > 0.05,
-            "IC ficou {}",
+            "IC was {}",
             text.index_of_coincidence
         );
-        assert_eq!(text.top[0].display, " ", "espaço é o byte mais comum");
+        assert_eq!(text.top[0].display, " ", "space is the most common byte");
         assert!(text.looks_like.contains("texto"));
 
         let random: Vec<u8> = (0..=255u8).cycle().take(4096).collect();

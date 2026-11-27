@@ -18,8 +18,8 @@
 
 <script lang="ts">
   /**
-   * Perfil: visualizador (bio, contagens, foto HD, relação), foto de perfil
-   * em alta e download em massa (posts, reels, marcados, salvos).
+   * Profile: viewer (bio, counts, HD photo, relationship), hi-res profile
+   * photo and bulk download (posts, reels, tagged, saved).
    * `mode` = "viewer" | "avatar" | "media".
    */
   import { invoke } from "@tauri-apps/api/core";

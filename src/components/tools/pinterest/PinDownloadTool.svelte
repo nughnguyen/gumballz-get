@@ -18,9 +18,9 @@
 
 <script lang="ts">
   /**
-   * Baixar pin (estudo 67): inspeciona o pin (original, vídeo, carrossel,
-   * story, estatísticas, sinais de anúncio/IA) e baixa na melhor qualidade,
-   * com WebP → PNG para quem não abre WebP.
+   * Download a pin (study 67): inspects the pin (original, video, carousel,
+   * story, stats, ad/AI signals) and downloads at the best quality,
+   * with WebP → PNG for anyone who can't open WebP.
    */
   import { invoke } from "@tauri-apps/api/core";
   import { t } from "$lib/i18n";

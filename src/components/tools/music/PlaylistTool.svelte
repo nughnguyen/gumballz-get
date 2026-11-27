@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Playlist exportada -> .m3u8/.pls apontando para os arquivos do disco. */
+  /** Exported playlist -> .m3u8/.pls pointing at the files on disk. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

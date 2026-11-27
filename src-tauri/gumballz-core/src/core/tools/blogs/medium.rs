@@ -1,29 +1,29 @@
-//! Exportar as histórias que o **próprio usuário** publicou no Medium —
-//! inclusive os rascunhos, que só existem para a conta dona.
+//! Export the stories the **user themselves** published on Medium —
+//! including the drafts, which only exist for the owning account.
 //!
-//! ## Os dois caminhos
+//! ## The two paths
 //!
-//! 1. **Feed público** `https://medium.com/feed/@<usuario>` — **200
-//!    verificado em 2026-09-09**. Devolve as ~10 histórias publicadas mais
-//!    recentes com o corpo inteiro em `<content:encoded>`, mais `pubDate`,
-//!    `link` e as `<category>` (as tags). É o caminho que funciona sem
-//!    sessão, e o único que deu para exercitar de verdade.
-//! 2. **Sessão** — `https://medium.com/me/stories/public?format=json` e
-//!    `.../drafts?format=json` listam o que a conta publicou e o que ela tem
-//!    em rascunho; `https://medium.com/p/<id>?format=json` traz a história
-//!    inteira no modelo de parágrafos do Medium. Toda resposta vem prefixada
-//!    com `])}while(1);</x>` (defesa contra sequestro de JSON) e precisa do
-//!    corte antes de parsear — é o `blogs::strip_json_prefix`.
+//! 1. **Public feed** `https://medium.com/feed/@<user>` — **200
+//!    verified on 2026-09-09**. Returns the ~10 most recent published stories
+//!    with the whole body in `<content:encoded>`, plus `pubDate`,
+//!    `link` and the `<category>` (the tags). It is the path that works without
+//!    a session, and the only one that could really be exercised.
+//! 2. **Session** — `https://medium.com/me/stories/public?format=json` and
+//!    `.../drafts?format=json` list what the account published and what it has
+//!    in draft; `https://medium.com/p/<id>?format=json` brings the whole story
+//!    in Medium's paragraph model. Every response comes prefixed
+//!    with `])}while(1);</x>` (defence against JSON hijacking) and needs the
+//!    trim before parsing — that is `blogs::strip_json_prefix`.
 //!
-//!    **Não deu para verificar este caminho**: daqui o Cloudflare do Medium
-//!    responde 403 a qualquer requisição que não venha de um navegador com
-//!    sessão (`/@usuario?format=json` e `/_/graphql` deram 403 em 2026-09-09,
-//!    enquanto o feed RSS deu 200). O código está escrito para ele, o formato
-//!    do modelo de parágrafos está coberto por teste puro, e a tool sai como
-//!    `beta`. Sem sessão, ou se a sessão falhar, a tool cai no feed.
+//!    **This path could not be verified**: from here Medium's Cloudflare
+//!    answers 403 to any request that does not come from a browser with a
+//!    session (`/@user?format=json` and `/_/graphql` gave 403 on 2026-09-09,
+//!    while the RSS feed gave 200). The code is written for it, the paragraph
+//!    model's format is covered by a pure test, and the tool ships as
+//!    `beta`. Without a session, or if the session fails, the tool falls back to the feed.
 //!
-//! Rascunho só sai por sessão — por definição, é conteúdo que só a conta dona
-//! recebe.
+//! A draft only comes out via session — by definition, it is content only the owning account
+//! receives.
 
 use std::path::PathBuf;
 
@@ -42,17 +42,17 @@ use crate::core::tools::ProgressFn;
 const ID: &str = "blog-medium";
 const COOKIE_DOMAINS: &[&str] = &["medium.com"];
 
-// ── Opções e resultado ─────────────────────────────────────────────────
+// ── Options and result ─────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct Options {
-    /// Seu usuário no Medium, com ou sem `@`. Obrigatório no caminho do feed.
+    /// Your Medium username, with or without `@`. Required on the feed path.
     pub user: String,
     pub dest: String,
-    /// Incluir os rascunhos (só funciona com a sessão).
+    /// Include the drafts (only works with the session).
     pub drafts: bool,
-    /// Teto de histórias. 0 = tudo que a origem devolver.
+    /// Story ceiling. 0 = everything the source returns.
     pub limit: usize,
     pub markdown: bool,
     pub html: bool,
@@ -95,13 +95,13 @@ pub struct ExportResult {
     pub images: usize,
     pub requests: u32,
     pub files: Vec<String>,
-    /// Recado para a UI quando a sessão não deu certo e a tool caiu no feed.
+    /// Note for the UI when the session did not work out and the tool fell back to the feed.
     pub note: Option<String>,
 }
 
 // ── URLs ───────────────────────────────────────────────────────────────
 
-/// `@dhh`, `dhh`, `https://medium.com/@dhh` — tudo vira `dhh`.
+/// `@dhh`, `dhh`, `https://medium.com/@dhh` — all become `dhh`.
 pub fn normalize_user(input: &str) -> String {
     let s = input.trim().trim_matches('/');
     let s = s.rsplit('/').next().unwrap_or(s);
@@ -113,7 +113,7 @@ pub fn feed_url(user: &str) -> String {
     format!("https://medium.com/feed/@{}", normalize_user(user))
 }
 
-/// `kind` é "public" (publicadas) ou "drafts".
+/// `kind` is "public" (published) or "drafts".
 pub fn list_url(kind: &str) -> String {
     format!("https://medium.com/me/stories/{}?format=json", kind)
 }
@@ -125,9 +125,9 @@ pub fn story_url(id: &str) -> String {
 // ── Feed RSS ───────────────────────────────────────────────────────────
 
 static RE_ITEM: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?s)<item>(.*?)</item>").expect("regex de item do RSS"));
+    Lazy::new(|| Regex::new(r"(?s)<item>(.*?)</item>").expect("RSS item regex"));
 static RE_CDATA: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?s)^\s*<!\[CDATA\[(.*?)\]\]>\s*$").expect("regex de CDATA"));
+    Lazy::new(|| Regex::new(r"(?s)^\s*<!\[CDATA\[(.*?)\]\]>\s*$").expect("CDATA regex"));
 
 fn tag_regex(tag: &str) -> Regex {
     Regex::new(&format!(
@@ -159,8 +159,9 @@ fn unwrap_cdata(raw: &str) -> String {
     }
 }
 
-/// As cinco entidades que aparecem em título e categoria de RSS, mais as
-/// numéricas. Não é um parser de HTML: é o mínimo para o texto sair limpo.
+/// The five entities that appear in RSS titles and categories, plus the
+/// numeric ones. This is not an HTML parser: it is the minimum for the text
+/// to come out clean.
 pub fn decode_entities(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut rest = s;
@@ -203,7 +204,7 @@ pub fn decode_entities(s: &str) -> String {
     out
 }
 
-/// Uma história do feed.
+/// A story from the feed.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FeedItem {
     pub title: String,
@@ -214,8 +215,8 @@ pub struct FeedItem {
     pub html: String,
 }
 
-/// Lê o RSS do Medium. O `<item>` do canal e o `<image>` do cabeçalho não
-/// atrapalham: só o que está dentro de `<item>` conta.
+/// Reads Medium's RSS. The channel's `<item>` and the header's `<image>` do
+/// not get in the way: only what is inside `<item>` counts.
 pub fn parse_feed(xml: &str) -> Vec<FeedItem> {
     RE_ITEM
         .captures_iter(xml)
@@ -234,7 +235,7 @@ pub fn parse_feed(xml: &str) -> Vec<FeedItem> {
         .collect()
 }
 
-/// O slug de uma URL de história do Medium: `.../titulo-do-post-abc123`.
+/// The slug of a Medium story URL: `.../post-title-abc123`.
 pub fn slug_of_link(link: &str) -> String {
     let path = link.split('?').next().unwrap_or(link);
     path.trim_end_matches('/')
@@ -244,8 +245,8 @@ pub fn slug_of_link(link: &str) -> String {
         .to_string()
 }
 
-/// Converte a data do RSS (RFC 2822) para ISO 8601. Se não der, devolve o que
-/// veio — front-matter com a data original é melhor do que sem data.
+/// Converts the RSS date (RFC 2822) to ISO 8601. If it fails, returns what
+/// came in — front-matter with the original date is better than no date.
 pub fn iso_from_rfc2822(date: &str) -> String {
     match chrono::DateTime::parse_from_rfc2822(date.trim()) {
         Ok(d) => d.to_utc().to_rfc3339(),
@@ -275,9 +276,9 @@ pub fn doc_from_feed(item: &FeedItem, publication: &str) -> PostDoc {
     }
 }
 
-// ── Modelo de parágrafos (sessão) ──────────────────────────────────────
+// ── Paragraph model (session) ──────────────────────────────────────────
 
-/// Referência a uma história na listagem da conta.
+/// Reference to a story in the account's listing.
 #[derive(Debug, Clone, PartialEq)]
 pub struct StoryRef {
     pub id: String,
@@ -290,7 +291,7 @@ fn as_str(v: &Value, key: &str) -> String {
     v.get(key).and_then(Value::as_str).unwrap_or("").to_string()
 }
 
-/// Lê `payload.value` de `/me/stories/<kind>?format=json`.
+/// Reads `payload.value` from `/me/stories/<kind>?format=json`.
 pub fn parse_story_list(v: &Value, draft: bool) -> Vec<StoryRef> {
     let items = v
         .pointer("/payload/value")
@@ -322,10 +323,10 @@ fn ms_to_iso(ms: i64) -> String {
     }
 }
 
-/// Um marcador do Medium (negrito, itálico, link, código) chega com `start` e
-/// `end` em unidades UTF-16, do jeito que o JavaScript conta. Aqui a gente
-/// converte para índice de caractere antes de mexer no texto — sem isso, um
-/// emoji no meio do parágrafo desloca todo o resto.
+/// A Medium markup (bold, italic, link, code) arrives with `start` and `end`
+/// in UTF-16 units, the way JavaScript counts. Here we convert to a character
+/// index before touching the text — without that, an emoji in the middle of
+/// the paragraph shifts everything after it.
 fn utf16_to_char_index(text: &str, target: usize) -> usize {
     let mut units = 0usize;
     for (i, ch) in text.chars().enumerate() {
@@ -351,9 +352,9 @@ fn markup_kind(m: &Value) -> String {
     }
 }
 
-/// Aplica os marcadores de um parágrafo sobre o texto puro.
+/// Applies a paragraph's markups to the plain text.
 pub fn apply_markups(text: &str, markups: &[Value]) -> String {
-    // (posição em caracteres, 0 = fecha antes de abrir, texto a inserir)
+    // (position in characters, 0 = close before opening, text to insert)
     let mut inserts: Vec<(usize, u8, String)> = Vec::new();
     for m in markups {
         let kind = markup_kind(m);
@@ -411,12 +412,12 @@ fn image_url(id: &str) -> String {
     format!("https://miro.medium.com/v2/resize:fit:2000/{}", id)
 }
 
-/// O modelo de parágrafos do Medium virando Markdown. Os tipos são os da
-/// própria API: 1 parágrafo, 2/3/13 títulos, 4 imagem, 6/7 citação, 8 código,
-/// 9/10 lista, 11 embed, 14 cartão de link, 15 legenda.
+/// Medium's paragraph model becoming Markdown. The types are the API's own:
+/// 1 paragraph, 2/3/13 headings, 4 image, 6/7 quote, 8 code, 9/10 list,
+/// 11 embed, 14 link card, 15 caption.
 pub fn paragraphs_to_markdown(paragraphs: &[Value]) -> String {
-    // Cada bloco carrega se é item de lista: item colado em item vira uma
-    // lista de verdade; o resto continua separado por linha em branco.
+    // Each block carries whether it is a list item: an item glued to an item
+    // becomes a real list; the rest stays separated by a blank line.
     let mut blocks: Vec<(String, bool)> = Vec::new();
     let mut ordinal = 0usize;
     let mut fence: Vec<String> = Vec::new();
@@ -573,8 +574,8 @@ pub fn parse_story(v: &Value, draft: bool) -> PostDoc {
         .to_string();
     let words = value.pointer("/virtuals/wordCount").and_then(Value::as_u64);
     let markdown = paragraphs_to_markdown(&paragraphs);
-    // O primeiro parágrafo do modelo é o próprio título; sem ele o corpo
-    // começa direto no texto, que é o que o front-matter já cobre.
+    // The model's first paragraph is the title itself; without it the body
+    // starts straight into the text, which is what the front-matter already covers.
     let markdown = strip_leading_title(&markdown, &as_str(value, "title"));
     let meta = PostMeta {
         title: as_str(value, "title"),
@@ -605,7 +606,7 @@ pub fn parse_story(v: &Value, draft: bool) -> PostDoc {
     }
 }
 
-/// Tira o `## Título` de abertura quando ele repete o título do post.
+/// Strips the opening `## Title` when it repeats the post's title.
 pub fn strip_leading_title(md: &str, title: &str) -> String {
     let title = title.trim();
     if title.is_empty() {
@@ -620,15 +621,15 @@ pub fn strip_leading_title(md: &str, title: &str) -> String {
     md.to_string()
 }
 
-// ── Execução ───────────────────────────────────────────────────────────
+// ── Execution ──────────────────────────────────────────────────────────
 
 pub async fn run(opts: &Options, progress: ProgressFn) -> Result<ExportResult> {
     let dest = opts.dest.trim();
     if dest.is_empty() {
-        return Err(anyhow!("escolha a pasta de destino"));
+        return Err(anyhow!("pick the destination folder"));
     }
     if !opts.markdown && !opts.html && !opts.json {
-        return Err(anyhow!("escolha ao menos um formato"));
+        return Err(anyhow!("pick at least one format"));
     }
     let user = normalize_user(&opts.user);
     let root = PathBuf::from(dest);
@@ -652,7 +653,7 @@ pub async fn run(opts: &Options, progress: ProgressFn) -> Result<ExportResult> {
                     return Err(e);
                 }
                 note = Some(format!(
-                    "a sessão do Medium não respondeu ({}); saiu o que o feed público entrega",
+                    "the Medium session did not respond ({}); out came what the public feed delivers",
                     e
                 ));
             }
@@ -662,7 +663,7 @@ pub async fn run(opts: &Options, progress: ProgressFn) -> Result<ExportResult> {
     if docs.is_empty() {
         if user.is_empty() {
             return Err(anyhow!(
-                "informe o seu usuário do Medium (ou capture os cookies de medium.com no gerenciador para incluir os rascunhos)"
+                "provide your Medium username (or capture the medium.com cookies in the manager to include drafts)"
             ));
         }
         crate::core::tools::report(&progress, ID, "feed", 0, None, Some(user.clone()));
@@ -670,7 +671,7 @@ pub async fn run(opts: &Options, progress: ProgressFn) -> Result<ExportResult> {
         let items = parse_feed(&xml);
         if items.is_empty() {
             return Err(anyhow!(
-                "o feed de @{} não trouxe nenhuma história publicada",
+                "@{}'s feed brought no published story",
                 user
             ));
         }
@@ -725,7 +726,7 @@ pub async fn run(opts: &Options, progress: ProgressFn) -> Result<ExportResult> {
                     doc.markdown = md;
                     out.images += n;
                 }
-                Err(e) => tracing::warn!("medium: imagens de {} falharam: {}", doc.slug, e),
+                Err(e) => tracing::warn!("medium: images of {} failed: {}", doc.slug, e),
             }
         }
         let files = write_post(&dir, &stem, doc, opts.markdown, opts.html, opts.json)?;
@@ -763,12 +764,12 @@ async fn from_session(
     if opts.drafts {
         match fetcher.get_json(&list_url("drafts")).await {
             Ok(v) => refs.extend(parse_story_list(&v, true)),
-            Err(e) => tracing::warn!("medium: rascunhos não vieram: {}", e),
+            Err(e) => tracing::warn!("medium: drafts did not come: {}", e),
         }
     }
     if refs.is_empty() {
         return Err(anyhow!(
-            "a sessão do Medium não listou nenhuma história sua (a sessão pode ter expirado)"
+            "the Medium session listed none of your stories (the session may have expired)"
         ));
     }
     if opts.limit > 0 && refs.len() > opts.limit {
@@ -800,7 +801,7 @@ async fn from_session(
                 }
                 docs.push(doc);
             }
-            Err(e) => tracing::warn!("medium: história {} falhou: {}", r.id, e),
+            Err(e) => tracing::warn!("medium: story {} failed: {}", r.id, e),
         }
     }
     Ok(docs)
@@ -811,7 +812,7 @@ mod tests {
     use super::*;
 
     fn json(s: &str) -> Value {
-        serde_json::from_str(s).expect("json de amostra")
+        serde_json::from_str(s).expect("sample json")
     }
 
     #[test]
@@ -847,14 +848,14 @@ mod tests {
 </item>
 </channel></rss>"#;
         let items = parse_feed(xml);
-        assert_eq!(items.len(), 1, "só o que está dentro de <item>");
+        assert_eq!(items.len(), 1, "only what is inside <item>");
         let it = &items[0];
         assert_eq!(it.title, "Signal v Noise exits Medium");
         assert_eq!(it.tags, vec!["medium", "publishing"]);
         assert_eq!(it.author, "DHH");
         assert_eq!(
             it.link, "https://medium.com/signal-v-noise/signal-v-noise-exits-medium-56c483d827fc",
-            "o ?source= do RSS é rastreio e sai"
+            "the RSS ?source= is tracking and goes out"
         );
         let doc = doc_from_feed(it, "Medium");
         assert_eq!(doc.slug, "signal-v-noise-exits-medium-56c483d827fc");
@@ -883,7 +884,7 @@ mod tests {
 
     #[test]
     fn marcadores_contam_em_utf16_como_o_javascript() {
-        // "🙂 ab": o emoji ocupa 2 unidades UTF-16, então "ab" começa em 3.
+        // "🙂 ab": the emoji takes 2 UTF-16 units, so "ab" starts at 3.
         let text = "🙂 ab";
         let markups = vec![json(r#"{"type":"STRONG","start":3,"end":5}"#)];
         assert_eq!(apply_markups(text, &markups), "🙂 **ab**");
@@ -991,7 +992,7 @@ mod tests {
         assert_eq!(doc.meta.words, Some(420));
         assert_eq!(doc.meta.subtitle.as_deref(), Some("O sub"));
         assert!(doc.meta.date.starts_with("2019-02-11"), "{}", doc.meta.date);
-        assert_eq!(doc.markdown.trim(), "corpo", "o título não repete no corpo");
+        assert_eq!(doc.markdown.trim(), "corpo", "the title does not repeat in the body");
     }
 
     #[test]
@@ -1045,9 +1046,9 @@ mod tests {
             out.files
                 .iter()
                 .find(|f| f.ends_with(".md"))
-                .expect("um .md"),
+                .expect("a .md"),
         )
-        .expect("le o markdown");
+        .expect("read the markdown");
         assert!(md.starts_with("---\ntitle: \""), "{}", &md[..80]);
         assert!(md.len() > 500);
         let _ = std::fs::remove_dir_all(&dir);
@@ -1057,7 +1058,7 @@ mod tests {
     #[ignore = "sessao: lista as historias e rascunhos da conta logada (precisa dos cookies de medium.com)"]
     async fn sessao_lista_historias_e_rascunhos() {
         let path = std::env::var("GUMBALLZ_MEDIUM_COOKIES").expect("GUMBALLZ_MEDIUM_COOKIES");
-        let content = std::fs::read_to_string(path).expect("arquivo netscape");
+        let content = std::fs::read_to_string(path).expect("netscape file");
         let f = Fetcher::new(1200, Some(&content), &["medium.com".to_string()]).expect("cliente");
         assert!(f.has_session(), "nenhum cookie de medium.com no arquivo");
         let v = f.get_json(&list_url("public")).await.expect("listagem");

@@ -1,39 +1,39 @@
-//! Cliente do provedor de PO Token do YouTube.
+//! YouTube PO Token provider client.
 //!
-//! O YouTube passou a exigir Proof-of-Origin Token em parte dos clients, ligado
-//! ao video e a sessao, com expiracao curta. Sem token, o download degrada para
-//! formato pior ou e recusado — e a mensagem que chega ao usuario nao diz nada
-//! disso.
+//! YouTube started requiring a Proof-of-Origin Token on some clients, tied
+//! to the video and the session, with a short expiry. Without a token, the download degrades to a
+//! worse format or is refused — and the message that reaches the user says nothing
+//! about any of this.
 //!
-//! ## O que este modulo NAO faz, e por que
+//! ## What this module does NOT do, and why
 //!
-//! O backlog descrevia "rodar o bgutil-ytdlp-pot-provider como servico lateral
-//! gerenciado pelo app". Verificado contra o projeto real (1.3.1, marco/2026):
-//! ele roda como **container Docker ou servidor Node**, e exige alem disso um
-//! **plugin Python instalado dentro do yt-dlp**. Empacotar isso significaria o
-//! app gerenciar um runtime Node com dependencias nativas e um diretorio de
-//! plugin do yt-dlp — outra ordem de grandeza, e uma superficie de falha que o
-//! usuario nao consegue diagnosticar.
+//! The backlog described "running bgutil-ytdlp-pot-provider as a side service
+//! managed by the app". Checked against the real project (1.3.1, March/2026):
+//! it runs as a **Docker container or Node server**, and on top of that requires a
+//! **Python plugin installed inside yt-dlp**. Packaging that would mean the
+//! app managing a Node runtime with native dependencies and a yt-dlp
+//! plugin directory — another order of magnitude, and a failure surface the
+//! user cannot diagnose.
 //!
-//! Entao aqui fica o lado que e do app: **descobrir se existe um provedor
-//! acessivel, apontar o yt-dlp para ele, e nomear a falha quando nao houver.**
-//! Empacotar o provedor fica registrado como divida, com o motivo.
+//! So what stays here is the app's side: **finding out whether an accessible provider
+//! exists, pointing yt-dlp at it, and naming the failure when there is none.**
+//! Packaging the provider stays recorded as debt, with the reason.
 
 use serde::Serialize;
 
-/// Onde o bgutil escuta por padrao quando rodado local.
+/// Where bgutil listens by default when run locally.
 pub const DEFAULT_BASE_URL: &str = "http://127.0.0.1:4416";
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "state", rename_all = "snake_case")]
 pub enum ProviderHealth {
-    /// Respondeu e esta pronto.
+    /// Answered and is ready.
     Ready { version: Option<String> },
-    /// Endereco configurado mas ninguem atende.
+    /// Address configured but nobody answers.
     Unreachable { base_url: String },
-    /// Atendeu mas respondeu erro — versao incompativel, normalmente.
+    /// Answered but returned an error — incompatible version, normally.
     Unhealthy { detail: String },
-    /// Nenhum provedor configurado. Nao e erro: e o estado padrao.
+    /// No provider configured. Not an error: it is the default state.
     NotConfigured,
 }
 
@@ -43,11 +43,11 @@ impl ProviderHealth {
     }
 }
 
-/// Normaliza o endereco do provedor.
+/// Normalizes the provider address.
 ///
-/// Aceita o que o usuario provavelmente digita (`localhost:4416`, com ou sem
-/// barra no fim) e recusa o que viraria argumento quebrado no yt-dlp: espaco em
-/// branco entra na string de `--extractor-args` e parte o argumento em dois.
+/// Accepts what the user probably types (`localhost:4416`, with or without
+/// a trailing slash) and refuses what would become a broken argument in yt-dlp: whitespace
+/// inside the `--extractor-args` string splits the argument in two.
 pub fn normalize_base_url(raw: &str) -> Option<String> {
     let t = raw.trim().trim_end_matches('/');
     if t.is_empty() || t.contains(char::is_whitespace) {
@@ -61,11 +61,11 @@ pub fn normalize_base_url(raw: &str) -> Option<String> {
     Some(with_scheme)
 }
 
-/// Argumentos que apontam o yt-dlp para o provedor.
+/// Arguments that point yt-dlp at the provider.
 ///
-/// Vazio quando nao ha provedor utilizavel: mandar a flag apontando para um
-/// endereco morto faz o yt-dlp esperar o timeout em **todo** download, o que e
-/// pior que nao ter provedor nenhum.
+/// Empty when there is no usable provider: sending the flag pointing at a
+/// dead address makes yt-dlp wait out the timeout on **every** download, which is
+/// worse than having no provider at all.
 pub fn extractor_args(health: &ProviderHealth, base_url: &str) -> Vec<String> {
     if !health.is_usable() {
         return Vec::new();
@@ -79,11 +79,11 @@ pub fn extractor_args(health: &ProviderHealth, base_url: &str) -> Vec<String> {
     ]
 }
 
-/// O stderr indica que faltou PO Token?
+/// Does stderr indicate a missing PO Token?
 ///
-/// Casa pelas frases que o yt-dlp realmente emite quando o token falta ou
-/// expira, e nao por "po_token" solto — a string aparece tambem em log de
-/// sucesso quando o token foi fornecido.
+/// Matches the phrases yt-dlp actually emits when the token is missing or
+/// expired, not a bare "po_token" — the string also shows up in success logs
+/// when the token was provided.
 pub fn stderr_indicates_missing_token(stderr_lower: &str) -> bool {
     const SIGNS: &[&str] = &[
         "a po token is required",
@@ -101,29 +101,29 @@ mod tests {
     use super::*;
 
     #[test]
-    fn normaliza_o_que_o_usuario_digita() {
-        for (entrada, esperado) in [
+    fn normalizes_what_the_user_types() {
+        for (input, expected) in [
             ("127.0.0.1:4416", "http://127.0.0.1:4416"),
             ("http://localhost:4416/", "http://localhost:4416"),
             ("  https://pot.example.com/ ", "https://pot.example.com"),
         ] {
-            assert_eq!(normalize_base_url(entrada).as_deref(), Some(esperado));
+            assert_eq!(normalize_base_url(input).as_deref(), Some(expected));
         }
     }
 
     #[test]
-    fn recusa_endereco_que_quebraria_o_argumento() {
-        // Espaco entra na string de --extractor-args e parte o argumento em
-        // dois, que e falha silenciosa e dificil de diagnosticar.
-        for ruim in ["", "   ", "http://a b:4416", "localhost 4416"] {
-            assert_eq!(normalize_base_url(ruim), None, "aceitou {ruim:?}");
+    fn rejects_an_address_that_would_break_the_argument() {
+        // A space inside the --extractor-args string splits the argument in
+        // two, which is a silent failure that is hard to diagnose.
+        for bad in ["", "   ", "http://a b:4416", "localhost 4416"] {
+            assert_eq!(normalize_base_url(bad), None, "accepted {bad:?}");
         }
     }
 
     #[test]
-    fn provedor_indisponivel_nao_gera_flag() {
-        // Apontar para endereco morto faz o yt-dlp esperar timeout em TODO
-        // download — pior que nao ter provedor.
+    fn unavailable_provider_generates_no_flag() {
+        // Pointing at a dead address makes yt-dlp wait out the timeout on EVERY
+        // download — worse than having no provider.
         for h in [
             ProviderHealth::NotConfigured,
             ProviderHealth::Unreachable {
@@ -135,13 +135,13 @@ mod tests {
         ] {
             assert!(
                 extractor_args(&h, DEFAULT_BASE_URL).is_empty(),
-                "gerou flag para {h:?}"
+                "generated a flag for {h:?}"
             );
         }
     }
 
     #[test]
-    fn provedor_pronto_gera_a_flag_do_bgutil() {
+    fn ready_provider_generates_the_bgutil_flag() {
         let h = ProviderHealth::Ready {
             version: Some("1.3.1".into()),
         };
@@ -154,44 +154,44 @@ mod tests {
     }
 
     #[test]
-    fn provedor_pronto_com_endereco_invalido_ainda_nao_gera_flag() {
+    fn ready_provider_with_invalid_address_still_generates_no_flag() {
         let h = ProviderHealth::Ready { version: None };
         assert!(extractor_args(&h, "  ").is_empty());
     }
 
     #[test]
-    fn reconhece_as_frases_reais_de_token_faltando() {
-        let casos = [
+    fn recognizes_the_real_missing_token_phrases() {
+        let cases = [
             "error: [youtube] abc: a po token is required for this client",
             "warning: [youtube] abc: the content is not available on this app",
             "error: sign in to confirm you're not a bot",
         ];
-        for c in casos {
-            assert!(stderr_indicates_missing_token(c), "nao reconheceu {c:?}");
+        for c in cases {
+            assert!(stderr_indicates_missing_token(c), "did not recognize {c:?}");
         }
     }
 
     #[test]
-    fn nao_confunde_log_de_sucesso_com_falta_de_token() {
-        // "po_token" aparece em log normal quando o token FOI fornecido;
-        // casar pela substring solta produziria falso positivo em todo
-        // download bem sucedido com provedor ligado.
-        let casos = [
+    fn does_not_confuse_a_success_log_with_a_missing_token() {
+        // "po_token" shows up in a normal log when the token WAS provided;
+        // matching the bare substring would false-positive on every
+        // successful download with a provider on.
+        let cases = [
             "[debug] [youtube] fetched po_token from provider",
             "[youtube] extracting player po_token: ok",
             "error: http error 429: too many requests",
             "",
         ];
-        for c in casos {
+        for c in cases {
             assert!(
                 !stderr_indicates_missing_token(c),
-                "falso positivo em {c:?}"
+                "false positive on {c:?}"
             );
         }
     }
 
     #[test]
-    fn so_ready_e_utilizavel() {
+    fn only_ready_is_usable() {
         assert!(ProviderHealth::Ready { version: None }.is_usable());
         assert!(!ProviderHealth::NotConfigured.is_usable());
         assert!(!ProviderHealth::Unhealthy { detail: "x".into() }.is_usable());

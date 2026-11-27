@@ -36,11 +36,11 @@ impl PlatformDownloader for StudocuDownloader {
 
     async fn get_media_info(&self, url: &str) -> anyhow::Result<MediaInfo> {
         let info =
-            studocu::parse_studocu_url(url).ok_or_else(|| anyhow!("Không phải link Studocu"))?;
+            studocu::parse_studocu_url(url).ok_or_else(|| anyhow!("Not a Studocu link"))?;
         let client = crate::core::tools::client()?;
         let html = studocu::fetch_document_html(&client, &info.url).await?;
         let doc = studocu::extract_document(&html, &info.id)
-            .ok_or_else(|| anyhow!("Không đọc được thông tin tài liệu Studocu"))?;
+            .ok_or_else(|| anyhow!("Could not read Studocu document info"))?;
         // Studocu's blurred preview of page 1 works as a thumbnail.
         // Compute it before `doc.title` moves `doc` (E0382 otherwise).
         let thumbnail_url = Some(doc.blurred_page_url(1)).filter(|u| !u.is_empty());
@@ -86,7 +86,7 @@ impl PlatformDownloader for StudocuDownloader {
             .page_url
             .as_deref()
             .or_else(|| info.available_qualities.first().map(|q| q.url.as_str()))
-            .ok_or_else(|| anyhow!("Không có link Studocu"))?;
+            .ok_or_else(|| anyhow!("No Studocu link"))?;
 
         let tx = progress.clone();
         let tool_progress: crate::core::tools::ProgressFn =
@@ -128,12 +128,12 @@ impl PlatformDownloader for StudocuDownloader {
         // Studocu only serves the free preview for locked documents, so
         // the page counts are part of the result, not just a log line.
         let mut phase = format!(
-            "Đã tải {}/{} trang",
+            "Downloaded {}/{} pages",
             outcome.pages_got, outcome.pages_total
         );
         if outcome.pages_blurred > 0 {
             phase.push_str(&format!(
-                " ({} trang chỉ có bản xem trước mờ)",
+                " ({} pages only have a blurred preview)",
                 outcome.pages_blurred
             ));
         }

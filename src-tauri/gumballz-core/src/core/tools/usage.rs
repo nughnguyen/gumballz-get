@@ -1,6 +1,6 @@
-//! Ledger local de uso de IA (estudo 17, ccusage): cada chamada a LLM/TTS
-//! vira uma linha em `<app_data>/tools/ai_usage.jsonl`. O custo é calculado
-//! na leitura, com a tabela de preços do momento, para poder recalcular.
+//! Local ledger of AI usage (study 17, ccusage): each LLM/TTS call
+//! becomes one line in `<app_data>/tools/ai_usage.jsonl`. Cost is computed
+//! at read time, with the current price table, so it can be recalculated.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -21,7 +21,7 @@ pub struct UsageEntry {
     pub characters: u64,
     #[serde(default)]
     pub seconds: f64,
-    /// Custo informado na hora (ex.: 0 para Ollama). `None` = calcular.
+    /// Cost reported at call time (e.g. 0 for Ollama). `None` = compute it.
     #[serde(default)]
     pub cost_usd: Option<f64>,
 }
@@ -30,7 +30,7 @@ fn path() -> Option<PathBuf> {
     super::tools_dir().map(|d| d.join("ai_usage.jsonl"))
 }
 
-/// Grava sem bloquear quem chamou; erro de disco vira só um log.
+/// Writes without blocking the caller; a disk error becomes just a log line.
 pub fn record(
     task: &str,
     provider: &str,
@@ -66,7 +66,7 @@ pub fn record(
         Ok(mut f) => {
             let _ = writeln!(f, "{}", line);
         }
-        Err(e) => tracing::warn!("[usage] nao gravou: {}", e),
+        Err(e) => tracing::warn!("[usage] did not write: {}", e),
     }
 }
 

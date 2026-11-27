@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Linha de cookies (arquivo cookies.txt ou string), lembrada entre telas. */
+  /** Cookie line (cookies.txt file or string), remembered across screens. */
   import { t } from "$lib/i18n";
   import { pickFile } from "$lib/tools/rt";
   import { saveCookies } from "$lib/tools/pinterest";

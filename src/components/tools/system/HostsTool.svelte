@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Bloquear anúncio e telemetria pelo arquivo hosts, só dentro do bloco do GumballZ Get. */
+  /** Block ads and telemetry via the hosts file, only inside the GumballZ Get block. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

@@ -1,14 +1,14 @@
-//! Clipes e prints do PC, que cada gravador nomeia do seu jeito:
+//! PC clips and screenshots, which each recorder names its own way:
 //!
 //! - Xbox Game Bar  `Hades 2026-09-09 21-14-03-123.mp4`
 //! - NVIDIA ShadowPlay  `Hades/Hades 2026.09.09 - 21.14.03.01.DVR.mp4`
-//! - OBS  `2026-09-09 21-14-03.mkv` (sem jogo no nome)
-//! - Steam  `1145360_20260909211403_1.jpg` em `760/remote/<appid>/screenshots`
+//! - OBS  `2026-09-09 21-14-03.mkv` (no game in the name)
+//! - Steam  `1145360_20260909211403_1.jpg` in `760/remote/<appid>/screenshots`
 //!
-//! Extrai jogo e data de cada padrão, agrupa em pastas, tira duplicado e
-//! entrega o resumo. O appid da Steam vira nome lendo o `appmanifest` local —
-//! nada de rede. Clipe grande demais vai para o compressor de vídeo que a
-//! seção Video já usa, em vez de um segundo ffmpeg escrito à mão.
+//! Extracts game and date from each pattern, groups into folders, removes duplicates and
+//! delivers the summary. The Steam appid becomes a name by reading the local `appmanifest` —
+//! no network. A clip too big goes to the video compressor the
+//! Video section already uses, instead of a second hand-written ffmpeg.
 
 use std::path::{Path, PathBuf};
 
@@ -26,7 +26,7 @@ use crate::core::tools::{report, sanitize_name, ProgressFn};
 
 const ID: &str = "clip-organizer";
 
-/// Pastas cujo nome não diz nada sobre o jogo — não viram rótulo.
+/// Folders whose name says nothing about the game — they do not become a label.
 const GENERIC_DIRS: &[&str] = &[
     "captures",
     "videos",
@@ -69,7 +69,7 @@ fn cap_num<T: std::str::FromStr>(c: &regex::Captures, i: usize) -> Option<T> {
     c.get(i)?.as_str().parse::<T>().ok()
 }
 
-/// O que o nome do arquivo entrega.
+/// What the filename gives away.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClipName {
     pub game: Option<String>,
@@ -159,8 +159,8 @@ pub fn parse_clip_name(file_name: &str) -> Option<ClipName> {
     None
 }
 
-/// Rótulo do jogo: o nome que veio no arquivo, senão o `appmanifest` da
-/// Steam, senão a pasta-mãe (o ShadowPlay guarda por jogo), senão o fallback.
+/// Game label: the name that came in the file, otherwise the Steam `appmanifest`,
+/// otherwise the parent folder (ShadowPlay stores per game), otherwise the fallback.
 pub fn game_label(
     path: &Path,
     parsed: &ClipName,
@@ -189,16 +189,16 @@ pub fn game_label(
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ClipOptions {
-    /// Pastas de captura para varrer.
+    /// Capture folders to scan.
     #[serde(default)]
     pub dirs: Vec<String>,
-    /// Inclui as pastas de screenshot do cliente Steam.
+    /// Includes the Steam client's screenshot folders.
     #[serde(default)]
     pub include_steam: bool,
-    /// Pastas `steamapps` extras, para resolver appid → nome.
+    /// Extra `steamapps` folders, to resolve appid → name.
     #[serde(default)]
     pub steam_dirs: Vec<String>,
-    /// Vazio = só analisar, sem mexer em arquivo.
+    /// Empty = just analyze, without touching any file.
     #[serde(default)]
     pub dest: String,
     /// "game" | "game-year" | "year-month" | "flat"
@@ -211,12 +211,12 @@ pub struct ClipOptions {
     pub dedupe: bool,
     #[serde(default)]
     pub dry_run: bool,
-    /// Acima disso o clipe vai para o compressor; 0 desliga.
+    /// Above this the clip goes to the compressor; 0 turns it off.
     #[serde(default)]
     pub recompress_over_mb: f64,
     #[serde(default = "default_target")]
     pub target_mb: f64,
-    /// Rótulo do que não tem jogo no nome (o OBS, por exemplo).
+    /// Label for what has no game in the name (OBS, for example).
     #[serde(default)]
     pub fallback_game: String,
 }
@@ -250,7 +250,7 @@ pub struct ClipResult {
     pub skipped: u64,
     pub failed: u64,
     pub bytes_total: u64,
-    /// Os dez maiores arquivos, para o usuário decidir o que recomprimir.
+    /// The ten largest files, so the user can decide what to recompress.
     pub largest: Vec<BigClip>,
     pub recompressed: Vec<crate::core::tools::video_compress::CompressItem>,
     pub mode: String,
@@ -311,7 +311,7 @@ pub async fn run(opts: ClipOptions, progress: ProgressFn) -> anyhow::Result<Clip
     dirs.sort();
     dirs.dedup();
     if dirs.is_empty() {
-        anyhow::bail!("escolha ao menos uma pasta de capturas");
+        anyhow::bail!("pick at least one captures folder");
     }
 
     let apps = steam::scan_apps(&steam::steam_libraries(&opts.steam_dirs));
@@ -324,7 +324,7 @@ pub async fn run(opts: ClipOptions, progress: ProgressFn) -> anyhow::Result<Clip
     let organizing = opts.mode == "copy" || opts.mode == "move";
     let dest_root = PathBuf::from(opts.dest.trim());
     if organizing && opts.dest.trim().is_empty() {
-        anyhow::bail!("escolha a pasta de destino para organizar");
+        anyhow::bail!("pick the destination folder to organize into");
     }
     let move_it = opts.mode == "move";
 
@@ -332,8 +332,8 @@ pub async fn run(opts: ClipOptions, progress: ProgressFn) -> anyhow::Result<Clip
     let found = collect(&dirs);
     let total = found.len() as u64;
 
-    // No modo análise não há índice em disco: o `seen` abaixo já acha cópia
-    // repetida dentro da rodada sem escrever nada.
+    // In analyze mode there is no index on disk: the `seen` below already finds a copy
+    // repeated within the round without writing anything.
     let mut index = if opts.dedupe && organizing {
         DedupeIndex::load(&dest_root)
     } else {
@@ -446,7 +446,7 @@ pub async fn run(opts: ClipOptions, progress: ProgressFn) -> anyhow::Result<Clip
 
     if organizing && !opts.dry_run {
         if let Err(e) = index.save() {
-            tracing::warn!("[{}] índice de duplicados: {}", ID, e);
+            tracing::warn!("[{}] duplicate index: {}", ID, e);
         }
     }
 
@@ -515,7 +515,7 @@ mod tests {
     fn tempdir(tag: &str) -> PathBuf {
         let d =
             std::env::temp_dir().join(format!("gumballz-clips-{}-{}", tag, uuid::Uuid::new_v4()));
-        std::fs::create_dir_all(&d).expect("criar tempdir");
+        std::fs::create_dir_all(&d).expect("create tempdir");
         d
     }
 
@@ -573,20 +573,20 @@ mod tests {
     fn refuses_what_is_not_a_capture() {
         assert!(parse_clip_name("relatorio.pdf").is_none());
         assert!(parse_clip_name("ferias 2026.mp4").is_none());
-        // Data impossível.
+        // Impossible date.
         assert!(parse_clip_name("Hades 2026-13-09 21-14-03-123.mp4").is_none());
         assert!(parse_clip_name("2026-09-31 21-14-03.mkv").is_none());
-        // Steam sem o contador.
+        // Steam without the counter.
         assert!(parse_clip_name("1145360_20260909211403.jpg").is_none());
-        // Carimbo do Switch não é do PC.
+        // A Switch stamp is not a PC one.
         assert!(parse_clip_name("2026090921140300-8AEDFF741E2D23FBED39474178692DAF.jpg").is_none());
         assert!(parse_clip_name("sem-ponto").is_none());
     }
 
     #[test]
     fn shadowplay_wins_over_game_bar_when_both_could_match() {
-        // O ponto separa a data no ShadowPlay; o Game Bar usa hífen. Um nome
-        // com os dois formatos não pode cair no ramo errado.
+        // The dot separates the date in ShadowPlay; Game Bar uses a hyphen. A name
+        // with both formats must not fall into the wrong branch.
         let c = parse_clip_name("Jogo 2026-09-09 21-14-03 2026.09.09 - 21.14.03.01.DVR.mp4")
             .expect("ShadowPlay");
         assert_eq!(c.source, "shadowplay");
@@ -635,7 +635,7 @@ mod tests {
         assert_eq!(id, "570");
         assert!(known);
 
-        // Sem manifesto, o appid fica visível em vez de virar nome inventado.
+        // Without a manifest, the appid stays visible instead of becoming an invented name.
         let (game, id, known) = game_label(
             Path::new("/x/570_20260909211403_1.jpg"),
             &parsed,
@@ -651,7 +651,7 @@ mod tests {
     async fn scan_groups_by_game_without_touching_the_files() {
         let base = tempdir("scan");
         let caps = base.join("Captures");
-        std::fs::create_dir_all(&caps).expect("criar");
+        std::fs::create_dir_all(&caps).expect("create");
         std::fs::write(
             caps.join("Hades 2026-09-09 21-14-03-100.mp4"),
             b"clipe-hades-1",
@@ -698,10 +698,10 @@ mod tests {
         let base = tempdir("org");
         let caps = base.join("Captures");
         let shadow = base.join("ShadowPlay").join("Elden Ring");
-        std::fs::create_dir_all(&caps).expect("criar");
-        std::fs::create_dir_all(&shadow).expect("criar");
+        std::fs::create_dir_all(&caps).expect("create");
+        std::fs::create_dir_all(&shadow).expect("create");
         std::fs::write(caps.join("Hades 2026-09-09 21-14-03-100.mp4"), b"hades").expect("w");
-        // Mesmo conteúdo com outro nome: entra uma vez só.
+        // Same content under another name: it goes in only once.
         std::fs::write(caps.join("Hades 2026-09-09 21-15-03-100.mp4"), b"hades").expect("w");
         std::fs::write(
             shadow.join("Elden Ring 2026.09.09 - 22.00.00.01.DVR.mp4"),

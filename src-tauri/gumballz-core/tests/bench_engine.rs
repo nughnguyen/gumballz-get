@@ -1,14 +1,14 @@
-//! Benchmark do motor de download contra um servidor local (sem o limite do
-//! link). Ignorado por padrão; roda com:
+//! Benchmark of the download engine against a local server (without the
+//! link's speed limit). Ignored by default; runs with:
 //!
 //! ```text
 //! BENCH_BASE=http://127.0.0.1:8765 BENCH_FILE=big1g.bin BENCH_MODE=raw \
 //!   cargo test -p gumballz-core --features desktop --release --test bench_engine -- --ignored --nocapture
 //! ```
 //!
-//! Variáveis: `BENCH_SEGMENTS` (lista, ex. `1,2,4,8,16`), `BENCH_SEGSIZE_MB`
-//! (lista), `BENCH_PARALLEL` (downloads simultâneos no cenário de stress),
-//! `BENCH_YTDLP` (caminho do yt-dlp para o cenário generic), `BENCH_SMALL_N`.
+//! Variables: `BENCH_SEGMENTS` (list, e.g. `1,2,4,8,16`), `BENCH_SEGSIZE_MB`
+//! (list), `BENCH_PARALLEL` (simultaneous downloads in the stress scenario),
+//! `BENCH_YTDLP` (path to yt-dlp for the generic scenario), `BENCH_SMALL_N`.
 
 use std::path::PathBuf;
 use std::time::Instant;
@@ -86,8 +86,8 @@ async fn bench_engine() {
         .build()
         .unwrap();
 
-    println!("\n## modo `{mode}` · arquivo `{file}`\n");
-    println!("| cenário | config | tempo | MiB/s |");
+    println!("\n## mode `{mode}` · file `{file}`\n");
+    println!("| scenario | config | time | MiB/s |");
     println!("|---|---|---|---|");
 
     if mode == "small" {
@@ -104,7 +104,7 @@ async fn bench_engine() {
             total += b;
         }
         let secs = t.elapsed().as_secs_f64();
-        println!("| {n} arquivos de 1 MiB, sequencial | 1 conexão | {secs:.2}s | {:.1} ({:.0} ms/arquivo) |", mib_s(total, secs), secs * 1000.0 / n as f64);
+        println!("| {n} 1 MiB files, sequential | 1 connection | {secs:.2}s | {:.1} ({:.0} ms/file) |", mib_s(total, secs), secs * 1000.0 / n as f64);
         for par in env_list("BENCH_PARALLEL", "4,8") {
             let t = Instant::now();
             let mut handles = Vec::new();
@@ -124,7 +124,7 @@ async fn bench_engine() {
                 total += h.await.unwrap();
             }
             let secs = t.elapsed().as_secs_f64();
-            println!("| {n} arquivos de 1 MiB, {par} em paralelo | fila | {secs:.2}s | {:.1} ({:.0} ms/arquivo) |", mib_s(total, secs), secs * 1000.0 / n as f64);
+            println!("| {n} 1 MiB files, {par} in parallel | queue | {secs:.2}s | {:.1} ({:.0} ms/file) |", mib_s(total, secs), secs * 1000.0 / n as f64);
         }
         return;
     }
@@ -150,7 +150,7 @@ async fn bench_engine() {
                 total += h.await.unwrap();
             }
             let secs = t.elapsed().as_secs_f64();
-            println!("| {par} downloads simultâneos do mesmo arquivo | {segs} segmentos cada | {secs:.2}s | {:.1} agregado |", mib_s(total, secs));
+            println!("| {par} simultaneous downloads of the same file | {segs} segments each | {secs:.2}s | {:.1} aggregate |", mib_s(total, secs));
         }
         return;
     }
@@ -190,7 +190,7 @@ async fn bench_engine() {
                     println!(
                         "| yt-dlp generic (http) | http-chunk-size {} | {secs:.2}s | {:.1} |",
                         if chunk == "0" {
-                            "padrão do app (10M)"
+                            "app default (10M)"
                         } else {
                             chunk
                         },
@@ -198,7 +198,7 @@ async fn bench_engine() {
                     );
                     let _ = std::fs::remove_file(res.file_path);
                 }
-                Err(e) => println!("| yt-dlp generic | chunk {chunk} | erro | {e} |"),
+                Err(e) => println!("| yt-dlp generic | chunk {chunk} | error | {e} |"),
             }
         }
         return;
@@ -213,12 +213,12 @@ async fn bench_engine() {
         for &s in &segments {
             let (bytes, secs) = run_fetcher(&client, &url, dir.join("b.bin"), s as usize, mb).await;
             println!(
-                "| HttpFetcher | {s} segmentos · {mb} MiB/segmento | {secs:.2}s | {:.1} |",
+                "| HttpFetcher | {s} segments · {mb} MiB/segment | {secs:.2}s | {:.1} |",
                 mib_s(bytes, secs)
             );
         }
     }
-    // baseline: reqwest stream único sem o fetcher
+    // baseline: single reqwest stream without the fetcher
     {
         use futures::StreamExt;
         let t = Instant::now();
@@ -234,7 +234,7 @@ async fn bench_engine() {
         }
         let secs = t.elapsed().as_secs_f64();
         println!(
-            "| reqwest cru (1 conexão, sem fetcher) | baseline | {secs:.2}s | {:.1} |",
+            "| raw reqwest (1 connection, no fetcher) | baseline | {secs:.2}s | {:.1} |",
             mib_s(n, secs)
         );
     }

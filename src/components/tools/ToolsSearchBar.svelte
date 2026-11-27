@@ -18,9 +18,9 @@
 
 <script lang="ts">
   /**
-   * Busca + filtro de plataforma do hub e das páginas de categoria.
-   * O filtro é persistido: quem está no Windows e escolheu "Multiplataforma"
-   * não precisa escolher de novo a cada visita.
+   * Search + platform filter for the hub and the category pages.
+   * The filter is persisted: someone on Windows who picked "Cross-platform"
+   * doesn't need to pick again on every visit.
    */
   import { onMount } from "svelte";
   import { t } from "$lib/i18n";

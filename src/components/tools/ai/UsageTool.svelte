@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Quanto gastei com IA (estudo 17): ledger local por dia, modelo e tarefa. */
+  /** How much I spent on AI (study 17): local ledger per day, model and task. */
   import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
   import { t } from "$lib/i18n";

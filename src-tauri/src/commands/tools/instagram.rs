@@ -1,7 +1,7 @@
-//! Comandos da categoria Instagram. A sessão vem do gerenciador de cookies
-//! (bucket `instagram.com`, preenchido pela extensão); cada comando recebe
-//! o `slug` da conta (None = `_default`). Jobs longos reportam em
-//! `tool-progress` com id `ig:<job>` e podem ser cancelados por `tool_ig_cancel`.
+//! Commands of the Instagram category. The session comes from the cookie manager
+//! (bucket `instagram.com`, filled by the extension); each command receives the
+//! account `slug` (None = `_default`). Long jobs report on `tool-progress` with
+//! id `ig:<job>` and can be cancelled with `tool_ig_cancel`.
 
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, OnceLock};
@@ -44,7 +44,7 @@ impl Drop for Job {
     }
 }
 
-// ── Conta ────────────────────────────────────────────────────────────────
+// ── Account ────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Serialize)]
 pub struct IgAccount {
@@ -106,11 +106,11 @@ pub async fn tool_ig_post(slug: Option<String>, url: String) -> Result<media::Me
         ig::IgTarget::Post { shortcode } => {
             media::post_info(&client, &shortcode).await.map_err(err)
         }
-        _ => Err("cole o link de um post, reel ou IGTV".into()),
+        _ => Err("paste a post, reel or IGTV link".into()),
     }
 }
 
-/// Resolve qualquer link (post, story, highlight, perfil) em itens de mídia.
+/// Resolves any link (post, story, highlight, profile) into media items.
 async fn resolve_items(
     client: &IgClient,
     url: &str,
@@ -152,7 +152,7 @@ async fn resolve_items(
         ig::IgTarget::Tag { name } => social::tag_media(client, &name, "recent", 24, flag, p, job)
             .await
             .map_err(err),
-        ig::IgTarget::Unknown => Err(format!("nao reconheci este link do Instagram: {}", url)),
+        ig::IgTarget::Unknown => Err(format!("I did not recognise this Instagram link: {}", url)),
     }
 }
 
@@ -199,7 +199,7 @@ pub struct BulkResult {
     pub items: usize,
 }
 
-/// Vários links de uma vez (um por linha), com pausa entre eles.
+/// Several links at once (one per line), with a pause between them.
 #[tauri::command]
 pub async fn tool_ig_download_bulk(
     app: tauri::AppHandle,
@@ -247,7 +247,7 @@ pub async fn tool_ig_download_bulk(
     })
 }
 
-// ── Perfil, stories e highlights ─────────────────────────────────────────
+// ── Profile, stories and highlights ─────────────────────────────────────────
 
 #[tauri::command]
 pub async fn tool_ig_profile(
@@ -267,7 +267,7 @@ pub async fn tool_ig_friendship(
     profile::friendship(&client, &user_id).await.map_err(err)
 }
 
-/// `tab` = posts | reels | tagged | saved | stories | highlights (todos os itens).
+/// `tab` = posts | reels | tagged | saved | stories | highlights (all items).
 #[tauri::command]
 pub async fn tool_ig_profile_media(
     app: tauri::AppHandle,
@@ -379,7 +379,7 @@ pub async fn tool_ig_story_viewers(
     Ok(StoryViewers { total, viewers })
 }
 
-// ── Seguidores ───────────────────────────────────────────────────────────
+// ── Followers ───────────────────────────────────────────────────────────
 
 fn owner_of(client: &IgClient) -> String {
     client.session.user_id.clone()
@@ -535,7 +535,7 @@ pub fn tool_ig_snapshot_delete(file: String) -> Result<(), String> {
     let root = ig::data_dir().join("snapshots");
     let p = std::path::Path::new(&file);
     if !p.starts_with(&root) {
-        return Err("caminho fora da pasta de snapshots".into());
+        return Err("path outside the snapshots folder".into());
     }
     std::fs::remove_file(p).map_err(err)
 }
@@ -563,7 +563,7 @@ pub async fn tool_ig_ghosts(
         .map_err(err)
 }
 
-// ── Export oficial ───────────────────────────────────────────────────────
+// ── Official export ───────────────────────────────────────────────────────
 
 #[tauri::command]
 pub async fn tool_ig_export(path: String) -> Result<analytics::ExportReport, String> {
@@ -578,7 +578,7 @@ pub async fn tool_ig_read_text(path: String) -> Result<String, String> {
     tokio::fs::read_to_string(&path).await.map_err(err)
 }
 
-/// Grava um CSV (linhas já montadas pela UI).
+/// Writes a CSV (rows already built by the UI).
 #[tauri::command]
 pub fn tool_ig_write_csv(path: String, rows: Vec<Vec<String>>) -> Result<String, String> {
     let mut out = String::from("\u{feff}");
@@ -680,7 +680,7 @@ pub async fn tool_ig_comments(
     let client = load_client(slug.as_deref())?;
     let j = Job::new(&job);
     let ig::IgTarget::Post { shortcode } = ig::parse_target(&url) else {
-        return Err("cole o link de um post ou reel".into());
+        return Err("paste a post or reel link".into());
     };
     let item = media::post_info(&client, &shortcode).await.map_err(err)?;
     let comments = social::comments(&client, &item.pk, limit, &j.flag, &progress(&app), &job)
@@ -700,7 +700,7 @@ pub struct LikersResult {
 pub async fn tool_ig_likers(slug: Option<String>, url: String) -> Result<LikersResult, String> {
     let client = load_client(slug.as_deref())?;
     let ig::IgTarget::Post { shortcode } = ig::parse_target(&url) else {
-        return Err("cole o link de um post ou reel".into());
+        return Err("paste a post or reel link".into());
     };
     let item = media::post_info(&client, &shortcode).await.map_err(err)?;
     let (count, users) = social::likers(&client, &item.pk).await.map_err(err)?;
@@ -715,7 +715,7 @@ pub fn tool_ig_giveaway(
     social::giveaway(&comments, &rules)
 }
 
-// ── Publicar e agendar ───────────────────────────────────────────────────
+// ── Publish and schedule ───────────────────────────────────────────────────
 
 #[tauri::command]
 pub async fn tool_ig_publish(
@@ -766,7 +766,7 @@ pub fn tool_ig_schedule_remove(id: String) -> Result<publish::ScheduleStore, Str
 
 static SCHEDULER: OnceLock<()> = OnceLock::new();
 
-/// Laço que publica os agendamentos vencidos enquanto o app está aberto.
+/// Loop that publishes due scheduled posts while the app is open.
 pub fn start_scheduler(app: tauri::AppHandle) {
     if SCHEDULER.set(()).is_err() {
         return;
@@ -785,7 +785,7 @@ pub fn start_scheduler(app: tauri::AppHandle) {
             let outcome = if post.mode == "graph" {
                 match &post.graph {
                     Some(auth) => publish::publish_graph(auth, &post.request, &p, &job).await,
-                    None => Err(anyhow::anyhow!("agendamento sem token da API")),
+                    None => Err(anyhow::anyhow!("schedule without an API token")),
                 }
             } else {
                 match load_client(post.account_slug.as_deref()) {

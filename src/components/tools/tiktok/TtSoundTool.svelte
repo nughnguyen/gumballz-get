@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Só o áudio do TikTok — o "som" — com o crédito nas tags e num sidecar de texto. */
+  /** Only the TikTok audio — the "sound" — with credit in the tags and in a text sidecar. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

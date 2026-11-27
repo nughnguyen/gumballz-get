@@ -1,15 +1,15 @@
-//! ONNX Runtime como binário gerido, no mesmo padrão do PDFium.
+//! ONNX Runtime as a managed binary, following the same pattern as PDFium.
 //!
-//! O crate `ort` está com a feature `load-dynamic`: nada de nativo entra no
-//! build do GumballZ Get. A biblioteca do ONNX Runtime (`libonnxruntime.dylib`,
-//! `onnxruntime.dll`, `libonnxruntime.so`) é baixada sob demanda dos releases
-//! oficiais do `microsoft/onnxruntime` e guardada no diretório de dados do app.
-//! Quem não quiser baixar aponta um arquivo que já tem — igual ao PDFium.
+//! The `ort` crate is built with the `load-dynamic` feature: nothing native goes into
+//! the GumballZ Get build. The ONNX Runtime library (`libonnxruntime.dylib`,
+//! `onnxruntime.dll`, `libonnxruntime.so`) is downloaded on demand from the official
+//! `microsoft/onnxruntime` releases and stored in the app data directory.
+//! Anyone who does not want to download it can point to a file they already have — same as PDFium.
 //!
-//! A versão é fixa e casa com a API que o `ort` espera (`api-27`, ou seja
-//! ONNX Runtime 1.27.x). Uma lib mais velha que isso o `ort` recusa na hora de
-//! carregar, então o download vem com sha256 conferido: um arquivo truncado ou
-//! trocado no meio do caminho falha aqui, não lá dentro do `dlopen`.
+//! The version is pinned and matches the API the `ort` expects (`api-27`, i.e.
+//! ONNX Runtime 1.27.x). A library older than that is refused by `ort` at load
+//! time, so the download comes with a verified sha256: a truncated or
+//! swapped file fails here, not inside `dlopen`.
 
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -18,13 +18,13 @@ use std::sync::OnceLock;
 use anyhow::{anyhow, Context};
 use serde::Serialize;
 
-/// Versão do ONNX Runtime que o `ort` 2.0.0-rc.13 (`api-27`) pede.
+/// ONNX Runtime version required by `ort` 2.0.0-rc.13 (`api-27`).
 pub const RUNTIME_VERSION: &str = "1.27.1";
 
 const RELEASE_BASE: &str = "https://github.com/microsoft/onnxruntime/releases/download";
 
-/// Um pacote oficial de release. `sha256` e `bytes` foram conferidos contra o
-/// digest publicado pela API do GitHub em 2026-09-09.
+/// An official release package. `sha256` and `bytes` were checked against the
+/// digest published by the GitHub API on 2026-09-09.
 struct Asset {
     id: &'static str,
     label: &'static str,
@@ -77,9 +77,9 @@ const ASSETS: &[Asset] = &[
     },
 ];
 
-/// Nome com que a lib fica salva no disco. É o nome que o `ort` procura
-/// quando não recebe caminho, então serve tanto ao `init_from` quanto a quem
-/// preferir mexer na variável de ambiente.
+/// The name under which the lib is saved on disk. It is the name `ort` looks for
+/// when it receives no path, so it serves both `init_from` and anyone who
+/// prefers to tweak the environment variable.
 pub fn lib_filename() -> &'static str {
     if cfg!(target_os = "windows") {
         "onnxruntime.dll"
@@ -100,8 +100,8 @@ fn current_os() -> &'static str {
     }
 }
 
-/// Variante recomendada para este SO + arquitetura, ou `None` quando a
-/// Microsoft não publica build oficial (macOS Intel, desde a 1.26).
+/// Recommended variant for this OS + architecture, or `None` when
+/// Microsoft publishes no official build (macOS Intel, since 1.26).
 pub fn auto_variant_id() -> Option<&'static str> {
     #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
     {
@@ -161,15 +161,15 @@ fn pick_asset(variant: Option<&str>) -> anyhow::Result<&'static Asset> {
         .filter(|s| !s.is_empty() && *s != "auto");
     if let Some(id) = wanted {
         return asset_by_id(id)
-            .ok_or_else(|| anyhow!("variante de ONNX Runtime desconhecida: {id}"));
+            .ok_or_else(|| anyhow!("unknown ONNX Runtime variant: {id}"));
     }
     let auto = auto_variant_id().ok_or_else(|| {
         anyhow!(
-            "a Microsoft não publica ONNX Runtime pronto para este sistema; \
-             instale a partir de um arquivo local (pacote `onnxruntime` do pip, por exemplo)"
+            "Microsoft does not publish ready-made ONNX Runtime for this system; \
+             install from a local file (the `onnxruntime` pip package, for example)"
         )
     })?;
-    asset_by_id(auto).ok_or_else(|| anyhow!("variante {auto} sumiu do catálogo"))
+    asset_by_id(auto).ok_or_else(|| anyhow!("variant {auto} vanished from the catalog"))
 }
 
 pub fn target_dir() -> Option<PathBuf> {
@@ -184,8 +184,8 @@ pub fn version_marker_path() -> Option<PathBuf> {
     target_dir().map(|d| d.join("onnxruntime.version"))
 }
 
-/// A lib em uso e de onde ela veio: `"env"` quando o usuário apontou
-/// `ORT_DYLIB_PATH`, `"managed"` quando é a que o GumballZ Get baixou.
+/// The lib in use and where it came from: `"env"` when the user pointed at
+/// `ORT_DYLIB_PATH`, `"managed"` when it is the one GumballZ Get downloaded.
 pub fn resolve_with_source() -> Option<(PathBuf, &'static str)> {
     if let Ok(raw) = std::env::var("ORT_DYLIB_PATH") {
         let p = PathBuf::from(raw.trim());
@@ -228,7 +228,7 @@ pub struct RuntimeStatus {
     pub version: Option<String>,
     pub target_version: String,
     pub lib_filename: String,
-    /// `false` quando não há build oficial para este SO/arquitetura.
+    /// `false` when there is no official build for this OS/architecture.
     pub can_download: bool,
     pub variants: Vec<RuntimeVariant>,
 }
@@ -247,46 +247,46 @@ pub fn status() -> RuntimeStatus {
     }
 }
 
-/// Mensagem de erro que diz o que fazer, em vez de só reclamar.
+/// Error message that says what to do, instead of just complaining.
 fn missing_runtime_error() -> anyhow::Error {
     let where_to = target_dir()
         .map(|d| d.display().to_string())
-        .unwrap_or_else(|| "<pasta de dados do app>".into());
+        .unwrap_or_else(|| "<app data folder>".into());
     if auto_variant_id().is_some() {
         anyhow!(
-            "o ONNX Runtime {} ainda não está instalado. Instale pela tela de Modelos \
-             (o download vai para {}) ou aponte um {} que você já tenha.",
+            "ONNX Runtime {} is not installed yet. Install it from the Models screen \
+             (the download goes to {}) or point to a {} you already have.",
             RUNTIME_VERSION,
             where_to,
             lib_filename()
         )
     } else {
         anyhow!(
-            "não existe build oficial do ONNX Runtime para este sistema. \
-             Aponte um {} que você já tenha (o pacote `onnxruntime` do pip traz um) — \
-             ele é copiado para {}.",
+            "there is no official ONNX Runtime build for this system. \
+             Point to a {} you already have (the `onnxruntime` pip package brings one) — \
+             it is copied to {}.",
             lib_filename(),
             where_to
         )
     }
 }
 
-/// Caminho que o `ort` já está usando, quando o carregamento deu certo uma vez.
+/// Path the `ort` is already using, once loading has succeeded.
 static READY: OnceLock<PathBuf> = OnceLock::new();
 
-/// Aponta o `ort` para a lib resolvida. Idempotente: o `ort` guarda o handle
-/// num `OnceLock` próprio, então a segunda chamada não troca nada — por isso
-/// guardamos o caminho que venceu e devolvemos ele.
+/// Points `ort` at the resolved lib. Idempotent: `ort` keeps the handle
+/// in its own `OnceLock`, so a second call changes nothing — that is why
+/// we keep the winning path and return it.
 ///
-/// Falta de lib vira erro acionável, nunca panic: o `ort` só entra em pânico
-/// se alguém tocar na API dele sem passar por aqui.
+/// A missing lib becomes an actionable error, never a panic: `ort` only panics
+/// if someone touches its API without going through here.
 pub fn init() -> anyhow::Result<PathBuf> {
     if let Some(p) = READY.get() {
         return Ok(p.clone());
     }
     let path = resolve_path().ok_or_else(missing_runtime_error)?;
     ort::init_from(&path)
-        .map_err(|e| anyhow!("não consegui carregar {}: {}", path.display(), e))?
+        .map_err(|e| anyhow!("could not load {}: {}", path.display(), e))?
         .with_name("gumballz-get")
         .commit();
     let _ = READY.set(path.clone());
@@ -296,7 +296,7 @@ pub fn init() -> anyhow::Result<PathBuf> {
 fn sha256_of(path: &Path) -> anyhow::Result<String> {
     use sha2::{Digest, Sha256};
     let mut file = std::fs::File::open(path)
-        .with_context(|| format!("abrindo {} para conferir o sha256", path.display()))?;
+        .with_context(|| format!("opening {} to verify the sha256", path.display()))?;
     let mut hasher = Sha256::new();
     let mut buf = vec![0u8; 1 << 20];
     loop {
@@ -309,8 +309,8 @@ fn sha256_of(path: &Path) -> anyhow::Result<String> {
     Ok(hex::encode(hasher.finalize()))
 }
 
-/// Nome de arquivo que conta como biblioteca do ONNX Runtime neste SO.
-/// Deixado público para o teste puro de seleção não precisar de rede.
+/// File name that counts as an ONNX Runtime library on this OS.
+/// Left public so the pure selection test needs no network.
 pub fn is_runtime_lib(name: &str) -> bool {
     if name.starts_with('.') {
         return false;
@@ -324,8 +324,8 @@ pub fn is_runtime_lib(name: &str) -> bool {
     }
 }
 
-/// Só o que está dentro de `lib/` interessa; o `.dSYM` do macOS carrega um
-/// arquivo com o mesmo nome e não é biblioteca carregável.
+/// Only what is inside `lib/` matters; the macOS `.dSYM` carries a
+/// file with the same name and is not a loadable library.
 fn is_lib_entry(path: &Path) -> bool {
     let mut has_lib = false;
     for comp in path.components() {
@@ -349,16 +349,16 @@ fn is_lib_entry(path: &Path) -> bool {
 fn write_atomic(dir: &Path, name: &str, bytes: &[u8]) -> anyhow::Result<PathBuf> {
     let dest = dir.join(name);
     let tmp = dir.join(format!(".{name}.tmp"));
-    std::fs::write(&tmp, bytes).with_context(|| format!("gravando {}", tmp.display()))?;
+    std::fs::write(&tmp, bytes).with_context(|| format!("writing {}", tmp.display()))?;
     if dest.exists() {
         let _ = std::fs::remove_file(&dest);
     }
-    std::fs::rename(&tmp, &dest).with_context(|| format!("movendo para {}", dest.display()))?;
+    std::fs::rename(&tmp, &dest).with_context(|| format!("moving to {}", dest.display()))?;
     Ok(dest)
 }
 
-/// Tira do pacote as bibliotecas de `lib/` e devolve o nome da maior — que é
-/// sempre o `libonnxruntime` de verdade, e não um shim de execution provider.
+/// Pulls the `lib/` libraries out of the package and returns the name of the biggest — which is
+/// always the real `libonnxruntime`, not an execution-provider shim.
 fn extract_libs(archive: &Path, is_zip: bool, dir: &Path) -> anyhow::Result<String> {
     let mut biggest: Option<(String, u64)> = None;
     let mut note = |name: &str, len: u64| {
@@ -369,7 +369,7 @@ fn extract_libs(archive: &Path, is_zip: bool, dir: &Path) -> anyhow::Result<Stri
 
     if is_zip {
         let file = std::fs::File::open(archive)
-            .with_context(|| format!("abrindo {}", archive.display()))?;
+            .with_context(|| format!("opening {}", archive.display()))?;
         let mut zip = zip::ZipArchive::new(std::io::BufReader::new(file))?;
         for i in 0..zip.len() {
             let mut entry = zip.by_index(i)?;
@@ -392,12 +392,12 @@ fn extract_libs(archive: &Path, is_zip: bool, dir: &Path) -> anyhow::Result<Stri
         }
     } else {
         let file = std::fs::File::open(archive)
-            .with_context(|| format!("abrindo {}", archive.display()))?;
+            .with_context(|| format!("opening {}", archive.display()))?;
         let gz = flate2::read::GzDecoder::new(std::io::BufReader::new(file));
         let mut tar = tar::Archive::new(gz);
         for entry in tar.entries()? {
             let mut entry = entry?;
-            // Symlink (`libonnxruntime.dylib` -> versionado) não tem conteúdo.
+            // Symlink (`libonnxruntime.dylib` -> versioned) has no content.
             if !entry.header().entry_type().is_file() {
                 continue;
             }
@@ -416,12 +416,12 @@ fn extract_libs(archive: &Path, is_zip: bool, dir: &Path) -> anyhow::Result<Stri
     }
 
     let (name, _) = biggest
-        .ok_or_else(|| anyhow!("o pacote não traz nenhuma biblioteca do ONNX Runtime em lib/"))?;
+        .ok_or_else(|| anyhow!("the package brings no ONNX Runtime library in lib/"))?;
     Ok(name)
 }
 
-/// Garante que o nome canônico (`libonnxruntime.dylib` etc.) existe apontando
-/// para o arquivo versionado que veio no pacote.
+/// Makes sure the canonical name (`libonnxruntime.dylib` etc.) exists, pointing
+/// at the versioned file that came in the package.
 fn make_canonical(dir: &Path, extracted: &str) -> anyhow::Result<PathBuf> {
     let canonical = dir.join(lib_filename());
     if extracted == lib_filename() {
@@ -430,16 +430,16 @@ fn make_canonical(dir: &Path, extracted: &str) -> anyhow::Result<PathBuf> {
     let src = dir.join(extracted);
     let tmp = dir.join(format!(".{}.tmp", lib_filename()));
     std::fs::copy(&src, &tmp)
-        .with_context(|| format!("copiando {} → {}", src.display(), tmp.display()))?;
+        .with_context(|| format!("copying {} → {}", src.display(), tmp.display()))?;
     if canonical.exists() {
         let _ = std::fs::remove_file(&canonical);
     }
     std::fs::rename(&tmp, &canonical)
-        .with_context(|| format!("movendo para {}", canonical.display()))?;
+        .with_context(|| format!("moving to {}", canonical.display()))?;
     Ok(canonical)
 }
 
-/// Baixa (conferindo o sha256), extrai e deixa a lib pronta para o `init()`.
+/// Downloads (verifying the sha256), extracts, and leaves the lib ready for `init()`.
 pub async fn ensure_runtime(
     variant: Option<String>,
     progress: &crate::core::tools::ProgressFn,
@@ -450,14 +450,14 @@ pub async fn ensure_runtime(
     install_runtime(variant, progress).await
 }
 
-/// Instala mesmo que já exista — é o "atualizar" da tela de Modelos.
+/// Installs even if one already exists — it is the Models screen's "update".
 pub async fn install_runtime(
     variant: Option<String>,
     progress: &crate::core::tools::ProgressFn,
 ) -> anyhow::Result<PathBuf> {
     let asset = pick_asset(variant.as_deref())?;
-    let dir = target_dir().ok_or_else(|| anyhow!("não achei o diretório de dados do app"))?;
-    std::fs::create_dir_all(&dir).with_context(|| format!("criando {}", dir.display()))?;
+    let dir = target_dir().ok_or_else(|| anyhow!("could not find the app data directory"))?;
+    std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
 
     let url = format!("{}/v{}/{}", RELEASE_BASE, RUNTIME_VERSION, asset.file);
     let tmp = crate::core::tools::temp_dir().join(asset.file);
@@ -477,13 +477,13 @@ pub async fn install_runtime(
             "verify",
             0,
             None,
-            Some("conferindo sha256".into()),
+            Some("verifying sha256".into()),
         );
         let got = sha256_of(&tmp_for_task)?;
         if got != expected {
             let _ = std::fs::remove_file(&tmp_for_task);
             return Err(anyhow!(
-                "o pacote do ONNX Runtime baixado não confere: esperava sha256 {expected}, veio {got}"
+                "the downloaded ONNX Runtime package does not match: expected sha256 {expected}, got {got}"
             ));
         }
         crate::core::tools::report(
@@ -492,7 +492,7 @@ pub async fn install_runtime(
             "extract",
             0,
             None,
-            Some("extraindo".into()),
+            Some("extracting".into()),
         );
         let extracted = extract_libs(&tmp_for_task, is_zip, &dir_for_task)?;
         let canonical = make_canonical(&dir_for_task, &extracted)?;
@@ -500,7 +500,7 @@ pub async fn install_runtime(
         Ok(canonical)
     })
     .await
-    .map_err(|e| anyhow!("tarefa de extração falhou: {e}"))??;
+    .map_err(|e| anyhow!("extraction task failed: {e}"))??;
 
     if let Some(marker) = version_marker_path() {
         let _ = std::fs::write(&marker, format!("{} ({})", RUNTIME_VERSION, asset.file));
@@ -510,10 +510,10 @@ pub async fn install_runtime(
     Ok(out)
 }
 
-/// Instala a partir de um arquivo que o usuário já tem no disco.
+/// Installs from a file the user already has on disk.
 pub fn install_from_path(source: &Path) -> anyhow::Result<PathBuf> {
     if !source.is_file() {
-        return Err(anyhow!("{} não é um arquivo", source.display()));
+        return Err(anyhow!("{} is not a file", source.display()));
     }
     let name = source
         .file_name()
@@ -521,14 +521,14 @@ pub fn install_from_path(source: &Path) -> anyhow::Result<PathBuf> {
         .unwrap_or_default();
     if !is_runtime_lib(name) {
         return Err(anyhow!(
-            "{} não parece a biblioteca do ONNX Runtime deste sistema (esperava algo como {})",
+            "{} does not look like this system's ONNX Runtime library (expected something like {})",
             name,
             lib_filename()
         ));
     }
-    let dir = target_dir().ok_or_else(|| anyhow!("não achei o diretório de dados do app"))?;
-    std::fs::create_dir_all(&dir).with_context(|| format!("criando {}", dir.display()))?;
-    let bytes = std::fs::read(source).with_context(|| format!("lendo {}", source.display()))?;
+    let dir = target_dir().ok_or_else(|| anyhow!("could not find the app data directory"))?;
+    std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
+    let bytes = std::fs::read(source).with_context(|| format!("reading {}", source.display()))?;
     let dest = write_atomic(&dir, lib_filename(), &bytes)?;
     if let Some(marker) = version_marker_path() {
         let _ = std::fs::write(&marker, format!("local ({name})"));
@@ -536,11 +536,11 @@ pub fn install_from_path(source: &Path) -> anyhow::Result<PathBuf> {
     Ok(dest)
 }
 
-/// Apaga a lib gerida (a apontada por env var não é nossa para mexer).
+/// Deletes the managed lib (the one pointed at by env var is not ours to touch).
 pub fn remove_managed() -> anyhow::Result<()> {
-    let dir = target_dir().ok_or_else(|| anyhow!("não achei o diretório de dados do app"))?;
+    let dir = target_dir().ok_or_else(|| anyhow!("could not find the app data directory"))?;
     if dir.is_dir() {
-        std::fs::remove_dir_all(&dir).with_context(|| format!("apagando {}", dir.display()))?;
+        std::fs::remove_dir_all(&dir).with_context(|| format!("deleting {}", dir.display()))?;
     }
     Ok(())
 }
@@ -565,19 +565,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn cada_asset_do_catalogo_tem_sha256_e_tamanho() {
+    fn every_catalog_asset_has_sha256_and_size() {
         assert!(!ASSETS.is_empty());
         for a in ASSETS {
-            assert_eq!(a.sha256.len(), 64, "sha256 de {} tem tamanho errado", a.id);
+            assert_eq!(a.sha256.len(), 64, "sha256 of {} has the wrong size", a.id);
             assert!(
                 a.sha256.chars().all(|c| c.is_ascii_hexdigit()),
-                "sha256 de {} não é hex",
+                "sha256 of {} is not hex",
                 a.id
             );
-            assert!(a.bytes > 1_000_000, "{} parece pequeno demais", a.id);
+            assert!(a.bytes > 1_000_000, "{} looks too small", a.id);
             assert!(
                 a.file.contains(RUNTIME_VERSION),
-                "{} não é da versão fixada",
+                "{} is not the pinned version",
                 a.file
             );
             assert!(a.file.ends_with(".tgz") || a.file.ends_with(".zip"));
@@ -585,27 +585,27 @@ mod tests {
     }
 
     #[test]
-    fn ids_de_variante_sao_unicos() {
+    fn variant_ids_are_unique() {
         let mut ids: Vec<&str> = ASSETS.iter().map(|a| a.id).collect();
         ids.sort_unstable();
-        let antes = ids.len();
+        let before = ids.len();
         ids.dedup();
-        assert_eq!(antes, ids.len(), "id de variante repetido");
+        assert_eq!(before, ids.len(), "duplicate variant id");
     }
 
     #[test]
-    fn a_lista_de_variantes_e_so_deste_sistema() {
+    fn variant_list_is_only_for_this_system() {
         let os = current_os();
         for v in list_variants() {
-            let a = asset_by_id(&v.id).expect("variante listada tem que existir no catálogo");
+            let a = asset_by_id(&v.id).expect("listed variant must exist in the catalog");
             assert_eq!(a.os, os);
         }
     }
 
     #[test]
-    fn a_variante_automatica_esta_no_catalogo_e_e_a_recomendada() {
+    fn automatic_variant_is_in_catalog_and_is_the_recommended_one() {
         if let Some(auto) = auto_variant_id() {
-            let a = asset_by_id(auto).expect("variante automática fora do catálogo");
+            let a = asset_by_id(auto).expect("automatic variant outside the catalog");
             assert_eq!(a.os, current_os());
             let recs: Vec<String> = list_variants()
                 .into_iter()
@@ -617,13 +617,13 @@ mod tests {
     }
 
     #[test]
-    fn variante_desconhecida_da_erro_em_vez_de_cair_no_automatico() {
+    fn unknown_variant_errors_instead_of_falling_back_to_automatic() {
         let e = pick_asset(Some("plan9-risc"));
         assert!(e.is_err());
     }
 
     #[test]
-    fn auto_e_vazio_caem_na_variante_do_sistema() {
+    fn auto_and_empty_fall_back_to_the_system_variant() {
         if auto_variant_id().is_some() {
             assert_eq!(pick_asset(None).map(|a| a.id).ok(), auto_variant_id());
             assert_eq!(
@@ -635,14 +635,14 @@ mod tests {
     }
 
     #[test]
-    fn o_nome_canonico_conta_como_biblioteca() {
+    fn canonical_name_counts_as_a_library() {
         assert!(is_runtime_lib(lib_filename()));
         assert!(!is_runtime_lib("LICENSE"));
         assert!(!is_runtime_lib("VERSION_NUMBER"));
     }
 
     #[test]
-    fn so_a_lib_dentro_de_lib_entra_e_o_dsym_fica_de_fora() {
+    fn only_the_lib_inside_lib_gets_in_and_dsym_stays_out() {
         let base = format!("onnxruntime-osx-arm64-{}", RUNTIME_VERSION);
         let versioned = if cfg!(target_os = "windows") {
             "onnxruntime.dll".to_string()
@@ -662,23 +662,23 @@ mod tests {
     }
 
     #[test]
-    fn a_mensagem_de_runtime_faltando_diz_o_que_fazer() {
+    fn missing_runtime_message_says_what_to_do() {
         let msg = missing_runtime_error().to_string();
-        assert!(msg.contains(lib_filename()) || msg.contains("Modelos"));
-        assert!(msg.len() > 40, "mensagem curta demais para ser acionável");
+        assert!(msg.contains(lib_filename()) || msg.contains("Models"));
+        assert!(msg.len() > 40, "message too short to be actionable");
     }
 
-    /// Precisa de rede: baixa o pacote oficial e confere o sha256 fixado.
+    /// Needs network: downloads the official package and checks the pinned sha256.
     #[test]
-    #[ignore = "rede: baixa o ONNX Runtime oficial e instala no diretorio de dados"]
-    fn baixa_e_instala_o_runtime_de_verdade() {
-        let rt = tokio::runtime::Runtime::new().expect("runtime tokio");
+    #[ignore = "network: downloads the official ONNX Runtime and installs it in the data directory"]
+    fn downloads_and_installs_the_real_runtime() {
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
         let p = crate::core::tools::noop_progress();
         let path = rt
             .block_on(install_runtime(None, &p))
-            .expect("instalação do ONNX Runtime");
+            .expect("ONNX Runtime installation");
         assert!(path.is_file());
         assert!(is_installed());
-        init().expect("carregar o ONNX Runtime recém-instalado");
+        init().expect("load the freshly installed ONNX Runtime");
     }
 }

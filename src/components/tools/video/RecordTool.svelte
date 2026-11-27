@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Gravar tela (estudo 28, ShareX): FFmpeg com captura nativa, microfone e buffer de replay. */
+  /** Record screen (study 28, ShareX): FFmpeg with native capture, microphone and replay buffer. */
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
   import { onDestroy, onMount } from "svelte";

@@ -1,8 +1,8 @@
-//! Query IDs do GraphQL do X (estudo 67). O X troca os ids a cada build do
-//! site; um id velho responde `404 Query not found`. Tabela fixa (twscrape
-//! 2026-08-28, twifork 2026-08-31) + raspagem dos bundles JS do proprio X,
-//! como fazem o `update-gql-ops.py` do twscrape e o `queryIds.js` do
-//! XActions. Cache em `tools/x/query-ids.json`.
+//! X GraphQL query IDs (study 67). X changes the ids with every build of
+//! the site; an old id answers `404 Query not found`. Fixed table (twscrape
+//! 2026-08-28, twifork 2026-08-31) + scraping X's own JS bundles,
+//! as `update-gql-ops.py` from twscrape and `queryIds.js` from
+//! XActions do. Cache in `tools/x/query-ids.json`.
 
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -72,7 +72,7 @@ fn save(c: &Cache) {
     *CACHE.lock().unwrap() = Some(c.clone());
 }
 
-/// Id atual de uma operacao: cache raspado tem prioridade sobre a tabela.
+/// Current id of an operation: the scraped cache takes priority over the table.
 pub fn id_for(op: &str) -> Option<String> {
     let c = load();
     if let Some(id) = c.ids.get(op) {
@@ -84,7 +84,7 @@ pub fn id_for(op: &str) -> Option<String> {
         .map(|(_, id)| id.to_string())
 }
 
-/// Idade do cache em segundos (`None` = nunca raspado).
+/// Cache age in seconds (`None` = never scraped).
 pub fn cache_age_secs() -> Option<i64> {
     let c = load();
     (c.fetched_at > 0).then(|| chrono::Utc::now().timestamp() - c.fetched_at)
@@ -106,7 +106,7 @@ fn script_urls(html: &str) -> Vec<String> {
             urls.push(m.as_str().to_string());
         }
     }
-    // manifesto webpack: {id:"hash"} + {id:"nome"} → nome.hasha.js
+    // webpack manifest: {id:"hash"} + {id:"name"} → name.<hash>.js
     let re_hash = regex::Regex::new(r#"(\d+):"([0-9a-f]{7}|[0-9a-f]{16})""#).unwrap();
     let re_name = regex::Regex::new(r#"(\d+):"([^"]+)""#).unwrap();
     let mut hashes: HashMap<String, String> = HashMap::new();
@@ -172,8 +172,8 @@ pub fn extract_ops(js: &str) -> Vec<(String, String)> {
     out
 }
 
-/// Carrega a home (com cookies quando houver) e a pagina de login, segue os
-/// bundles e atualiza o cache. Devolve quantas operacoes conhece agora.
+/// Loads the home page (with cookies when present) and the login page, follows the
+/// bundles and updates the cache. Returns how many operations it knows now.
 pub async fn refresh(http: &reqwest::Client, cookie: Option<&str>) -> anyhow::Result<usize> {
     let mut html = String::new();
     for page in [
@@ -206,7 +206,7 @@ pub async fn refresh(http: &reqwest::Client, cookie: Option<&str>) -> anyhow::Re
     }
     let urls = script_urls(&html);
     if urls.is_empty() {
-        anyhow::bail!("nao achei os bundles JS do X na pagina");
+        anyhow::bail!("did not find X's JS bundles on the page");
     }
     let mut found: HashMap<String, String> = HashMap::new();
     let sem = std::sync::Arc::new(tokio::sync::Semaphore::new(8));
@@ -232,7 +232,7 @@ pub async fn refresh(http: &reqwest::Client, cookie: Option<&str>) -> anyhow::Re
         }
     }
     if found.is_empty() {
-        anyhow::bail!("baixei os bundles do X mas nao achei operacoes GraphQL neles");
+        anyhow::bail!("downloaded X's bundles but found no GraphQL operations in them");
     }
     let mut c = load();
     for (op, id) in found {

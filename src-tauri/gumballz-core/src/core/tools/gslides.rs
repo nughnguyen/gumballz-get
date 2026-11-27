@@ -1,13 +1,13 @@
-//! Extractor y compilador vectorial de Google Slides a PDF panorámico (16:9).
+//! Google Slides extractor and vector compiler to panoramic PDF (16:9).
 //!
-//! Soporta:
-//! 1. Enlaces publicados en la web (`/presentation/d/e/2PACX-.../pubembed` o `/pub`),
-//!    los cuales no disponen de `/export?format=pdf` (devuelven HTTP 404).
-//! 2. Presentaciones restringidas donde `/export?format=pdf` devuelve 401/403 pero el
-//!    visor (`/embed` o `/htmlpresent`) entrega las diapositivas en bloques `SK_svgData`.
-//! 3. Compilación local de carpetas de archivos `.svg` ordenados numéricamente (`resvg` +
-//!    `tiny-skia` -> PDF 16:9 de `1280 x 720 pt`) y recepción desde el script JS del
-//!    navegador a través del `local_bridge`.
+//! Supports:
+//! 1. Links published on the web (`/presentation/d/e/2PACX-.../pubembed` or `/pub`),
+//!    which do not offer `/export?format=pdf` (they return HTTP 404).
+//! 2. Restricted presentations where `/export?format=pdf` returns 401/403 but the
+//!    viewer (`/embed` or `/htmlpresent`) delivers the slides in `SK_svgData` blocks.
+//! 3. Local compilation of folders of numerically ordered `.svg` files (`resvg` +
+//!    `tiny-skia` -> 16:9 PDF of `1280 x 720 pt`) and receiving from the browser's JS script
+//!    via the `local_bridge`.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -25,7 +25,7 @@ use serde::{Deserialize, Serialize};
 pub const SLIDE_WIDTH_PT: f64 = 1280.0;
 pub const SLIDE_HEIGHT_PT: f64 = 720.0;
 
-/// Resolución de rasterizado en píxeles (Full HD 16:9) sobre página física de 1280x720 pt.
+/// Rasterization resolution in pixels (Full HD 16:9) over a physical 1280x720 pt page.
 const RENDER_WIDTH_PX: u32 = 1920;
 const RENDER_HEIGHT_PX: u32 = 1080;
 const JPEG_QUALITY: u8 = 92;
@@ -172,7 +172,7 @@ pub fn unescape_js_string(raw: &str) -> String {
                 _ => {}
             }
         }
-        // Avanza un carácter UTF-8 válido
+        // Advance one valid UTF-8 character
         let rest = &raw[i..];
         if let Some(ch) = rest.chars().next() {
             out.push(ch);
@@ -184,9 +184,9 @@ pub fn unescape_js_string(raw: &str) -> String {
     out
 }
 
-/// Fija explícitamente `width="1280px" height="720px" viewBox="0 0 1280 720"`
-/// en el elemento `<svg>` raíz si aún no tiene `width`/`height` explícitos,
-/// preservando el `viewBox` original si ya es proporcional o asignando `0 0 1280 720`.
+/// Explicitly sets `width="1280px" height="720px" viewBox="0 0 1280 720"`
+/// on the root `<svg>` element if it does not already have explicit `width`/`height`,
+/// preserving the original `viewBox` if it is already proportional or assigning `0 0 1280 720`.
 pub fn normalize_slide_svg_geometry(svg: &str) -> String {
     let trimmed = svg.trim();
     let Some(svg_start) = trimmed.find("<svg") else {
@@ -246,7 +246,7 @@ fn clean_presentation_title(raw: &str) -> String {
     }
     let trimmed = t.trim();
     if trimmed.is_empty() {
-        "presentacion_google_slides".to_string()
+        "google_slides_presentation".to_string()
     } else {
         trimmed.to_string()
     }
@@ -275,7 +275,7 @@ pub fn extract_title_from_viewer_html(html: &str) -> String {
         }
     }
 
-    "presentacion_google_slides".to_string()
+    "google_slides_presentation".to_string()
 }
 
 /// Extrae todos los bloques `SK_svgData` en el orden exacto de las diapositivas.
@@ -347,9 +347,9 @@ fn guess_image_mime(bytes: &[u8], content_type: Option<&str>) -> &'static str {
     "image/png"
 }
 
-/// Descarga en paralelo las imágenes remotas referenciadas por los SVGs y las
-/// incrusta como Data URLs (`data:<mime>;base64,...`) exactamente igual que
-/// `svgImageToBase64` en el navegador, pero con deduplicación y concurrencia.
+/// Downloads in parallel the remote images referenced by the SVGs and embeds them
+/// as Data URLs (`data:<mime>;base64,...`) exactly like
+/// `svgImageToBase64` in the browser, but with deduplication and concurrency.
 ///
 /// Returns the real network bytes fetched: the viewer HTML bytes already
 /// received (`base_bytes`) plus every image body. Reports carry the running
@@ -374,7 +374,7 @@ pub async fn embed_remote_images_base64(
         "images",
         0,
         Some(total_imgs),
-        Some(format!("Descargando {} recursos de imagen...", total_imgs)),
+        Some(format!("Downloading {} image resources...", total_imgs)),
         base_bytes,
     );
 
@@ -456,7 +456,7 @@ fn shared_fontdb() -> Arc<usvg::fontdb::Database> {
         .clone()
 }
 
-/// Renderiza un SVG a un buffer JPEG en memoria con proporción 16:9 usando `resvg` y `tiny-skia`.
+/// Renders an SVG to an in-memory JPEG buffer at 16:9 aspect using `resvg` and `tiny-skia`.
 pub fn render_svg_to_jpeg(svg_str: &str) -> anyhow::Result<Vec<u8>> {
     let normalized = normalize_slide_svg_geometry(svg_str);
     let opt = usvg::Options {
@@ -465,7 +465,7 @@ pub fn render_svg_to_jpeg(svg_str: &str) -> anyhow::Result<Vec<u8>> {
     };
 
     let tree = usvg::Tree::from_data(normalized.as_bytes(), &opt)
-        .context("Error parseando el árbol SVG con usvg")?;
+        .context("Error parsing the SVG tree with usvg")?;
 
     let tree_size = tree.size();
     let target_w = RENDER_WIDTH_PX;
@@ -479,7 +479,7 @@ pub fn render_svg_to_jpeg(svg_str: &str) -> anyhow::Result<Vec<u8>> {
         )
     })?;
 
-    // Fondo blanco por defecto para evitar transparencias negras al pasar a JPEG
+    // White background by default to avoid black transparencies when converting to JPEG
     pixmap.fill(tiny_skia::Color::WHITE);
 
     let sx = target_w as f32 / tree_size.width().max(1.0);
@@ -488,7 +488,7 @@ pub fn render_svg_to_jpeg(svg_str: &str) -> anyhow::Result<Vec<u8>> {
 
     resvg::render(&tree, transform, &mut pixmap.as_mut());
 
-    // Convertir RGBA premultiplicado (tiny-skia) a RGB de 24 bits para JPEG
+    // Convert premultiplied RGBA (tiny-skia) to 24-bit RGB for JPEG
     let rgba = pixmap.data();
     let mut rgb = Vec::with_capacity((target_w * target_h * 3) as usize);
     for px in rgba.chunks_exact(4) {
@@ -526,7 +526,7 @@ pub fn compile_svgs_to_pdf(
     progress_id: &str,
 ) -> anyhow::Result<Vec<u8>> {
     if svgs.is_empty() {
-        return Err(anyhow!("No hay diapositivas SVG para compilar"));
+        return Err(anyhow!("No SVG slides to compile"));
     }
 
     let total = svgs.len() as u64;
@@ -542,7 +542,7 @@ pub fn compile_svgs_to_pdf(
             Some(format!("Renderizando diapositiva {}/{}...", idx + 1, total)),
         );
         let jpeg = render_svg_to_jpeg(svg_str)
-            .with_context(|| format!("Error procesando diapositiva {}", idx + 1))?;
+            .with_context(|| format!("Error processing slide {}", idx + 1))?;
         jpegs.push(jpeg);
     }
 
@@ -551,7 +551,7 @@ pub fn compile_svgs_to_pdf(
     Ok(pdf)
 }
 
-/// Extrae el primer número de un nombre de archivo para ordenamiento natural
+/// Extracts the first number from a filename for natural sorting
 /// (`diapositiva_1.svg`, `diapositiva_2.svg`, ..., `diapositiva_10.svg`).
 pub fn extraer_numero_slide(nombre: &str) -> usize {
     static NUM_RE: OnceLock<Regex> = OnceLock::new();
@@ -562,10 +562,10 @@ pub fn extraer_numero_slide(nombre: &str) -> usize {
         .unwrap_or(0)
 }
 
-/// Lista todos los archivos `.svg` de un directorio en orden numérico natural.
+/// Lists all `.svg` files in a directory in natural numeric order.
 pub fn obtener_svgs_ordenados(directorio: &Path) -> anyhow::Result<Vec<PathBuf>> {
     let mut entradas: Vec<PathBuf> = std::fs::read_dir(directorio)
-        .with_context(|| format!("No se pudo leer el directorio {}", directorio.display()))?
+        .with_context(|| format!("Could not read directory {}", directorio.display()))?
         .filter_map(|e| e.ok())
         .map(|e| e.path())
         .filter(|p| {
@@ -605,7 +605,7 @@ pub async fn compile_svg_dir_to_pdf(
     for p in &paths {
         let content = tokio::fs::read_to_string(p)
             .await
-            .with_context(|| format!("Error leyendo {}", p.display()))?;
+            .with_context(|| format!("Error reading {}", p.display()))?;
         svgs.push(content);
     }
 
@@ -682,9 +682,9 @@ pub fn build_google_client(url_hint: Option<&str>) -> anyhow::Result<reqwest::Cl
     Ok(builder.build()?)
 }
 
-/// Descarga y extrae las diapositivas de una presentación de Google Slides desde su visor
-/// (`pubembed` / `embed` / `htmlpresent`), incrusta sus imágenes en Base64 y genera el
-/// PDF 16:9 (`format == "pdf"`) o una carpeta con los `.svg` autocontenidos (`format == "svg"`).
+/// Downloads and extracts the slides of a Google Slides presentation from its viewer
+/// (`pubembed` / `embed` / `htmlpresent`), embeds its images in Base64 and generates the
+/// 16:9 PDF (`format == "pdf"`) or a folder with the self-contained `.svg` files (`format == "svg"`).
 pub async fn download_presentation(
     url: &str,
     format: &str,
@@ -692,7 +692,7 @@ pub async fn download_presentation(
     progress: super::ProgressFn,
 ) -> anyhow::Result<GslidesDownloadResult> {
     let target = parse_gslides_url(url)
-        .ok_or_else(|| anyhow!("Enlace de Google Slides no válido: {}", url))?;
+        .ok_or_else(|| anyhow!("Invalid Google Slides link: {}", url))?;
 
     let client = build_google_client(Some(url))?;
     let progress_id = format!("gslides:{}", target.id);
@@ -722,7 +722,7 @@ pub async fn download_presentation(
 
     if html.is_empty() {
         return Err(anyhow!(
-            "No se encontraron diapositivas vectoriales en la presentación (puede requerir inicio de sesión o usar el extractor en navegador)."
+            "No vector slides found in the presentation (may require sign-in or using the in-browser extractor)."
         ));
     }
 
@@ -732,7 +732,7 @@ pub async fn download_presentation(
 
     if extracted.svgs.is_empty() {
         return Err(anyhow!(
-            "No se encontraron bloques SK_svgData en la presentación."
+            "No SK_svgData blocks found in the presentation."
         ));
     }
 
@@ -792,8 +792,8 @@ pub async fn download_presentation(
     })
 }
 
-/// Genera el script JavaScript / Bookmarklet adaptado para enviar diapositivas al
-/// `local_bridge` de GumballZ Get en `http://127.0.0.1:<port>/api` autenticado con token Bearer.
+/// Generates the JavaScript / Bookmarklet script adapted to send slides to
+/// GumballZ Get's `local_bridge` at `http://127.0.0.1:<port>/api`, authenticated with a Bearer token.
 pub fn browser_extractor_script(port: u16, token: &str) -> String {
     let tpl = r##"javascript:(function(){
   const SERVER_URL = "http://127.0.0.1:__PORT__/api";
@@ -801,7 +801,7 @@ pub fn browser_extractor_script(port: u16, token: &str) -> String {
   let count = 1;
   let lastSvgSignature = "";
   let duplicateCount = 0;
-  const deckTitle = (document.title || "presentacion_google_slides").replace(/\s*-\s*(Presentaciones de Google|Google Slides|Apresentações Google).*$/i, "").trim();
+  const deckTitle = (document.title || "google_slides_presentation").replace(/\s*-\s*(Presentaciones de Google|Google Slides|Apresentações Google).*$/i, "").trim();
 
   fetch(`${SERVER_URL}/reset`, {
     method: "POST",
@@ -810,7 +810,7 @@ pub fn browser_extractor_script(port: u16, token: &str) -> String {
   });
 
   let btn = document.createElement("button");
-  btn.textContent = "⏳ Enviando slides a GumballZ Get...";
+  btn.textContent = "⏳ Sending slides to GumballZ Get...";
   btn.style.cssText = "position:fixed;top:20px;right:20px;z-index:999999;padding:14px 22px;background:#4f46e5;color:white;font-weight:bold;border:none;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.35);font-family:system-ui,sans-serif;";
   document.body.appendChild(btn);
 
@@ -862,14 +862,14 @@ pub fn browser_extractor_script(port: u16, token: &str) -> String {
       let sig = target.innerHTML;
       if (sig === lastSvgSignature && count > 1) {
         if (++duplicateCount >= 2) {
-          btn.textContent = "⚙️ Compilando PDF 16:9 en GumballZ Get...";
+          btn.textContent = "⚙️ Compiling 16:9 PDF in GumballZ Get...";
           let r = await fetch(`${SERVER_URL}/compile`, {
             method: "POST",
             headers: AUTH_HEADERS,
             body: JSON.stringify({ title: deckTitle })
           });
           let j = await r.json().catch(() => ({}));
-          btn.textContent = j.file ? `✅ PDF guardado: ${j.file}` : "✅ ¡PDF generado en GumballZ Get!";
+          btn.textContent = j.file ? `✅ PDF saved: ${j.file}` : "✅ PDF generated in GumballZ Get!";
           btn.style.background = "#10b981";
           setTimeout(() => btn.remove(), 6000);
           return;
@@ -893,7 +893,7 @@ pub fn browser_extractor_script(port: u16, token: &str) -> String {
         body: JSON.stringify({ index: count++, svg_content: xml, title: deckTitle })
       });
 
-      btn.textContent = `🚀 Enviado slide ${count - 1} a GumballZ Get...`;
+      btn.textContent = `🚀 Sent slide ${count - 1} to GumballZ Get...`;
     }
 
     advance();

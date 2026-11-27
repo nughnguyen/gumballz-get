@@ -1,8 +1,8 @@
-//! Score offline de completude do perfil. Cada item olha um campo real do
+//! Offline profile-completeness score. Each item looks at a real field of the
 //! export (`Profile.csv`, `Positions.csv`, `Education.csv`, `Skills.csv`,
-//! `Endorsement_Received_Info.csv`, `Recommendations_Received.csv`) e diz o
-//! numero que viu contra o alvo. Nada de conselho generico: item sem fonte no
-//! export sai como "warn" e nao entra na conta.
+//! `Endorsement_Received_Info.csv`, `Recommendations_Received.csv`) and says the
+//! number it saw against the target. No generic advice: an item with no source in
+//! the export comes out as "warn" and does not count.
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -13,7 +13,7 @@ use crate::core::tools::{report, ProgressFn};
 
 const ID: &str = "li-checklist";
 
-/// Alvos objetivos. Ficam aqui para a UI poder explicar o porque.
+/// Objective targets. They live here so the UI can explain the why.
 const HEADLINE_MIN: usize = 40;
 const ABOUT_MIN: usize = 200;
 const ROLE_DESC_MIN: usize = 150;
@@ -27,16 +27,16 @@ pub struct Options {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct CheckItem {
-    /// Casa com `tools.licheck.item_<id>` na UI.
+    /// Matches `tools.licheck.item_<id>` in the UI.
     pub id: String,
-    /// "ok" | "miss" | "warn" (sem fonte no export, fora da conta).
+    /// "ok" | "miss" | "warn" (no source in the export, out of the count).
     pub state: String,
     pub weight: u32,
-    /// O que o export trouxe (numero ou texto curto).
+    /// What the export brought (number or short text).
     pub value: String,
-    /// O alvo do item, quando ha um.
+    /// The item's target, when there is one.
     pub target: String,
-    /// Arquivo e coluna de onde veio, para o item ser conferivel.
+    /// File and column it came from, so the item can be checked.
     pub source: String,
 }
 
@@ -82,7 +82,7 @@ fn is_image(name: &str) -> bool {
         .any(|e| n.ends_with(e))
 }
 
-/// URL vaidosa: sem o sufixo aleatorio que o LinkedIn coloca por padrao
+/// Vanity URL: without the random suffix LinkedIn adds by default
 /// (`ana-silva-1a2b3c4`, `anasilva123456789`).
 pub fn looks_custom(slug: &str) -> bool {
     let s = slug.trim_matches('/').to_lowercase();
@@ -97,8 +97,8 @@ pub fn looks_custom(slug: &str) -> bool {
     digits < 6
 }
 
-/// Procura a URL do proprio perfil no `messages.csv` (a coluna
-/// SENDER PROFILE URL das mensagens que voce mandou).
+/// Looks for the own profile URL in `messages.csv` (the
+/// SENDER PROFILE URL column of the messages you sent).
 fn own_url(src: &Source, name: &str) -> String {
     if name.trim().is_empty() {
         return String::new();
@@ -199,7 +199,7 @@ pub fn run(opts: &Options, p: &ProgressFn) -> Result<ChecklistResult> {
         ),
     ];
 
-    // Foto: so da para responder se o export veio com as imagens.
+    // Photo: it can only be answered if the export came with the images.
     let photo = opened
         .entries
         .iter()
@@ -226,7 +226,7 @@ pub fn run(opts: &Options, p: &ProgressFn) -> Result<ChecklistResult> {
             .map(|r| positions.get(r, &["Title"]).to_string())
             .unwrap_or_default(),
         "",
-        "Positions.csv · Finished On vazio",
+        "Positions.csv · Finished On empty",
     ));
     items.push(item(
         "role_description",
@@ -334,7 +334,7 @@ pub fn run(opts: &Options, p: &ProgressFn) -> Result<ChecklistResult> {
     Ok(out)
 }
 
-/// Usado pelo painel geral para nao repetir a leitura do perfil.
+/// Used by the overview panel so it does not repeat reading the profile.
 pub fn slug_of(url: &str) -> String {
     csv::norm(url.rsplit("/in/").next().unwrap_or(""))
 }
@@ -361,10 +361,10 @@ mod tests {
         let r = run_dir(&dir);
         assert_eq!(r.name, "nughnguyen Dev");
         assert_eq!(r.items.len(), 14);
-        // Sem imagens no export: foto fica fora da conta.
+        // No images in the export: photo stays out of the count.
         assert!(r.unknown.contains(&"photo".to_string()));
         assert_eq!(r.max, 105);
-        // Headline de 50 passa; about de 47, descricao de 24 e 3 skills nao.
+        // Headline of 50 passes; about of 47, description of 24 and 3 skills do not.
         assert!(r.missing.contains(&"about".to_string()));
         assert!(r.missing.contains(&"role_description".to_string()));
         assert!(r.missing.contains(&"skills".to_string()));

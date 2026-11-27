@@ -1,5 +1,5 @@
-//! Cifras clássicas: César/ROT, Atbash, Vigenère e Rail Fence. Todas
-//! preservam pontuação e caixa, e todas têm o caminho de volta.
+//! Classic ciphers: Caesar/ROT, Atbash, Vigenère and Rail Fence. All
+//! preserve punctuation and case, and all have a way back.
 
 use serde::{Deserialize, Serialize};
 
@@ -12,10 +12,10 @@ pub struct CipherOptions {
     pub cipher: String,
     #[serde(default)]
     pub decrypt: bool,
-    /// Deslocamento do César ou número de trilhos do Rail Fence.
+    /// Caesar shift or Rail Fence rail count.
     #[serde(default)]
     pub shift: i32,
-    /// Chave do Vigenère.
+    /// Vigenère key.
     #[serde(default)]
     pub key: String,
 }
@@ -76,7 +76,7 @@ pub fn vigenere(text: &str, key: &str, decrypt: bool) -> String {
 pub fn rail_fence(text: &str, rails: usize, decrypt: bool) -> String {
     let rails = rails.clamp(2, text.chars().count().max(2));
     let chars: Vec<char> = text.chars().collect();
-    // Padrão de zigue-zague: qual trilho cada posição ocupa.
+    // Zigzag pattern: which rail each position occupies.
     let mut pattern = Vec::with_capacity(chars.len());
     let (mut r, mut dir) = (0isize, 1isize);
     for _ in 0..chars.len() {
@@ -137,7 +137,7 @@ pub struct CaesarCandidate {
     pub score: f64,
 }
 
-/// As 26 rotações, ordenadas pela que mais parece texto de verdade.
+/// All 26 rotations, ordered by which looks most like real text.
 pub fn caesar_bruteforce(text: &str) -> Vec<CaesarCandidate> {
     let mut out: Vec<CaesarCandidate> = (0..26)
         .map(|shift| {
@@ -180,14 +180,14 @@ mod tests {
     #[test]
     fn vigenere_round_trips() {
         let enc = vigenere("ATTACKATDAWN", "LEMON", false);
-        assert_eq!(enc, "LXFOPVEFRNHR", "vetor clássico do Vigenère");
+        assert_eq!(enc, "LXFOPVEFRNHR", "classic Vigenère vector");
         assert_eq!(vigenere(&enc, "LEMON", true), "ATTACKATDAWN");
     }
 
     #[test]
     fn vigenere_skips_non_letters_without_burning_the_key() {
         let enc = vigenere("AT TACK", "LEMON", false);
-        assert_eq!(enc, "LX FOPV", "o espaço não pode consumir letra da chave");
+        assert_eq!(enc, "LX FOPV", "the space cannot consume a key letter");
     }
 
     #[test]
@@ -207,7 +207,7 @@ mod tests {
         let secret = "the quick brown fox jumps over the lazy dog and then some more";
         let enc = caesar(secret, 7);
         let best = &caesar_bruteforce(&enc)[0];
-        assert_eq!(best.shift, 7, "achou o deslocamento");
+        assert_eq!(best.shift, 7, "found the shift");
         assert_eq!(best.text, secret);
     }
 }

@@ -1,11 +1,11 @@
-//! Escolha do downloader para uma URL, com a sondagem de arquivo direto (B4).
+//! Choosing the downloader for a URL, with direct-file probing (B4).
 //!
-//! `Platform::from_url` e `registry.find_platform` decidem só pela URL. Um
-//! `https://host/100MB.bin` de extensão que ninguém conhece caía no generic e
-//! ficava minutos em `connecting` esperando o extractor do yt-dlp. Aqui, se a
-//! URL não é de plataforma conhecida e tem extensão desconhecida, um `HEAD`
-//! curto decide: não é página e tem tamanho de arquivo ⇒ `direct_file`, que
-//! usa o `HttpFetcher` segmentado.
+//! `Platform::from_url` and `registry.find_platform` decide by URL alone. A
+//! `https://host/100MB.bin` with an extension nobody knows fell into generic
+//! and sat for minutes in `connecting` waiting for the yt-dlp extractor. Here,
+//! if the URL is not from a known platform and has an unknown extension, a short
+//! `HEAD` decides: it is not a page and it has a file size ⇒ `direct_file`,
+//! which uses the segmented `HttpFetcher`.
 
 use std::sync::Arc;
 

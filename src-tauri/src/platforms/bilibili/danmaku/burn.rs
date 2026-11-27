@@ -1,15 +1,16 @@
-//! Queimar o ASS de danmaku num arquivo de vídeo local, com corte opcional.
+//! Burns the danmaku ASS into a local video file, with an optional cut.
 //!
-//! Cortar e queimar ao mesmo tempo é onde o FFmpeg sai de sincronia: com `-ss`
-//! antes de `-i` os quadros chegam ao filtro já rebobinados para zero, e o
-//! libass desenha em cima do clipe os comentários do começo do vídeo. Em vez
-//! de brigar com `-copyts` (que resolve o desenho e desarruma a saída), o
-//! corte é feito na legenda: uma cópia temporária do ASS já sai deslocada e
-//! recortada para a janela pedida, e aí `-ss`/`-t` viram um corte comum.
+//! Cutting and burning at the same time is where FFmpeg falls out of sync: with
+//! `-ss` before `-i` the frames reach the filter already rewound to zero, and
+//! libass draws the comments from the start of the video on top of the clip.
+//! Instead of fighting with `-copyts` (which fixes the drawing and scrambles the
+//! output), the cut is done in the subtitle: a temporary copy of the ASS already
+//! comes out shifted and trimmed to the requested window, and then `-ss`/`-t`
+//! become an ordinary cut.
 //!
-//! A cópia temporária também tira o caminho original do caminho: nome ASCII
-//! curto em pasta nossa, sem apóstrofo nem acento para o parser de filtro do
-//! FFmpeg tropeçar.
+//! The temporary copy also takes the original path out of the way: short ASCII
+//! name in our own folder, with no apostrophe or accent for FFmpeg's filter
+//! parser to trip over.
 
 use std::path::{Path, PathBuf};
 
@@ -17,32 +18,32 @@ use anyhow::{anyhow, Result};
 use gumballz_core::core::tools::{report, subtitle, video_compress, ProgressFn};
 use serde::{Deserialize, Serialize};
 
-/// Id da tool no evento `tool-progress`.
+/// Tool id in the `tool-progress` event.
 pub const ID: &str = "bili-danmaku-burn";
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct BurnOptions {
     pub video: String,
-    /// O `.ass` do danmaku (aceita `.ssa`, `.srt` e `.vtt` também).
+    /// The danmaku `.ass` (accepts `.ssa`, `.srt` and `.vtt` too).
     pub subtitle: String,
-    /// Início do recorte em segundos; 0 pega do começo.
+    /// Cut start in seconds; 0 takes from the beginning.
     #[serde(default)]
     pub start: f64,
-    /// Duração do recorte em segundos; 0 vai até o fim.
+    /// Cut duration in seconds; 0 goes to the end.
     #[serde(default)]
     pub duration: f64,
-    /// Alvo de tamanho em MB; 0 codifica por qualidade fixa (CRF).
+    /// Size target in MB; 0 encodes at fixed quality (CRF).
     #[serde(default)]
     pub target_mb: f64,
     #[serde(default = "default_crf")]
     pub crf: u32,
     #[serde(default = "default_preset")]
     pub preset: String,
-    /// Altura máxima da saída; 0 mantém a original.
+    /// Maximum output height; 0 keeps the original.
     #[serde(default)]
     pub max_height: u32,
-    /// Pasta com as fontes do ASS (o danmaku pede uma CJK que raramente está
-    /// instalada). Vazia usa as fontes do sistema.
+    /// Folder with the ASS fonts (danmaku asks for a CJK font that is rarely
+    /// installed). Empty uses the system fonts.
     #[serde(default)]
     pub fonts_dir: String,
     #[serde(default)]
@@ -64,9 +65,9 @@ pub struct BurnResult {
     pub output: String,
     pub bytes: u64,
     pub duration_secs: f64,
-    /// Quantos comentários sobraram dentro da janela.
+    /// How many comments are left inside the window.
     pub dialogues: usize,
-    /// 0 quando a codificação foi por CRF.
+    /// 0 when encoding was by CRF.
     pub video_kbps: u32,
     pub audio_kbps: u32,
 }
@@ -74,11 +75,11 @@ pub struct BurnResult {
 pub async fn run(opts: &BurnOptions, progress: &ProgressFn) -> Result<BurnResult> {
     let video = PathBuf::from(opts.video.trim());
     if !video.is_file() {
-        return Err(anyhow!("vídeo não encontrado: {}", opts.video));
+        return Err(anyhow!("video not found: {}", opts.video));
     }
     let sub = PathBuf::from(opts.subtitle.trim());
     if !sub.is_file() {
-        return Err(anyhow!("legenda não encontrada: {}", opts.subtitle));
+        return Err(anyhow!("subtitle not found: {}", opts.subtitle));
     }
     let ffmpeg = gumballz_core::core::dependencies::ensure_ffmpeg().await?;
 
@@ -88,7 +89,7 @@ pub async fn run(opts: &BurnOptions, progress: &ProgressFn) -> Result<BurnResult
         "progress",
         0,
         Some(3),
-        Some("lendo o vídeo".into()),
+        Some("reading the video".into()),
     );
     let probe = gumballz_core::core::ffmpeg::probe(&video).await?;
     let has_audio = probe.streams.iter().any(|s| s.codec_type == "audio");
@@ -100,7 +101,7 @@ pub async fn run(opts: &BurnOptions, progress: &ProgressFn) -> Result<BurnResult
     };
     if window <= 0.0 {
         return Err(anyhow!(
-            "a janela de corte ficou vazia — o vídeo tem {:.1}s",
+            "the cut window ended up empty — the video is {:.1}s long",
             probe.duration_seconds
         ));
     }
@@ -113,7 +114,7 @@ pub async fn run(opts: &BurnOptions, progress: &ProgressFn) -> Result<BurnResult
     };
     if dialogues == 0 {
         return Err(anyhow!(
-            "nenhum comentário cai entre {:.1}s e {:.1}s",
+            "no comment falls between {:.1}s and {:.1}s",
             start,
             start + window
         ));
@@ -150,7 +151,7 @@ pub async fn run(opts: &BurnOptions, progress: &ProgressFn) -> Result<BurnResult
             video_compress::plan_bitrates(window, target_bytes, 128, has_audio, 0.97).ok_or_else(
                 || {
                     anyhow!(
-                        "{:.0} MB não cabem {:.0}s de vídeo — aumente o alvo ou encurte o clipe",
+                        "{:.0} MB does not fit {:.0}s of video — raise the target or shorten the clip",
                         opts.target_mb,
                         window
                     )
@@ -223,7 +224,7 @@ pub async fn run(opts: &BurnOptions, progress: &ProgressFn) -> Result<BurnResult
     let _ = std::fs::remove_file(&work);
     let bytes = std::fs::metadata(&output).map(|m| m.len()).unwrap_or(0);
     if bytes == 0 {
-        return Err(anyhow!("o FFmpeg terminou sem escrever nada"));
+        return Err(anyhow!("FFmpeg finished without writing anything"));
     }
     report(progress, ID, "done", 3, Some(3), None);
     Ok(BurnResult {
@@ -236,7 +237,7 @@ pub async fn run(opts: &BurnOptions, progress: &ProgressFn) -> Result<BurnResult
     })
 }
 
-// ── Montagem do comando ────────────────────────────────────────────────
+// ── Command assembly ────────────────────────────────────────────────
 
 fn null_sink() -> &'static str {
     if cfg!(windows) {
@@ -246,8 +247,8 @@ fn null_sink() -> &'static str {
     }
 }
 
-/// `-ss`/`-t` antes do `-i`: o FFmpeg busca no contêiner em vez de decodificar
-/// o vídeo inteiro, e o ASS já vem deslocado, então a conta bate.
+/// `-ss`/`-t` before `-i`: FFmpeg seeks in the container instead of decoding
+/// the whole video, and the ASS already comes shifted, so the math works out.
 pub fn cut_args(start: f64, window: f64) -> Vec<String> {
     let mut a = Vec::new();
     if start > 0.0 {
@@ -261,8 +262,8 @@ pub fn cut_args(start: f64, window: f64) -> Vec<String> {
     a
 }
 
-/// Escala antes do `ass`: o libass desenha na resolução de saída e o texto sai
-/// nítido, em vez de ser desenhado grande e depois reduzido junto com o vídeo.
+/// Scale before `ass`: libass draws at the output resolution and the text comes
+/// out sharp, instead of being drawn large and then shrunk together with the video.
 pub fn filter_chain(subtitle: &Path, fonts_dir: &str, max_height: u32) -> String {
     let mut chain = String::new();
     if max_height > 0 {
@@ -330,8 +331,8 @@ fn sane_preset(preset: &str) -> String {
     }
 }
 
-/// Recodifica o áudio em vez de copiar: cópia de trecho começa num pacote que
-/// não é o primeiro quadro e o clipe sai com o som adiantado.
+/// Re-encodes the audio instead of copying: a clip copy starts on a packet that
+/// is not the first frame and the clip comes out with the sound ahead.
 fn audio_args(has_audio: bool, kbps: u32) -> Vec<String> {
     if !has_audio {
         return vec!["-an".into()];
@@ -369,7 +370,7 @@ async fn run_ffmpeg(
         .args(tail)
         .output()
         .await
-        .map_err(|e| anyhow!("ffmpeg nao iniciou: {}", e))?;
+        .map_err(|e| anyhow!("ffmpeg did not start: {}", e))?;
     if !out.status.success() {
         let stderr = String::from_utf8_lossy(&out.stderr);
         return Err(anyhow!("{}", friendly_ffmpeg(stderr.trim())));
@@ -377,21 +378,21 @@ async fn run_ffmpeg(
     Ok(())
 }
 
-/// O erro cru do libass não diz nada para quem não conhece FFmpeg.
+/// libass's raw error says nothing to anyone who does not know FFmpeg.
 fn friendly_ffmpeg(stderr: &str) -> String {
     if stderr.contains("fontselect") || stderr.contains("Glyph") {
         return format!(
-            "a fonte do ASS não está instalada — aponte a pasta de fontes. ({})",
+            "the ASS font is not installed — point at the fonts folder. ({})",
             stderr
         );
     }
     if stderr.is_empty() {
-        return "o ffmpeg falhou sem dizer por quê".to_string();
+        return "ffmpeg failed without saying why".to_string();
     }
     stderr.to_string()
 }
 
-// ── Recorte da legenda ─────────────────────────────────────────────────
+// ── Subtitle cut ─────────────────────────────────────────────────
 
 fn is_ass(path: &Path) -> bool {
     path.extension()
@@ -402,7 +403,7 @@ fn is_ass(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
-/// Legenda antiga em português vem em Latin-1 mais vezes do que se admite.
+/// Old subtitles in Portuguese come in Latin-1 more often than one would admit.
 fn read_text(path: &Path) -> Result<String> {
     let bytes = std::fs::read(path)?;
     Ok(match String::from_utf8(bytes.clone()) {
@@ -422,11 +423,11 @@ pub fn parse_ass_time(s: &str) -> Option<f64> {
     Some(h * 3600.0 + m * 60.0 + sec)
 }
 
-/// Desloca e recorta um ASS mexendo só nas colunas de tempo. As tags de
-/// posição do danmaku (`\move`, `\pos`) e as vírgulas dentro delas têm que
-/// sair intactas, então o texto é o resto da linha e não é tocado.
+/// Shifts and cuts an ASS by touching only the time columns. The danmaku
+/// position tags (`\move`, `\pos`) and the commas inside them have to come out
+/// intact, so the text is the rest of the line and is not touched.
 ///
-/// Devolve o arquivo novo e quantos diálogos sobraram.
+/// Returns the new file and how many dialogues are left.
 pub fn shift_ass(text: &str, start_secs: f64, window_secs: f64) -> (String, usize) {
     let mut out = String::with_capacity(text.len());
     let mut kept = 0usize;
@@ -468,7 +469,7 @@ fn shift_event(line: &str, start_secs: f64, window_secs: f64) -> Option<String> 
     ))
 }
 
-/// SRT/VTT: passa pelo parser da seção Tools, corta a janela e volta em ASS.
+/// SRT/VTT: goes through the Tools section's parser, cuts the window and comes back as ASS.
 fn shift_other(text: &str, start_secs: f64, window_secs: f64) -> Result<(String, usize)> {
     let mut cues = subtitle::parse(text)?;
     let offset = (start_secs * 1000.0).round() as i64;
@@ -507,9 +508,9 @@ mod tests {
         assert_eq!(kept, 2, "{}", out);
         assert!(out.contains("[Script Info]"));
         assert!(out.contains("Format: Layer, Start, End"));
-        // A tag de movimento e a vírgula do texto não podem ser tocadas.
+        // The movement tag and the text's comma must not be touched.
         assert!(out.contains("{\\move(1920,100,-200,100)}meio, com virgula"));
-        // O que começava em 10s passa a começar em 2s.
+        // What started at 10s now starts at 2s.
         assert!(
             out.contains("Dialogue: 0,0:00:02.00,0:00:14.00,Danmaku"),
             "{}",
@@ -519,10 +520,10 @@ mod tests {
 
     #[test]
     fn shift_clamps_to_the_window() {
-        // O primeiro comentário abre antes da janela e fecha dentro dela.
+        // The first comment opens before the window and closes inside it.
         let (out, kept) = shift_ass(ASS, 8.0, 3.0);
         assert_eq!(kept, 2);
-        // Começo negativo vira zero e nada passa do fim da janela.
+        // A negative start becomes zero and nothing passes the end of the window.
         for line in out.lines().filter(|l| l.starts_with("Dialogue:")) {
             let rest = line.split_once(':').unwrap().1;
             let f: Vec<&str> = rest.splitn(10, ',').collect();
@@ -537,7 +538,7 @@ mod tests {
     fn shift_drops_what_falls_outside() {
         let (out, kept) = shift_ass(ASS, 30.0, 10.0);
         assert_eq!(kept, 0, "{}", out);
-        // Sem diálogo, mas o cabeçalho continua de pé.
+        // No dialogue, but the header still stands.
         assert!(out.contains("[Events]"));
     }
 
@@ -577,7 +578,7 @@ mod tests {
             "{}",
             scaled
         );
-        // A escala tem que vir antes do ass, senão o texto é reduzido junto.
+        // The scale has to come before ass, otherwise the text is shrunk along with it.
         assert!(scaled.find("scale=").unwrap() < scaled.find("ass=").unwrap());
     }
 
@@ -600,9 +601,9 @@ mod tests {
         assert_eq!(audio_args(true, 96), vec!["-c:a", "aac", "-b:a", "96k"]);
     }
 
-    /// Ponta a ponta com o FFmpeg gerido: gera um clipe, recorta e confere que
-    /// o comentário aparece na hora certa (o quadro fica mais claro quando o
-    /// texto branco entra em cena).
+    /// End to end with the managed FFmpeg: generates a clip, cuts it and checks
+    /// the comment appears at the right time (the frame gets brighter when the
+    /// white text comes on screen).
     /// `cargo test -p gumballz-get --lib -- --ignored live_danmaku_burn`
     #[tokio::test]
     #[ignore]
@@ -642,7 +643,7 @@ mod tests {
             .unwrap();
         assert!(gen.status.success());
 
-        // Um comentário só, de 12s a 16s no vídeo original.
+        // A single comment, from 12s to 16s in the original video.
         let ass = dir.join("danmaku.ass");
         std::fs::write(
             &ass,
@@ -667,18 +668,18 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(res.dialogues, 1);
-        assert!(res.bytes > 1000, "saiu pequeno demais: {}", res.bytes);
+        assert!(res.bytes > 1000, "came out too small: {}", res.bytes);
         let probe = gumballz_core::core::ffmpeg::probe(Path::new(&res.output))
             .await
             .unwrap();
         assert!(
             (probe.duration_seconds - 8.0).abs() < 0.5,
-            "duração: {}",
+            "duration: {}",
             probe.duration_seconds
         );
         assert!(probe.streams.iter().any(|s| s.codec_type == "audio"));
 
-        // O texto tem que estar por volta de 2s-6s do clipe, não no começo.
+        // The text has to be around 2s-6s of the clip, not at the start.
         let brightness = |at: f64| {
             let ffmpeg = ffmpeg.clone();
             let out = res.output.clone();
@@ -701,14 +702,14 @@ mod tests {
         let durante = brightness(3.0).await;
         assert!(
             durante > antes,
-            "o comentário não apareceu na janela certa: {} vs {}",
+            "the comment did not appear in the right window: {} vs {}",
             antes,
             durante
         );
-        eprintln!("clipe: {} bytes, {} diálogo(s)", res.bytes, res.dialogues);
+        eprintln!("clip: {} bytes, {} dialogue(s)", res.bytes, res.dialogues);
     }
 
-    /// Mesmo clipe, agora mirando um tamanho de arquivo.
+    /// Same clip, now aiming at a file size.
     /// `cargo test -p gumballz-get --lib -- --ignored live_danmaku_burn_target`
     #[tokio::test]
     #[ignore]
@@ -773,7 +774,7 @@ mod tests {
             "{} bytes passaram de 1 MB",
             res.bytes
         );
-        // O log de duas passagens não pode ficar para trás.
+        // The two-pass log must not be left behind.
         assert!(
             !std::fs::read_dir(&dir)
                 .unwrap()
@@ -781,6 +782,6 @@ mod tests {
                 .any(|e| e.file_name().to_string_lossy().contains("pass")),
             "sobrou log de passagem"
         );
-        eprintln!("alvo 1 MB → {} bytes a {} kbps", res.bytes, res.video_kbps);
+        eprintln!("target 1 MB → {} bytes at {} kbps", res.bytes, res.video_kbps);
     }
 }

@@ -1,6 +1,6 @@
-//! Cliente da API web do Pinterest. Testado em 2026-09-05 sem login: pin,
-//! board, seções, feed do board, perfil, boards do perfil, pins salvos e
-//! criados, busca (pins/vídeos/boards), relacionados, typeahead e `pin.it`.
+//! Pinterest web API client. Tested on 2026-09-05 without login: pin,
+//! board, sections, board feed, profile, profile boards, saved and
+//! created pins, search (pins/videos/boards), related, typeahead and `pin.it`.
 
 use std::time::Duration;
 
@@ -10,10 +10,10 @@ use serde_json::{json, Value};
 
 const ROOT: &str = "https://www.pinterest.com";
 const UA: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
-/// Página máxima aceita pelo `BoardFeedResource` (yt-dlp usa 250).
+/// Maximum page accepted by `BoardFeedResource` (yt-dlp uses 250).
 pub const PAGE: u32 = 100;
 
-// ───────────────────────── alvos (URLs) ─────────────────────────
+// ───────────────────────── targets (URLs) ─────────────────────────
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -88,8 +88,8 @@ fn pinterest_host(host: &str) -> bool {
     }
 }
 
-/// Reconhece pin, board, seção, perfil, busca e `pin.it`. Texto sem URL vira
-/// busca de pins; só dígitos vira id de pin.
+/// Recognizes pin, board, section, profile, search and `pin.it`. Text without a URL becomes
+/// a pin search; digits only become a pin id.
 pub fn parse_target(input: &str) -> Option<Target> {
     let s = input.trim();
     if s.is_empty() {
@@ -119,7 +119,7 @@ pub fn parse_target(input: &str) -> Option<Target> {
         };
     }
     if !pinterest_host(&host) {
-        // não é URL do Pinterest: trata como texto de busca
+        // not a Pinterest URL: treat as search text
         if !s.contains('.') || s.contains(' ') {
             return Some(Target::Search {
                 query: s.to_string(),
@@ -182,7 +182,7 @@ pub fn parse_target(input: &str) -> Option<Target> {
     }
 }
 
-// ───────────────────────── modelo ─────────────────────────
+// ───────────────────────── model ─────────────────────────
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Media {
@@ -195,9 +195,9 @@ pub struct Media {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Video {
-    /// playlist HLS (V_HLSV4), sempre presente quando é vídeo
+    /// HLS playlist (V_HLSV4), always present when it is a video
     pub hls: Option<String>,
-    /// MP4 direto quando o Pinterest expõe (720p / expMp4)
+    /// Direct MP4 when Pinterest exposes it (720p / expMp4)
     pub mp4: Option<String>,
     pub width: u32,
     pub height: u32,
@@ -237,7 +237,7 @@ pub struct Attribution {
     pub url: Option<String>,
 }
 
-/// Item extra de carrossel ou página de story pin.
+/// Extra carousel item or story pin page.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Extra {
     pub index: usize,
@@ -249,10 +249,10 @@ pub struct Extra {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AiInfo {
-    /// o próprio Pinterest rotulou (ai_disclosures / gen_ai_topics)
+    /// Pinterest itself labeled it (ai_disclosures / gen_ai_topics)
     pub labeled: bool,
     pub topics: Vec<String>,
-    /// 0 nada · 1 sinal fraco (só "ai") · 2 ferramenta citada (midjourney…) · 3 frase explícita ("ai generated")
+    /// 0 nothing · 1 weak signal (only "ai") · 2 tool named (midjourney…) · 3 explicit phrase ("ai generated")
     pub keyword_level: u8,
     pub keyword: Option<String>,
 }
@@ -264,16 +264,16 @@ pub struct Pin {
     pub title: String,
     pub description: String,
     pub alt_text: String,
-    /// link de destino ("Visit site")
+    /// destination link ("Visit site")
     pub link: Option<String>,
     pub domain: Option<String>,
     pub created_at: Option<String>,
     /// "image" | "gif" | "video" | "carousel" | "story"
     pub kind: String,
     pub image_signature: Option<String>,
-    /// original (`/originals/`), quando a API entrega
+    /// original (`/originals/`), when the API delivers it
     pub image: Option<Media>,
-    /// 736x, sempre existe para pins com imagem
+    /// 736x, always exists for pins with an image
     pub image_large: Option<Media>,
     /// 236x
     pub thumb: Option<String>,
@@ -292,7 +292,7 @@ pub struct Pin {
     pub dominant_color: Option<String>,
     pub rich: Option<Rich>,
     pub attribution: Option<Attribution>,
-    /// seção do board de onde veio (preenchido pelo backup)
+    /// board section it came from (filled in by the backup)
     #[serde(default)]
     pub section: Option<String>,
 }
@@ -336,7 +336,7 @@ pub struct User {
     pub is_private: bool,
 }
 
-/// Uma lista paginada de pins.
+/// A paginated list of pins.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Feed {
@@ -365,7 +365,7 @@ pub enum Feed {
     },
 }
 
-// ───────────────────────── helpers de JSON ─────────────────────────
+// ───────────────────────── JSON helpers ─────────────────────────
 
 fn s(v: &Value) -> Option<String> {
     match v {
@@ -421,7 +421,7 @@ fn person(v: &Value) -> Option<Person> {
     })
 }
 
-/// Reescreve `…/236x/aa/bb/cc/hash.jpg` para `/originals/`.
+/// Rewrites `…/236x/aa/bb/cc/hash.jpg` to `/originals/`.
 pub fn to_originals(url: &str) -> String {
     let re = regex::Regex::new(r"^(https?://i\.pinimg\.com)/(?:\d+x\d*|originals)(/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{2}/[^/?#]+)$").unwrap();
     match re.captures(url) {
@@ -523,7 +523,7 @@ fn detect_ai(v: &Value, title: &str, description: &str, alt: &str) -> AiInfo {
     info
 }
 
-/// Normaliza o JSON de um pin (qualquer `field_set_key`).
+/// Normalizes a pin's JSON (any `field_set_key`).
 pub fn parse_pin(v: &Value) -> Option<Pin> {
     let id = s(&v["id"])?;
     if v["type"].as_str().map(|t| t != "pin").unwrap_or(false) {
@@ -563,7 +563,7 @@ pub fn parse_pin(v: &Value) -> Option<Pin> {
 
     let mut video = video_from_list(&v["videos"]["video_list"]);
     let mut extras = Vec::new();
-    // story pins: páginas com blocos de imagem/vídeo
+    // story pins: pages with image/video blocks
     if let Some(pages) = v["story_pin_data"]["pages"].as_array() {
         let mut idx = 0usize;
         for page in pages {
@@ -778,7 +778,7 @@ fn parse_user(v: &Value) -> Option<User> {
     })
 }
 
-// ───────────────────────── cliente ─────────────────────────
+// ───────────────────────── client ─────────────────────────
 
 pub struct PinClient {
     http: reqwest::Client,
@@ -786,8 +786,8 @@ pub struct PinClient {
     csrf: Option<String>,
 }
 
-/// Interpreta o campo "cookies" da UI: caminho de um cookies.txt (Netscape)
-/// ou a string crua `a=1; b=2`.
+/// Interprets the UI's "cookies" field: path to a cookies.txt (Netscape)
+/// or the raw string `a=1; b=2`.
 pub fn cookie_header(input: Option<&str>) -> Option<String> {
     let raw = input?.trim();
     if raw.is_empty() {
@@ -865,7 +865,7 @@ impl PinClient {
         }
     }
 
-    /// GET em um resource; devolve `data` e o próximo bookmark (None no fim).
+    /// GET on a resource; returns `data` and the next bookmark (None at the end).
     async fn resource(
         &self,
         name: &str,
@@ -893,7 +893,7 @@ impl PinClient {
                 Ok(v) => v,
                 Err(e) => {
                     return Err(anyhow!(
-                        "Pinterest respondeu HTTP {} sem JSON ({})",
+                        "Pinterest answered HTTP {} without JSON ({})",
                         status,
                         e
                     ))
@@ -904,13 +904,13 @@ impl PinClient {
                 let msg = rr["message"]
                     .as_str()
                     .or_else(|| rr["error"]["message"].as_str())
-                    .unwrap_or("resposta sem status de sucesso");
+                    .unwrap_or("response without success status");
                 let code = rr["error"]["http_status"]
                     .as_u64()
                     .unwrap_or(status.as_u16() as u64);
                 if code == 404 {
                     return Err(anyhow!(
-                        "nao encontrado no Pinterest (privado, removido ou URL errada): {}",
+                        "not found on Pinterest (private, removed or wrong URL): {}",
                         msg
                     ));
                 }
@@ -941,7 +941,7 @@ impl PinClient {
                 &format!("/pin/{}/", id),
             )
             .await?;
-        parse_pin(&data).ok_or_else(|| anyhow!("o Pinterest nao devolveu esse pin"))
+        parse_pin(&data).ok_or_else(|| anyhow!("Pinterest did not return this pin"))
     }
 
     pub async fn board(&self, user: &str, slug: &str) -> anyhow::Result<Board> {
@@ -953,7 +953,7 @@ impl PinClient {
                 &src,
             )
             .await?;
-        parse_board(&data).ok_or_else(|| anyhow!("board nao encontrado"))
+        parse_board(&data).ok_or_else(|| anyhow!("board not found"))
     }
 
     pub async fn board_sections(&self, board_id: &str) -> anyhow::Result<Vec<Section>> {
@@ -991,7 +991,7 @@ impl PinClient {
                 &format!("/{}/", username),
             )
             .await?;
-        parse_user(&data).ok_or_else(|| anyhow!("perfil nao encontrado"))
+        parse_user(&data).ok_or_else(|| anyhow!("profile not found"))
     }
 
     pub async fn user_boards(&self, username: &str) -> anyhow::Result<Vec<Board>> {
@@ -1024,7 +1024,7 @@ impl PinClient {
         Ok(out)
     }
 
-    /// Uma página de um feed.
+    /// One page of a feed.
     pub async fn feed_page(
         &self,
         feed: &Feed,
@@ -1102,7 +1102,7 @@ impl PinClient {
         Ok((pins, next, guides))
     }
 
-    /// Percorre o feed até `limit` pins (0 = tudo), com callback por página.
+    /// Walks the feed up to `limit` pins (0 = all), with a callback per page.
     pub async fn collect(
         &self,
         feed: &Feed,
@@ -1146,7 +1146,7 @@ impl PinClient {
         Ok(out)
     }
 
-    /// Busca de boards (scope "boards" devolve boards em vez de pins).
+    /// Board search (scope "boards" returns boards instead of pins).
     pub async fn search_boards(&self, query: &str, limit: usize) -> anyhow::Result<Vec<Board>> {
         let mut out = Vec::new();
         let mut bookmark: Option<String> = None;
@@ -1205,7 +1205,7 @@ impl PinClient {
         Ok(out)
     }
 
-    /// Expande `pin.it/xxxx` para a URL final.
+    /// Expands `pin.it/xxxx` to the final URL.
     pub async fn resolve_short(&self, code: &str) -> anyhow::Result<String> {
         let url = format!("https://api.pinterest.com/url_shortener/{}/redirect/", code);
         let resp = self.http.get(&url).send().await?;
@@ -1214,8 +1214,8 @@ impl PinClient {
             .get(reqwest::header::LOCATION)
             .and_then(|v| v.to_str().ok())
             .map(|v| v.to_string())
-            .ok_or_else(|| anyhow!("o pin.it nao redirecionou"))?;
-        // às vezes há um segundo pulo (pinterest.com/pin/…/sent/?…)
+            .ok_or_else(|| anyhow!("pin.it did not redirect"))?;
+        // sometimes there is a second hop (pinterest.com/pin/…/sent/?…)
         for _ in 0..3 {
             if parse_target(&loc)
                 .map(|t| !matches!(t, Target::Short { .. }))
@@ -1237,7 +1237,7 @@ impl PinClient {
         Ok(loc.split("/sent/").next().unwrap_or(&loc).to_string())
     }
 
-    /// Desfaz o save de um pin seu (exige cookies com `csrftoken`).
+    /// Undoes the save of one of your pins (needs cookies with `csrftoken`).
     pub async fn unsave(&self, pin_id: &str) -> anyhow::Result<()> {
         let csrf = self.csrf.clone().ok_or_else(|| {
             anyhow!("para desfazer saves informe os cookies da sua sessao (com csrftoken)")
@@ -1255,9 +1255,9 @@ impl PinClient {
         if !status.is_success() || body["resource_response"]["status"].as_str() != Some("success") {
             let msg = body["resource_response"]["error"]["message"]
                 .as_str()
-                .unwrap_or("falhou");
+                .unwrap_or("failed");
             return Err(anyhow!(
-                "nao consegui desfazer o save de {} (HTTP {}): {}",
+                "could not undo the save of {} (HTTP {}): {}",
                 pin_id,
                 status,
                 msg
@@ -1266,7 +1266,7 @@ impl PinClient {
         Ok(())
     }
 
-    /// Feed a partir de um alvo já resolvido (board precisa do id).
+    /// Feed from an already-resolved target (a board needs its id).
     pub async fn feed_for(&self, target: &Target) -> anyhow::Result<(Feed, String)> {
         match target {
             Target::Board { user, slug } => {
@@ -1290,7 +1290,7 @@ impl PinClient {
                     .into_iter()
                     .find(|x| &x.slug == section || x.title.eq_ignore_ascii_case(section))
                     .ok_or_else(|| {
-                        anyhow!("secao '{}' nao encontrada no board {}", section, b.name)
+                        anyhow!("section '{}' not found on board {}", section, b.name)
                     })?;
                 Ok((
                     Feed::Section { section_id: sec.id },
@@ -1323,7 +1323,7 @@ impl PinClient {
             Target::Short { code } => {
                 let url = self.resolve_short(code).await?;
                 let t = parse_target(&url)
-                    .ok_or_else(|| anyhow!("nao entendi o destino de pin.it/{}", code))?;
+                    .ok_or_else(|| anyhow!("could not understand the destination of pin.it/{}", code))?;
                 Box::pin(self.feed_for(&t)).await
             }
         }
@@ -1462,7 +1462,7 @@ mod tests {
     }
 }
 
-/// Testes contra o Pinterest de verdade (`cargo test -- --ignored live_`).
+/// Tests against the real Pinterest (`cargo test -- --ignored live_`).
 #[cfg(test)]
 mod live {
     use super::*;
@@ -1518,7 +1518,7 @@ mod live {
             )
             .await
             .unwrap();
-        assert!(vids.iter().any(|v| v.video.is_some()), "nenhum video");
+        assert!(vids.iter().any(|v| v.video.is_some()), "no video");
         let rel = c
             .collect(
                 &Feed::Related {

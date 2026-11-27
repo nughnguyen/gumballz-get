@@ -18,8 +18,8 @@
 
 <script lang="ts">
   /**
-   * ⚠️ Só Windows. Ajustes de privacidade/interface (Sophia Script) e
-   * endurecimento (hardentools) como regras de registro com reversão.
+   * ⚠️ Windows only. Privacy/interface tweaks (Sophia Script) and
+   * hardening (hardentools) as registry rules with rollback.
    * `group` escolhe que subconjunto a tool mostra.
    */
   import { invoke } from "@tauri-apps/api/core";

@@ -18,10 +18,10 @@
 
 <script lang="ts">
   /**
-   * Lê o export oficial ("Baixe suas informações", JSON) sem tocar na API:
-   * quem não segue de volta, fãs, pedidos pendentes, melhores amigos,
-   * bloqueados, deixou de seguir recentemente. Com sessão, dá para
-   * transformar em ações.
+   * Reads the official export ("Download your information", JSON) without touching the API:
+   * who doesn't follow back, fans, pending requests, close friends,
+   * blocked, recently unfollowed. With a session, it can be
+   * turned into actions.
    */
   import { invoke } from "@tauri-apps/api/core";
   import { t } from "$lib/i18n";

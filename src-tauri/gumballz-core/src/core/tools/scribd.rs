@@ -962,7 +962,7 @@ pub fn decode_sprite(bytes: &[u8]) -> anyhow::Result<(u32, u32, ScribdImageKind)
     if let Some((w, h, comps)) = jpeg_info(bytes) {
         if comps == 3 || comps == 1 {
             // Validate it really decodes before embedding the raw bytes.
-            let img = image::load_from_memory(bytes).context("giải mã JPEG sprite Scribd")?;
+            let img = image::load_from_memory(bytes).context("decode Scribd JPEG sprite")?;
             debug_assert_eq!((img.width(), img.height()), (w, h));
             return Ok((
                 w,
@@ -974,7 +974,7 @@ pub fn decode_sprite(bytes: &[u8]) -> anyhow::Result<(u32, u32, ScribdImageKind)
             ));
         }
     }
-    let img = image::load_from_memory(bytes).context("giải mã sprite Scribd")?;
+    let img = image::load_from_memory(bytes).context("decode Scribd sprite")?;
     let rgba = img.to_rgba8();
     let (w, h) = (rgba.width(), rgba.height());
     Ok((w, h, ScribdImageKind::Rgba(rgba.into_raw())))
@@ -1324,7 +1324,7 @@ fn baseline_offset_em(font: &EmbeddedFont) -> f64 {
 /// on top so it remains searchable.
 pub fn build_text_pdf(pages: &[ScribdPage]) -> anyhow::Result<Vec<u8>> {
     let font = EmbeddedFont::parse(EMBEDDED_FONT)
-        .ok_or_else(|| anyhow!("không đọc được font nhúng BeVietnamPro"))?;
+        .ok_or_else(|| anyhow!("could not read embedded BeVietnamPro font"))?;
 
     // Image XObjects first: ids 8..; a soft-mask XObject follows its
     // colour XObject when the sprite has any transparent pixel.
@@ -1449,7 +1449,7 @@ pub fn build_text_pdf(pages: &[ScribdPage]) -> anyhow::Result<Vec<u8>> {
         }
     }
     if pdf_pages.is_empty() {
-        anyhow::bail!("không có trang nào để ghi PDF");
+        anyhow::bail!("no pages to write to PDF");
     }
     if used.is_empty() {
         // Keep the ToUnicode CMap non-empty even for blank documents.
@@ -1926,7 +1926,7 @@ pub fn build_docx(pages: &[ScribdPage], title: &str) -> anyhow::Result<Vec<u8>> 
             }
             if page.text.trim().is_empty() && page.images.is_empty() {
                 body.push_str(&docx_para(&format!(
-                    "[Trang {}: trang ảnh, không trích xuất được chữ]",
+                    "[Page {}: image page, could not extract text]",
                     page.num
                 )));
             }
@@ -2018,10 +2018,10 @@ pub fn build_docx(pages: &[ScribdPage], title: &str) -> anyhow::Result<Vec<u8>> 
     }
     for (name, bytes) in files {
         zip.start_file(name, opts)
-            .context("ghi file vào docx")?;
-        zip.write_all(&bytes).context("ghi file vào docx")?;
+            .context("write file into docx")?;
+        zip.write_all(&bytes).context("write file into docx")?;
     }
-    let out = zip.finish().context("hoàn tất docx")?;
+    let out = zip.finish().context("finish docx")?;
     Ok(out.into_inner())
 }
 
@@ -2050,7 +2050,7 @@ pub async fn fetch_embed_html(
 ) -> anyhow::Result<String> {
     let resp = client.get(embed_url).send().await?;
     if !resp.status().is_success() {
-        anyhow::bail!("Scribd trả về HTTP {}", resp.status());
+        anyhow::bail!("Scribd returned HTTP {}", resp.status());
     }
     Ok(resp.text().await?)
 }
@@ -2156,7 +2156,7 @@ pub async fn fetch_page_texts(
         }
         let has_text = !text.trim().is_empty();
         if !has_text && images.is_empty() {
-            text = format!("[Trang {}: trang ảnh, không trích xuất được chữ]", n);
+            text = format!("[Page {}: image page, could not extract text]", n);
         }
         // Positioned spans (empty -> the reflowed text is drawn
         // instead, see page_spans_from_html).
@@ -2209,11 +2209,11 @@ pub async fn download_document(
     format: &str,
 ) -> anyhow::Result<ScribdDownloadOutcome> {
     let info = parse_scribd_url(url)
-        .ok_or_else(|| anyhow!("không phải link Scribd (document/doc/presentation/embeds)"))?;
+        .ok_or_else(|| anyhow!("not a Scribd link (document/doc/presentation/embeds)"))?;
     let client = super::client()?;
     let html = fetch_embed_html(&client, &info.embed_url).await?;
     let doc = extract_document_json(&html)
-        .ok_or_else(|| anyhow!("không đọc được thông tin tài liệu Scribd"))?;
+        .ok_or_else(|| anyhow!("could not read Scribd document info"))?;
     // Real network bytes so far: the embed HTML itself. Page fetches
     // add to this; the compile phase transfers nothing, so the total
     // stays flat there and the speed honestly drops to zero.
@@ -2725,7 +2725,7 @@ docManager.addPage({pageNum: 3, origWidth: 800, origHeight: 1000});</script>
                 num: 2,
                 width: 902,
                 height: 1274,
-                text: "[Trang 2: trang ảnh, không trích xuất được chữ]".to_string(),
+                text: "[Page 2: image page, could not extract text]".to_string(),
                 has_text: false,
                 spans: vec![],
                 images: vec![],

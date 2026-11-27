@@ -1,10 +1,10 @@
-//! Comandos da categoria Blogs: arquivo pessoal das newsletters do Substack e
-//! exportação das histórias do próprio usuário no Medium.
+//! Commands of the Blogs category: personal archive of Substack newsletters and
+//! export of the user's own stories on Medium.
 //!
-//! As duas tools leem a sessão do gerenciador de cookies antes de chamar o
-//! core — é ela que faz o Substack listar as assinaturas da conta e o Medium
-//! entregar os rascunhos. Sem cookie, as duas ainda funcionam no que é
-//! público (arquivo de uma publicação, feed do perfil).
+//! Both tools read the session from the cookie manager before calling the core —
+//! it is what lets Substack list the account's subscriptions and Medium deliver
+//! the drafts. Without a cookie, both still work on what is public (a
+//! publication's archive, a profile feed).
 
 use gumballz_core::core::tools::blogs::{medium, substack};
 
@@ -13,7 +13,7 @@ use super::{err, progress};
 const SUBSTACK_DOMAIN: &str = "substack.com";
 const MEDIUM_DOMAIN: &str = "medium.com";
 
-/// Cookies da conta escolhida no gerenciador (None = `_default`).
+/// Cookies of the account chosen in the manager (None = `_default`).
 fn session_of(domain: &str, slug: Option<&str>) -> Option<String> {
     let slug = slug.unwrap_or("_default");
     let content = crate::cookies::storage::read_account_file(domain, slug).ok()?;

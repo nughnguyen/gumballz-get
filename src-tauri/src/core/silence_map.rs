@@ -1,23 +1,25 @@
-//! Mapa de silencio de uma aula, para o player pular em reproducao.
+//! Silence map of a lesson, for the player to skip over during playback.
 //!
-//! O B36 corta silencio transformando o arquivo, e por isso paga dois precos:
-//! `silenceremove` preserva `stop_duration` de cada trecho para nao decepar o
-//! ataque da fala, o que deixou 1,4% de residuo na medicao do B53; e como ele e
-//! filtro de audio, a saida tem que ser audio, senao o video dessincroniza.
+//! B36 cuts silence by transforming the file, and so pays two prices:
+//! `silenceremove` preserves `stop_duration` of each stretch so it does not
+//! clip the attack of speech, which left 1.4% of residue in the B53 measurement;
+//! and since it is an audio filter, the output has to be audio, or the video
+//! desyncs.
 //!
-//! Pulando na reproducao, os dois problemas somem. O padding vira decisao de
-//! reproducao — ajustavel e reversivel — em vez de corte irreversivel, e o video
-//! continua video. **Isto nao e o B36 noutra camada: e a versao que alcanca o
-//! numero que o B36 nao alcanca.**
+//! Skipping during playback, both problems disappear. The padding becomes a
+//! playback decision — adjustable and reversible — instead of an irreversible
+//! cut, and the video stays a video. **This is not B36 in another layer: it is
+//! the version that reaches the number B36 does not reach.**
 //!
-//! O mapa e computado uma vez pela sonda que ja existe (`silence_probe_args`) e
-//! guardado como metadado da aula. Nada e reprocessado ao assistir de novo.
+//! The map is computed once by the probe that already exists
+//! (`silence_probe_args`) and kept as lesson metadata. Nothing is reprocessed
+//! when watching again.
 //!
-//! Origem: Smart Speed do Overcast, que tambem age na reproducao.
+//! Origin: Smart Speed from Overcast, which also acts during playback.
 
 use serde::{Deserialize, Serialize};
 
-/// Um trecho de silencio, em segundos desde o inicio.
+/// A stretch of silence, in seconds from the start.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub struct SilenceSpan {
     pub start: f64,
@@ -30,11 +32,11 @@ impl SilenceSpan {
     }
 }
 
-/// Mapa persistido junto da aula.
+/// Map persisted alongside the lesson.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct SilenceMap {
-    /// Versao do algoritmo. Se os parametros da sonda mudarem, um mapa antigo
-    /// descreve outra coisa e precisa ser recomputado em vez de reaproveitado.
+    /// Algorithm version. If the probe parameters change, an old map describes
+    /// something else and needs recomputing instead of reusing.
     #[serde(default)]
     pub version: u32,
     pub media_duration_secs: f64,
@@ -44,21 +46,21 @@ pub struct SilenceMap {
 
 pub const CURRENT_VERSION: u32 = 1;
 
-/// Quanto de cada trecho fica preservado na reproducao.
+/// How much of each stretch stays preserved during playback.
 ///
-/// Menor que o `stop_duration` de 0,35 s do B36 porque aqui nao ha risco de
-/// decepar audio: nada e cortado, so pulado, e um salto pode ser ajustado ou
-/// desligado a qualquer momento. 0,15 s evita que a fala comece abruptamente
-/// sem devolver o silencio inteiro.
+/// Smaller than B36's `stop_duration` of 0.35 s because there is no risk of
+/// clipping audio here: nothing is cut, only skipped, and a jump can be adjusted
+/// or switched off at any time. 0.15 s keeps speech from starting abruptly
+/// without giving back the whole silence.
 pub const PLAYBACK_PADDING_SECS: f64 = 0.15;
 
-/// Trecho curto demais nao vale um salto: o seek custa mais que o silencio.
+/// A stretch too short is not worth a jump: the seek costs more than the silence.
 pub const MIN_SKIPPABLE_SECS: f64 = 0.4;
 
-/// Le `silence_start` / `silence_end` do stderr do ffmpeg em pares.
+/// Reads `silence_start` / `silence_end` from ffmpeg stderr in pairs.
 ///
-/// Um `silence_start` sem `silence_end` significa que o arquivo terminou em
-/// silencio; sem a duracao total nao da para fechar o par, entao e descartado.
+/// A `silence_start` without a `silence_end` means the file ended in silence;
+/// without the total duration the pair cannot be closed, so it is discarded.
 pub fn parse_spans(stderr: &str) -> Vec<SilenceSpan> {
     let mut spans = Vec::new();
     let mut open: Option<f64> = None;
@@ -86,10 +88,10 @@ fn field_after(line: &str, key: &str) -> Option<f64> {
         .ok()
 }
 
-/// Para onde saltar quando a reproducao chega em `position`.
+/// Where to jump when playback reaches `position`.
 ///
-/// `None` significa "siga tocando". Devolve o destino em vez de um booleano
-/// para o player nao ter que reimplementar a aritmetica do padding.
+/// `None` means "keep playing". Returns the destination instead of a boolean
+/// so the player does not have to reimplement the padding arithmetic.
 pub fn skip_target(map: &SilenceMap, position: f64) -> Option<f64> {
     map.spans
         .iter()
@@ -98,10 +100,10 @@ pub fn skip_target(map: &SilenceMap, position: f64) -> Option<f64> {
         .map(|s| s.end - PLAYBACK_PADDING_SECS)
 }
 
-/// Quanto tempo a reproducao economiza com o mapa, em segundos.
+/// How much time playback saves with the map, in seconds.
 ///
-/// Este e o numero que o B36 nao alcanca: aqui so o padding de reproducao e
-/// descontado, e ele e menos da metade do `stop_duration` que o corte exige.
+/// This is the number B36 does not reach: here only the playback padding is
+/// subtracted, and it is less than half of the `stop_duration` the cut demands.
 pub fn savings_secs(map: &SilenceMap) -> f64 {
     map.spans
         .iter()
@@ -110,7 +112,7 @@ pub fn savings_secs(map: &SilenceMap) -> f64 {
         .sum()
 }
 
-/// Um mapa gravado por uma versao anterior do algoritmo nao serve.
+/// A map recorded by an earlier version of the algorithm is no good.
 pub fn needs_recompute(map: &SilenceMap) -> bool {
     map.version != CURRENT_VERSION
 }
@@ -161,7 +163,7 @@ mod tests {
     fn stderr_sem_silencio_da_mapa_vazio() {
         assert!(parse_spans("").is_empty());
         assert!(parse_spans("size=N/A time=00:05:00.00").is_empty());
-        // `silence_end` sem `start` correspondente nao pode virar trecho.
+        // A `silence_end` without a matching `start` must not become a span.
         assert!(parse_spans("silence_end: 5.0 | silence_duration: 1.0").is_empty());
     }
 
@@ -173,7 +175,7 @@ mod tests {
             (alvo - (15.0 - PLAYBACK_PADDING_SECS)).abs() < 1e-9,
             "{alvo}"
         );
-        // Dentro do trecho tambem salta, nao so na borda exata.
+        // It also jumps from inside the stretch, not only at the exact edge.
         assert!(skip_target(&m, 12.0).is_some());
     }
 
@@ -186,8 +188,8 @@ mod tests {
 
     #[test]
     fn nao_salta_dentro_do_padding_final() {
-        // Saltar aqui daria um seek de milissegundos e cortaria o inicio da
-        // fala — o defeito que o padding existe para evitar.
+        // Jumping here would give a millisecond seek and clip the start of
+        // speech — the defect the padding exists to avoid.
         let m = map(&[(10.0, 15.0)]);
         assert_eq!(skip_target(&m, 14.95), None);
     }
@@ -201,9 +203,9 @@ mod tests {
 
     #[test]
     fn a_economia_supera_a_do_corte_em_arquivo() {
-        // O ponto do item. Doze trechos de 5 s: cortando o arquivo, o B36
-        // preserva 0,35 s de cada um e entrega 55,8 s. Pulando na reproducao o
-        // padding e 0,15 s, entao sobra mais.
+        // The point of the item. Twelve 5 s stretches: cutting the file, B36
+        // preserves 0.35 s of each and delivers 55.8 s. Skipping during playback
+        // the padding is 0.15 s, so more is left.
         let spans: Vec<(f64, f64)> = (0..12)
             .map(|i| (i as f64 * 25.0, i as f64 * 25.0 + 5.0))
             .collect();
@@ -213,15 +215,15 @@ mod tests {
         let corte_em_arquivo = 12.0 * (5.0 - 0.35);
         assert!(
             economia > corte_em_arquivo,
-            "reproducao {economia} deveria superar corte {corte_em_arquivo}"
+            "playback {economia} should beat file cut {corte_em_arquivo}"
         );
         assert!((economia - 12.0 * (5.0 - 0.15)).abs() < 1e-9, "{economia}");
     }
 
     #[test]
     fn mapa_de_versao_antiga_e_recomputado() {
-        // Se os parametros da sonda mudarem, um mapa velho descreve outra
-        // coisa. Reaproveitar faria o player pular nos lugares errados.
+        // If the probe parameters change, an old map describes something else.
+        // Reusing it would make the player jump in the wrong places.
         let mut m = map(&[(1.0, 2.0)]);
         assert!(!needs_recompute(&m));
         m.version = 0;
@@ -239,9 +241,9 @@ mod tests {
 
     #[test]
     fn mapa_antigo_sem_version_e_tratado_como_desatualizado() {
-        // Campo novo num metadado ja gravado: ausente vira 0, que nao e a
-        // versao atual, entao recomputa em vez de confiar em mapa de origem
-        // desconhecida.
+        // A new field in an already recorded metadata: missing becomes 0, which
+        // is not the current version, so it recomputes instead of trusting a map
+        // of unknown origin.
         let json = r#"{"media_duration_secs":300.0,"spans":[]}"#;
         let m: SilenceMap = serde_json::from_str(json).unwrap();
         assert_eq!(m.version, 0);

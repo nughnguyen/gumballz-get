@@ -62,7 +62,7 @@ pub fn tool_usage_clear() -> Result<(), String> {
     usage::clear().map_err(err)
 }
 
-// ── Chaves de API (estudo 24) ──
+// ── API keys (study 24) ──
 
 #[tauri::command]
 pub fn tool_keys_kinds() -> Vec<ai_keys::KindView> {
@@ -115,7 +115,7 @@ pub fn tool_keys_use(id: String) -> Result<(), String> {
     ai_keys::use_in_app(&id).map_err(err)
 }
 
-// ── Servidor MCP ──
+// ── MCP server ──
 
 #[derive(Serialize)]
 pub struct McpStatus {
@@ -153,13 +153,13 @@ pub fn tool_mcp_set_enabled(enabled: bool) -> Result<bool, String> {
     Ok(crate::mcp::enabled())
 }
 
-/// Faz um `initialize` + `tools/list` de verdade contra o proprio endpoint,
-/// para provar que a porta, o token e o servidor respondem.
+/// Does a real `initialize` + `tools/list` against the app's own endpoint, to
+/// prove that the port, the token and the server answer.
 #[tauri::command]
 pub async fn tool_mcp_selftest(app: tauri::AppHandle) -> Result<String, String> {
     let settings = crate::storage::config::load_settings(&app);
     if settings.bridge.port == 0 {
-        return Err("bridge sem porta".into());
+        return Err("bridge has no port".into());
     }
     let url = format!("http://127.0.0.1:{}/mcp", settings.bridge.port);
     let client = reqwest::Client::builder()
@@ -201,17 +201,17 @@ pub async fn tool_mcp_selftest(app: tauri::AppHandle) -> Result<String, String> 
     Ok(format!("{} · {} tools · {}", version, n, url))
 }
 
-// ── Contagem de tokens e custo por modelo (estende ai-prices) ──
+// ── Token counting and cost per model (extends ai-prices) ──
 
 use gumballz_core::core::tools::{ai_tokens, arxiv};
 
-/// As famílias de tokenizador que a heurística conhece, com o fator de cada uma.
+/// The tokenizer families the heuristic knows, with each one's factor.
 #[tauri::command]
 pub fn tool_tokens_families() -> Vec<ai_tokens::Family> {
     ai_tokens::FAMILIES.to_vec()
 }
 
-/// Modelos comparados quando a UI não escolhe nenhum.
+/// Models compared when the UI picks none.
 #[tauri::command]
 pub fn tool_tokens_default_models() -> Vec<String> {
     ai_tokens::DEFAULT_MODELS
@@ -220,7 +220,7 @@ pub fn tool_tokens_default_models() -> Vec<String> {
         .collect()
 }
 
-/// Só a contagem (sem tabela de preços e sem rede).
+/// Just the count (no price table and no network).
 #[tauri::command]
 pub async fn tool_tokens_count(
     app: tauri::AppHandle,
@@ -233,8 +233,8 @@ pub async fn tool_tokens_count(
         .map_err(err)
 }
 
-/// Contagem estimada + custo por modelo. O número é sempre estimativa:
-/// `margin_pct` e `estimated` vêm no resultado para a UI dizer isso.
+/// Estimated count + cost per model. The number is always an estimate:
+/// `margin_pct` and `estimated` come in the result so the UI can say so.
 #[tauri::command]
 pub async fn tool_tokens_cost(
     app: tauri::AppHandle,

@@ -1,17 +1,17 @@
-//! Reparar PDF que não abre. Duas estratégias, na ordem que dá menos dano:
+//! Repair a PDF that does not open. Two strategies, in least-damage order:
 //!
-//! 1. **Ghostscript** (quando existe na máquina): interpreta o arquivo inteiro
-//!    e reescreve um PDF novo — é o que resolve stream corrompido de verdade.
-//! 2. **Reconstrução da xref** (Rust puro, sem dependência): a tabela de
-//!    referência cruzada é o que mais quebra (download truncado, edição por
-//!    programa ruim, byte a mais no começo). Varre o arquivo procurando os
-//!    `N G obj`, monta uma xref nova e um trailer novo no fim. O corpo do
-//!    documento não é tocado. PDF 1.5+ guarda a maioria dos objetos
-//!    comprimidos dentro de `/Type /ObjStm`: esses são descompactados e
-//!    reescritos como objetos normais no fim do arquivo, senão o catálogo
-//!    aponta para objetos que a xref nova não sabe onde estão.
+//! 1. **Ghostscript** (when it exists on the machine): interprets the whole file
+//!    and rewrites a new PDF — that is what fixes a truly corrupted stream.
+//! 2. **xref rebuild** (pure Rust, no dependency): the cross-reference
+//!    table is what breaks most (truncated download, editing by a
+//!    bad program, an extra byte at the start). Sweeps the file looking for the
+//!    `N G obj` markers, builds a new xref and a new trailer at the end. The document's
+//!    body is not touched. PDF 1.5+ keeps most objects
+//!    compressed inside `/Type /ObjStm`: those are unpacked and
+//!    rewritten as normal objects at the end of the file, otherwise the catalog
+//!    points at objects the new xref does not know where they are.
 //!
-//! No fim o resultado é conferido com o PDFium: se não abrir, não é reparo.
+//! In the end the result is checked with PDFium: if it does not open, it is not a repair.
 
 use std::path::{Path, PathBuf};
 
@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Deserialize)]
 pub struct RepairOptions {
     pub inputs: Vec<String>,
-    /// "auto" (Ghostscript se existir, senão reconstrução) | "gs" | "rebuild"
+    /// "auto" (Ghostscript if it exists, else rebuild) | "gs" | "rebuild"
     #[serde(default = "default_mode")]
     pub mode: String,
     #[serde(default)]
@@ -56,7 +56,7 @@ pub struct RepairResult {
     pub ghostscript: Option<String>,
 }
 
-// ── Reconstrução da xref ───────────────────────────────────────────────
+// ── xref rebuild ───────────────────────────────────────────────
 
 fn find_all(hay: &[u8], needle: &[u8]) -> Vec<usize> {
     if needle.is_empty() || hay.len() < needle.len() {
@@ -75,8 +75,8 @@ fn find_all(hay: &[u8], needle: &[u8]) -> Vec<usize> {
     out
 }
 
-/// Faixas `stream …ency endstream`: qualquer "N G obj" aí dentro é conteúdo
-/// binário comprimido, não um objeto de verdade.
+/// `stream …ency endstream` ranges: any "N G obj" in there is compressed
+/// binary content, not a real object.
 fn stream_ranges(data: &[u8]) -> Vec<(usize, usize)> {
     let mut out = Vec::new();
     let mut i = 0usize;
@@ -115,8 +115,8 @@ fn is_delim(b: u8) -> bool {
     )
 }
 
-/// Varre o arquivo e devolve `(número do objeto, offset, geração)`, com a
-/// última definição de cada número vencendo (é assim que o PDF atualiza).
+/// Sweeps the file and returns `(object number, offset, generation)`, with the
+/// last definition of each number winning (that is how PDF updates).
 pub fn scan_objects(data: &[u8]) -> Vec<(u32, usize, u16)> {
     let skip = stream_ranges(data);
     let mut found: std::collections::BTreeMap<u32, (usize, u16)> = Default::default();
@@ -130,7 +130,7 @@ pub fn scan_objects(data: &[u8]) -> Vec<(u32, usize, u16)> {
                 continue;
             }
         }
-        // Anda para trás: espaço, geração, espaço, número.
+        // Walk backward: space, generation, space, number.
         let mut i = pos;
         while i > 0 && is_ws(data[i - 1]) {
             i -= 1;
@@ -176,7 +176,7 @@ pub fn scan_objects(data: &[u8]) -> Vec<(u32, usize, u16)> {
     found.into_iter().map(|(n, (o, g))| (n, o, g)).collect()
 }
 
-/// Dicionário que vem logo depois da última palavra `trailer`.
+/// Dictionary that comes right after the last `trailer` word.
 fn last_trailer_dict(data: &[u8]) -> Option<String> {
     let start = *find_all(data, b"trailer").last()?;
     let open = find_first(&data[start..], b"<<")? + start;
@@ -199,7 +199,7 @@ fn last_trailer_dict(data: &[u8]) -> Option<String> {
     None
 }
 
-/// `/Root 12 0 R` — a última menção no arquivo é a que vale.
+/// `/Root 12 0 R` — the last mention in the file is the one that counts.
 fn find_root_ref(data: &[u8]) -> Option<String> {
     let text = String::from_utf8_lossy(data);
     let re = regex::Regex::new(r"/Root\s+(\d+)\s+(\d+)\s+R").ok()?;
@@ -207,7 +207,7 @@ fn find_root_ref(data: &[u8]) -> Option<String> {
     Some(format!("{} {} R", &m[1], &m[2]))
 }
 
-/// Sem trailer nenhum: acha o objeto que é o catálogo do documento.
+/// No trailer at all: finds the object that is the document's catalog.
 fn find_catalog(data: &[u8], objects: &[(u32, usize, u16)]) -> Option<String> {
     let re = regex::Regex::new(r"/Type\s*/Catalog").ok()?;
     for (num, off, gen) in objects {
@@ -238,8 +238,8 @@ fn patch_trailer(dict: &str, size: u32) -> String {
     }
 }
 
-/// Faixa de bytes de um objeto: do `N G obj` até o começo do próximo (ou o
-/// fim do arquivo).
+/// Byte range of an object: from `N G obj` to the start of the next one (or the
+/// end of the file).
 fn object_body(data: &[u8], objects: &[(u32, usize, u16)], idx: usize) -> (usize, usize) {
     let start = objects[idx].1;
     let end = objects
@@ -262,7 +262,7 @@ fn inflate(data: &[u8]) -> Option<Vec<u8>> {
         return Some(out);
     }
     out.clear();
-    // Alguns geradores escrevem deflate cru, sem o cabeçalho zlib.
+    // Some generators write raw deflate, without the zlib header.
     flate2::read::DeflateDecoder::new(data)
         .read_to_end(&mut out)
         .ok()
@@ -280,8 +280,8 @@ fn dict_int(dict: &str, key: &str) -> Option<usize> {
         .ok()
 }
 
-/// Abre um `/Type /ObjStm` e devolve `(número, corpo)` de cada objeto que
-/// estava comprimido lá dentro.
+/// Opens a `/Type /ObjStm` and returns `(number, body)` of each object that
+/// was compressed inside it.
 pub fn expand_object_stream(chunk: &[u8]) -> Vec<(u32, Vec<u8>)> {
     let head = match find_first(chunk, b"stream") {
         Some(p) => p,
@@ -301,7 +301,7 @@ pub fn expand_object_stream(chunk: &[u8]) -> Vec<(u32, Vec<u8>)> {
         (Some(n), Some(f)) => (n, f),
         _ => return Vec::new(),
     };
-    // Pula "stream" e a quebra de linha obrigatória depois dele.
+    // Skip "stream" and the mandatory line break after it.
     let mut body = head + 6;
     if chunk.get(body) == Some(&b'\r') {
         body += 1;
@@ -340,16 +340,16 @@ pub fn expand_object_stream(chunk: &[u8]) -> Vec<(u32, Vec<u8>)> {
     out
 }
 
-/// Reescreve o arquivo com uma xref nova no fim. Devolve `(bytes, objetos)`.
+/// Rewrites the file with a new xref at the end. Returns `(bytes, objects)`.
 pub fn rebuild_xref(data: &[u8]) -> anyhow::Result<(Vec<u8>, usize)> {
     let head = find_first(data, b"%PDF-")
-        .ok_or_else(|| anyhow!("não achei a assinatura %PDF- — o arquivo não parece um PDF"))?;
-    // Lixo antes do cabeçalho desloca todos os offsets: corta fora.
+        .ok_or_else(|| anyhow!("could not find the %PDF- signature — the file does not look like a PDF"))?;
+    // Junk before the header shifts all the offsets: cut it off.
     let body = &data[head..];
     let objects = scan_objects(body);
     if objects.is_empty() {
         return Err(anyhow!(
-            "nenhum objeto encontrado — arquivo vazio ou cifrado"
+            "no objects found — empty or encrypted file"
         ));
     }
 
@@ -360,8 +360,8 @@ pub fn rebuild_xref(data: &[u8]) -> anyhow::Result<(Vec<u8>, usize)> {
     let mut by_num: std::collections::BTreeMap<u32, (usize, u16)> =
         objects.iter().map(|(n, o, g)| (*n, (*o, *g))).collect();
 
-    // PDF 1.5+ comprime objeto dentro de objeto. Reescreve cada um solto no
-    // fim do arquivo — é o que deixa a xref plana voltar a fazer sentido.
+    // PDF 1.5+ compresses objects inside objects. Rewrites each one loose at the
+    // end of the file — that is what lets the flat xref make sense again.
     let mut unpacked = 0usize;
     for idx in 0..objects.len() {
         let (a, b) = object_body(body, &objects, idx);
@@ -387,7 +387,7 @@ pub fn rebuild_xref(data: &[u8]) -> anyhow::Result<(Vec<u8>, usize)> {
         _ => {
             let root = find_root_ref(&out)
                 .or_else(|| find_catalog(&out, &all))
-                .ok_or_else(|| anyhow!("não achei o catálogo (/Root) do documento"))?;
+                .ok_or_else(|| anyhow!("could not find the document catalog (/Root)"))?;
             format!("<< /Size {} /Root {} >>", size, root)
         }
     };
@@ -409,7 +409,7 @@ pub fn rebuild_xref(data: &[u8]) -> anyhow::Result<(Vec<u8>, usize)> {
     Ok((out, by_num.len()))
 }
 
-// ── Orquestração ───────────────────────────────────────────────────────
+// ── Orchestration ───────────────────────────────────────────────────────
 
 async fn open_pages(path: &str) -> Option<usize> {
     let p = path.to_string();
@@ -429,7 +429,7 @@ async fn run_ghostscript(gs: &Path, input: &Path, output: &Path) -> anyhow::Resu
         .map_err(|e| anyhow!("ghostscript nao iniciou: {}", e))?;
     if !output.exists() || std::fs::metadata(output).map(|m| m.len()).unwrap_or(0) == 0 {
         return Err(anyhow!(
-            "ghostscript não gerou nada: {}",
+            "ghostscript generated nothing: {}",
             String::from_utf8_lossy(&out.stderr).trim()
         ));
     }
@@ -446,7 +446,7 @@ fn output_path(opts: &RepairOptions, inp: &Path) -> anyhow::Result<PathBuf> {
     let stem = inp
         .file_stem()
         .map(|s| s.to_string_lossy().to_string())
-        .unwrap_or_else(|| "documento".into());
+        .unwrap_or_else(|| "document".into());
     let suffix = if opts.suffix.is_empty() {
         "-reparado"
     } else {
@@ -462,7 +462,7 @@ pub async fn run(opts: RepairOptions, progress: super::ProgressFn) -> anyhow::Re
         super::pdf::find_gs().await
     };
     if opts.mode == "gs" && gs.is_none() {
-        return Err(anyhow!("Ghostscript não encontrado nesta máquina"));
+        return Err(anyhow!("Ghostscript not found on this machine"));
     }
     let total = opts.inputs.len() as u64;
     let mut items = Vec::new();
@@ -511,12 +511,12 @@ pub async fn run(opts: RepairOptions, progress: super::ProgressFn) -> anyhow::Re
                 Err(e) => errors.push(e.to_string()),
             }
         }
-        // Confere o que o Ghostscript produziu; se não abrir, tenta a xref.
+        // Checks what Ghostscript produced; if it does not open, tries the xref.
         if item.method.is_some() {
             item.pages_after = open_pages(&out.to_string_lossy()).await;
             if item.pages_after.is_none() {
                 item.method = None;
-                errors.push("o PDF do ghostscript não abriu".into());
+                errors.push("the ghostscript PDF did not open".into());
             }
         }
         if item.method.is_none() && opts.mode != "gs" {
@@ -531,7 +531,7 @@ pub async fn run(opts: RepairOptions, progress: super::ProgressFn) -> anyhow::Re
                         if item.pages_after.is_some() {
                             item.method = Some("xref-rebuild".into());
                         } else {
-                            errors.push("a xref foi refeita mas o PDFium ainda não abre".into());
+                            errors.push("the xref was rebuilt but PDFium still does not open it".into());
                         }
                     }
                     Err(e) => errors.push(e.to_string()),
@@ -547,7 +547,7 @@ pub async fn run(opts: RepairOptions, progress: super::ProgressFn) -> anyhow::Re
         } else {
             let _ = std::fs::remove_file(&out);
             item.error = Some(if errors.is_empty() {
-                "não consegui reparar".into()
+                "could not repair".into()
             } else {
                 errors.join(" · ")
             });
@@ -566,7 +566,7 @@ pub async fn run(opts: RepairOptions, progress: super::ProgressFn) -> anyhow::Re
 mod tests {
     use super::*;
 
-    /// PDF mínimo de uma página, com a xref propositalmente errada.
+    /// Minimal one-page PDF, with a deliberately wrong xref.
     fn broken_pdf() -> Vec<u8> {
         let body = "%PDF-1.4\n\
 1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n\
@@ -583,7 +583,7 @@ trailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n9999\n%%EOF\n";
         assert_eq!(objs.len(), 3);
         assert_eq!(objs[0].0, 1);
         assert_eq!(objs[2].0, 3);
-        // Offset tem que apontar mesmo para o "3 0 obj".
+        // The offset really has to point at "3 0 obj".
         let data = broken_pdf();
         assert!(data[objs[2].1..].starts_with(b"3 0 obj"));
     }
@@ -603,10 +603,10 @@ trailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n9999\n%%EOF\n";
             .unwrap();
         assert!(
             out[at..].starts_with(b"xref"),
-            "startxref tem que cair na xref"
+            "startxref must land on the xref"
         );
-        // Primeira entrada em uso aponta para "1 0 obj".
-        // 0: "xref", 1: "0 4", 2: entrada livre, 3: primeiro objeto.
+        // First in-use entry points at "1 0 obj".
+        // 0: "xref", 1: "0 4", 2: free entry, 3: first object.
         let table = &text[at..];
         let line = table.lines().nth(3).unwrap();
         let off: usize = line[..10].parse().unwrap();
@@ -626,7 +626,7 @@ trailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n9999\n%%EOF\n";
             assert_eq!(entry.len(), 20);
             assert!(
                 entry[18] == b' ' && entry[19] == b'\n',
-                "EOL da entrada {}",
+                "EOL of entry {}",
                 i
             );
         }
@@ -639,7 +639,7 @@ trailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n9999\n%%EOF\n";
         let (out, _) = rebuild_xref(&junk).unwrap();
         assert!(
             out.starts_with(b"%PDF-"),
-            "o arquivo tem que começar no %PDF-"
+            "the file must start with %PDF-"
         );
         let text = String::from_utf8_lossy(&out).to_string();
         let at: usize = text[text.rfind("startxref\n").unwrap() + 10..]
@@ -662,7 +662,7 @@ trailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n9999\n%%EOF\n";
         );
         data.extend_from_slice(b"trailer\n<< /Size 3 /Root 1 0 R >>\n%%EOF\n");
         let objs = scan_objects(&data);
-        assert_eq!(objs.len(), 2, "o 7 0 obj do stream não conta");
+        assert_eq!(objs.len(), 2, "the stream's 7 0 obj does not count");
         assert!(objs.iter().all(|(n, _, _)| *n != 7));
     }
 
@@ -685,17 +685,17 @@ trailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n9999\n%%EOF\n";
         assert!(patched.contains("/Root 1 0 R"));
     }
 
-    /// Teste com um PDF de verdade, ligado à mão:
-    /// `GUMBALLZ_PDF=/caminho/arquivo.pdf cargo test -p gumballz-core --lib -- --ignored live_rebuild`
-    /// Quebra a xref como um download truncado quebraria, reconstrói e
-    /// confere que toda entrada aponta mesmo para o começo de um objeto.
+    /// Test with a real PDF, wired by hand:
+    /// `GUMBALLZ_PDF=/path/file.pdf cargo test -p gumballz-core --lib -- --ignored live_rebuild`
+    /// Breaks the xref the way a truncated download would break it, rebuilds and
+    /// checks that every entry really points at the start of an object.
     #[test]
     #[ignore]
     fn live_rebuild_of_a_real_pdf() {
         let path = std::env::var("GUMBALLZ_PDF").expect("defina GUMBALLZ_PDF");
         let original = std::fs::read(&path).unwrap();
         let mut broken = original.clone();
-        // Aponta o startxref para o nada — o sintoma mais comum.
+        // Points startxref at nothing — the most common symptom.
         let at = find_all(&broken, b"startxref").last().copied().unwrap();
         for b in broken[at + 10..at + 18].iter_mut() {
             if b.is_ascii_digit() {
@@ -703,10 +703,10 @@ trailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n9999\n%%EOF\n";
             }
         }
         let (fixed, objects) = rebuild_xref(&broken).unwrap();
-        assert!(objects > 0, "nenhum objeto achado");
+        assert!(objects > 0, "no objects found");
 
-        // Tudo em bytes: um PDF real tem stream binário, e converter para
-        // String com `from_utf8_lossy` desloca os offsets.
+        // All in bytes: a real PDF has a binary stream, and converting to
+        // String with `from_utf8_lossy` shifts the offsets.
         let sx = find_all(&fixed, b"startxref\n").last().copied().unwrap() + 10;
         let digits: Vec<u8> = fixed[sx..]
             .iter()
@@ -717,8 +717,8 @@ trailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n9999\n%%EOF\n";
         assert!(fixed[start..].starts_with(b"xref"));
 
         let mut checked = 0;
-        // 0: "xref", 1: "0 N"; da terceira linha em diante é entrada, e a
-        // n-ésima entrada é o objeto de número n.
+        // 0: "xref", 1: "0 N"; from the third line on it is an entry, and the
+        // n-th entry is the object numbered n.
         for (num, line) in fixed[start..].split(|b| *b == b'\n').skip(2).enumerate() {
             if line.len() < 18 || line[17] != b'n' {
                 continue;
@@ -728,17 +728,17 @@ trailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n9999\n%%EOF\n";
                 String::from_utf8_lossy(&fixed[off..(off + 24).min(fixed.len())]).to_string();
             assert!(
                 head.starts_with(&format!("{} ", num)) && head.contains("obj"),
-                "entrada {} aponta para {:?}",
+                "entry {} points to {:?}",
                 num,
                 head
             );
             checked += 1;
         }
-        assert!(checked > 0, "nenhuma entrada em uso");
+        assert!(checked > 0, "no entry in use");
         let out = std::env::temp_dir().join("gumballz-get-repair-live.pdf");
         std::fs::write(&out, &fixed).unwrap();
         eprintln!(
-            "{} objetos, {} entradas conferidas → {}",
+            "{} objects, {} entries checked → {}",
             objects,
             checked,
             out.display()

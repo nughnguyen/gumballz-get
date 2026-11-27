@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Post → imagem (estudo 67): render em canvas, como TwitterShots/BrandBird, sem servidor. */
+  /** Post → image (study 67): canvas render, like TwitterShots/BrandBird, no server. */
   import { invoke } from "@tauri-apps/api/core";
   import { t } from "$lib/i18n";
   import { showToast } from "$lib/stores/toast-store.svelte";

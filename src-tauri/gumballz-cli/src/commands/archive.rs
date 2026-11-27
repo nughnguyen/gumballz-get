@@ -1,9 +1,9 @@
-//! `gumballz-get archive`: acervo retomável numa pasta, pela linha de comando.
+//! `gumballz-get archive`: a resumable archive in a folder, from the command line.
 //!
-//! Embrulha `yt_archive` (o mesmo motor da tela "Arquivar" do app) e o
-//! `yt_dataset` (semeadura a partir de buscas). Rodar de novo continua de onde
-//! parou; Ctrl+C devolve o item em andamento à fila. Com `--json` cada evento
-//! sai numa linha, para um agente acompanhar sem interpretar texto.
+//! It wraps `yt_archive` (the same engine as the app's "Archive" screen) and
+//! `yt_dataset` (seeding from searches). Running it again resumes where it
+//! stopped; Ctrl+C returns the in-progress item to the queue. With `--json` each
+//! event comes out on one line, so an agent can follow it without parsing text.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -124,8 +124,9 @@ fn seed_queue(dest: &Path, seed: &str) -> Result<()> {
     Ok(())
 }
 
-/// Com URL, a coleção é sempre reenumerada e fundida à fila: rodar de novo
-/// pega os vídeos novos do canal sem perder o que já foi baixado.
+/// With a URL, the collection is always re-enumerated and merged into the
+/// queue: running it again picks up the channel's new videos without losing
+/// what was already downloaded.
 fn build_options(args: &ArchiveArgs) -> Result<Options> {
     let session_netscape = match &args.cookies {
         Some(path) => {
@@ -156,8 +157,8 @@ fn gb_to_bytes(gb: f64) -> u64 {
     (gb.max(0.0) * 1_000_000_000.0) as u64
 }
 
-/// O percentual de cada item ("item") é ruidoso demais para um log; só a
-/// troca de item e o fim são impressos.
+/// Each item's percentage ("item") is too noisy for a log; only the item
+/// change and the end are printed.
 fn progress_printer() -> ProgressFn {
     Arc::new(|p: ToolProgress| {
         if p.stage == "item" {

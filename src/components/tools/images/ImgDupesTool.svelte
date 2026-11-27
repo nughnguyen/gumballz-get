@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Fotos duplicadas e parecidas (dHash), reusando o motor do Pinterest. */
+  /** Duplicate and similar photos (dHash), reusing the Pinterest engine. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

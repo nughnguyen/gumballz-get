@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Clipes e prints do PC (Game Bar, ShadowPlay, OBS, Steam) agrupados por jogo. */
+  /** PC clips and screenshots (Game Bar, ShadowPlay, OBS, Steam) grouped by game. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

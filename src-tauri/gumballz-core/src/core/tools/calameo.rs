@@ -1,6 +1,6 @@
-//! Calameo (estudos 48, 49): cada página é um `p{n}.svgz` (ou `.jpg`) num
-//! CDN previsível a partir do `og:image`. Salva as páginas descomprimidas
-//! numa pasta; a montagem em PDF fica para quando houver um renderizador SVG.
+//! Calameo (studies 48, 49): each page is a `p{n}.svgz` (or `.jpg`) on a
+//! predictable CDN derived from the `og:image`. Saves the decompressed pages
+//! in a folder; assembling the PDF waits for an SVG renderer.
 
 use std::io::Read;
 use std::path::PathBuf;
@@ -40,7 +40,7 @@ pub async fn download(
         .text()
         .await?;
     let prefix = page_prefix(&html)
-        .ok_or_else(|| anyhow!("nao achei as paginas desse documento (privado ou layout novo)"))?;
+        .ok_or_else(|| anyhow!("could not find this document's pages (private or new layout)"))?;
     let title = super::slides::og_title(&html).unwrap_or_else(|| "calameo".to_string());
     let folder = PathBuf::from(dest_dir).join(super::sanitize_name(&title));
     std::fs::create_dir_all(&folder)?;
@@ -75,11 +75,11 @@ pub async fn download(
     }
     if n == 0 {
         return Err(anyhow!(
-            "nenhuma pagina baixada; o documento pode exigir assinatura de URL"
+            "no pages downloaded; the document may require a signed URL"
         ));
     }
     if format == "jpg" {
-        // com JPEG dá para montar o PDF na hora
+        // with JPEG the PDF can be assembled right away
         let mut imgs = Vec::new();
         for page in 1..=n {
             imgs.push(tokio::fs::read(folder.join(format!("p{:04}.jpg", page))).await?);

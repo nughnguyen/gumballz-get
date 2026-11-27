@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Foto ou vídeo vira figurinha de WhatsApp/Telegram, dentro do limite de bytes. */
+  /** A photo or video becomes a WhatsApp/Telegram sticker, within the byte limit. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

@@ -1,8 +1,8 @@
-//! ⚠️ SOMENTE WINDOWS. Debloat (estudo 25, Sophia Script; 10, Kudu): lista os
-//! pacotes Appx do usuário via PowerShell, marca os que o Sophia considera
-//! bloat e remove com `Remove-AppxPackage`. Uma lista de protegidos nunca é
-//! oferecida para remoção (Store, Calculadora, Fotos, runtimes). Fora do
-//! Windows a lista é vazia.
+//! ⚠️ WINDOWS ONLY. Debloat (study 25, Sophia Script; 10, Kudu): lists the
+//! user's Appx packages via PowerShell, marks the ones Sophia considers
+//! bloat and removes them with `Remove-AppxPackage`. A protected list is never
+//! offered for removal (Store, Calculator, Photos, runtimes). Outside
+//! Windows the list is empty.
 
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
@@ -13,17 +13,17 @@ pub struct AppxPackage {
     pub full_name: String,
     pub version: String,
     pub publisher: String,
-    /// Está na lista de bloat sugerida (Sophia)
+    /// Is on the suggested bloat list (Sophia)
     pub suggested: bool,
-    /// Nome amigável quando conhecido
+    /// Friendly name when known
     pub label: String,
     pub non_removable: bool,
 }
 
-/// (prefixo do nome do pacote, rótulo) — Sophia Script `UninstallUWPApps`
-/// mais os terceiros que o Windows pré-instala por parceria.
+/// (package-name prefix, label) — Sophia Script `UninstallUWPApps`
+/// plus the third parties Windows pre-installs through partnerships.
 const BLOAT: &[(&str, &str)] = &[
-    ("Microsoft.BingNews", "Notícias"),
+    ("Microsoft.BingNews", "News"),
     ("Microsoft.BingWeather", "Clima"),
     ("Microsoft.BingSearch", "Bing Search"),
     ("Microsoft.GetHelp", "Obter Ajuda"),
@@ -36,8 +36,8 @@ const BLOAT: &[(&str, &str)] = &[
     ("Microsoft.People", "Pessoas"),
     ("Microsoft.PowerAutomateDesktop", "Power Automate"),
     ("Microsoft.Todos", "To Do"),
-    ("Microsoft.WindowsAlarms", "Alarmes e Relógio"),
-    ("Microsoft.WindowsFeedbackHub", "Hub de Comentários"),
+    ("Microsoft.WindowsAlarms", "Alarms & Clock"),
+    ("Microsoft.WindowsFeedbackHub", "Feedback Hub"),
     ("Microsoft.WindowsMaps", "Mapas"),
     ("Microsoft.YourPhone", "Vincular ao Celular"),
     ("Microsoft.ZuneMusic", "Media Player / Groove"),
@@ -55,7 +55,7 @@ const BLOAT: &[(&str, &str)] = &[
     ("Clipchamp.Clipchamp", "Clipchamp"),
     ("MicrosoftTeams", "Teams (pessoal)"),
     ("MSTeams", "Teams"),
-    ("Microsoft.OutlookForWindows", "Outlook (novo)"),
+    ("Microsoft.OutlookForWindows", "Outlook (new)"),
     ("Microsoft.549981C3F5F10", "Cortana"),
     ("Microsoft.Wallet", "Carteira"),
     ("Microsoft.WindowsSoundRecorder", "Gravador de Som"),
@@ -63,14 +63,14 @@ const BLOAT: &[(&str, &str)] = &[
     ("Microsoft.Windows.DevHome", "Dev Home"),
     ("Microsoft.MicrosoftJournal", "Journal"),
     ("Microsoft.Whiteboard", "Whiteboard"),
-    ("Microsoft.WindowsCommunicationsApps", "Mail e Calendário"),
+    ("Microsoft.WindowsCommunicationsApps", "Mail and Calendar"),
     ("Microsoft.OneDriveSync", "OneDrive (Store)"),
-    ("Microsoft.QuickAssist", "Assistência Rápida"),
+    ("Microsoft.QuickAssist", "Quick Assist"),
     (
         "Microsoft.Windows.NarratorQuickStart",
         "Narrador (tutorial)",
     ),
-    ("MicrosoftCorporationII.QuickAssist", "Assistência Rápida"),
+    ("MicrosoftCorporationII.QuickAssist", "Quick Assist"),
     ("MicrosoftCorporationII.MicrosoftFamily", "Microsoft Family"),
     ("MicrosoftWindows.CrossDevice", "Cross Device"),
     ("king.com.CandyCrush", "Candy Crush"),
@@ -87,12 +87,12 @@ const BLOAT: &[(&str, &str)] = &[
     ("4DF9E0F8.Netflix", "Netflix"),
     ("Microsoft.Advertising.Xaml", "Advertising Xaml"),
     ("Microsoft.MicrosoftStickyNotes", "Sticky Notes"),
-    ("Microsoft.WindowsCamera", "Câmera"),
+    ("Microsoft.WindowsCamera", "Camera"),
     ("Microsoft.Windows.Photos", "Fotos"),
     ("Microsoft.MSPaint", "Paint 3D"),
 ];
 
-/// Nunca oferecidos para remoção: quebram o sistema ou são runtimes.
+/// Never offered for removal: they break the system or are runtimes.
 const PROTECTED: &[&str] = &[
     "Microsoft.WindowsStore",
     "Microsoft.StorePurchaseApp",
@@ -259,8 +259,8 @@ pub struct RemoveResult {
     pub failed: Vec<String>,
 }
 
-/// Remove os pacotes do usuário atual; com `provisioned`, também impede que
-/// voltem para contas novas (precisa de administrador).
+/// Removes the current user's packages; with `provisioned`, it also stops them coming back
+/// for new accounts (needs administrator).
 pub async fn remove(
     names: &[String],
     provisioned: bool,
@@ -298,8 +298,8 @@ pub async fn remove(
     r
 }
 
-/// Tenta registrar de novo um pacote removido (só funciona enquanto os
-/// arquivos ainda existem em WindowsApps); senão, o caminho é a Store.
+/// Tries to register a removed package again (only works while the
+/// files still exist in WindowsApps); otherwise, the way is the Store.
 pub async fn restore(name: &str) -> anyhow::Result<()> {
     let safe = name.replace('\'', "");
     powershell(&format!(

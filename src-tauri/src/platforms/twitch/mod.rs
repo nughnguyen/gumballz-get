@@ -234,13 +234,13 @@ impl TwitchClipsDownloader {
         let signature = token_obj
             .get("signature")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow!("Token sem signature"))?
+            .ok_or_else(|| anyhow!("Token without signature"))?
             .to_string();
 
         let value = token_obj
             .get("value")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow!("Token sem value"))?
+            .ok_or_else(|| anyhow!("Token without value"))?
             .to_string();
 
         Ok(AccessToken { signature, value })

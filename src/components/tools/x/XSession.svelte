@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Linha de sessão do X: quem está logado, entrar e recarregar os query IDs. */
+  /** X session row: who is logged in, sign in, and reload the query IDs. */
   import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
   import { t } from "$lib/i18n";

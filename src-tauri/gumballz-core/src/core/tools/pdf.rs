@@ -1,9 +1,9 @@
-//! PDF: juntar, dividir, comprimir, converter, OCR e "PDF seguro". Tudo em
-//! cima do PDFium que o app já gerencia (Dependências → PDFium), carregado em
-//! tempo de execução com `libloading`, então não entra nenhuma crate de PDF.
-//! Estudo 3 (Stirling-PDF) deu o catálogo de operações; 35 (Dangerzone) deu a
-//! remontagem a partir dos pixels; Ghostscript e LibreOffice são opcionais e
-//! só entram quando já estão na máquina.
+//! PDF: merge, split, compress, convert, OCR and "safe PDF". All on
+//! on top of the PDFium the app already manages (Dependencies → PDFium), loaded at
+//! runtime with `libloading`, so no PDF crate comes in.
+//! Study 3 (Stirling-PDF) gave the catalog of operations; 35 (Dangerzone) gave the
+//! reassembly from pixels; Ghostscript and LibreOffice are optional and
+//! only come in when they are already on the machine.
 
 use std::ffi::{c_char, c_int, c_uint, c_ulong, c_void, CString};
 use std::io::Cursor;
@@ -46,7 +46,7 @@ unsafe extern "C" fn write_block(
     1
 }
 
-/// Ponteiros das funções do PDFium que usamos. Os nomes são a API C pública
+/// Pointers to the PDFium functions we use. The names are the public C API
 /// (`fpdfview.h`, `fpdf_text.h`, `fpdf_ppo.h`, `fpdf_save.h`, `fpdf_doc.h`).
 struct Api {
     _lib: libloading::Library,
@@ -75,16 +75,16 @@ struct Api {
     import_pages: unsafe extern "C" fn(Doc, Doc, *const c_char, c_int) -> c_int,
     save_copy: unsafe extern "C" fn(Doc, *mut FileWrite, c_ulong) -> c_int,
     meta_text: unsafe extern "C" fn(Doc, *const c_char, *mut c_void, c_ulong) -> c_ulong,
-    // Opcionais: builds antigos do PDFium podem não exportar. Quem precisa
-    // (o PDF → Markdown) checa e devolve erro claro em vez de derrubar o
-    // carregamento inteiro da biblioteca.
+    // Optional: old PDFium builds may not export them. Whoever needs them
+    // (PDF → Markdown) checks and returns a clear error instead of bringing down
+    // the whole library load.
     text_fontsize: Option<unsafe extern "C" fn(TextPage, c_int) -> f64>,
     text_fontinfo:
         Option<unsafe extern "C" fn(TextPage, c_int, *mut c_void, c_ulong, *mut c_int) -> c_ulong>,
     text_fontweight: Option<unsafe extern "C" fn(TextPage, c_int) -> c_int>,
-    /// Diz se o caractere foi inventado pelo PDFium (espaço de vão, quebra de
-    /// linha) em vez de existir no fluxo do PDF. A tarja precisa disso para
-    /// casar caractere com byte do content stream.
+    /// Says whether the character was invented by PDFium (gap space, line break)
+    /// instead of existing in the PDF stream. Redaction needs this to match
+    /// character to content-stream byte.
     text_generated: Option<unsafe extern "C" fn(TextPage, c_int) -> c_int>,
     obj_count: Option<unsafe extern "C" fn(Page) -> c_int>,
     obj_get: Option<unsafe extern "C" fn(Page, c_int) -> Object>,
@@ -101,7 +101,7 @@ unsafe impl Send for Api {}
 unsafe impl Sync for Api {}
 
 static API: Mutex<Option<&'static Api>> = Mutex::new(None);
-/// O PDFium não é thread-safe: toda operação segura este lock.
+/// PDFium is not thread-safe: every operation holds this lock.
 static OPS: Mutex<()> = Mutex::new(());
 
 unsafe fn sym<T: Copy>(lib: &libloading::Library, name: &[u8]) -> anyhow::Result<T> {
@@ -110,7 +110,7 @@ unsafe fn sym<T: Copy>(lib: &libloading::Library, name: &[u8]) -> anyhow::Result
         .map_err(|e| anyhow!("PDFium sem {}: {}", String::from_utf8_lossy(name), e))?)
 }
 
-/// Igual ao `sym`, mas o símbolo pode faltar: devolve `None` em vez de erro.
+/// Same as `sym`, but the symbol may be missing: returns `None` instead of an error.
 unsafe fn opt_sym<T: Copy>(lib: &libloading::Library, name: &[u8]) -> Option<T> {
     lib.get::<T>(name).ok().map(|s| *s)
 }
@@ -121,9 +121,9 @@ fn api() -> anyhow::Result<&'static Api> {
         return Ok(a);
     }
     let path = crate::core::pdfium::resolve_path()
-        .ok_or_else(|| anyhow!("PDFium nao esta instalado (Ajustes → Dependencias → PDFium)"))?;
+        .ok_or_else(|| anyhow!("PDFium is not installed (Settings → Dependencies → PDFium)"))?;
     let lib = unsafe { libloading::Library::new(&path) }
-        .map_err(|e| anyhow!("nao carregou o PDFium em {}: {}", path.display(), e))?;
+        .map_err(|e| anyhow!("could not load PDFium at {}: {}", path.display(), e))?;
     let api = unsafe {
         let init: unsafe extern "C" fn() = sym(&lib, b"FPDF_InitLibrary\0")?;
         init();
@@ -179,25 +179,25 @@ pub fn available() -> bool {
 struct Document {
     api: &'static Api,
     doc: Doc,
-    // O PDFium lê da memória enquanto o documento estiver aberto.
+    // PDFium reads from memory while the document is open.
     _data: Vec<u8>,
 }
 
 impl Document {
     fn open(api: &'static Api, path: &Path, password: Option<&str>) -> anyhow::Result<Self> {
-        let data = std::fs::read(path).map_err(|e| anyhow!("nao leu {}: {}", path.display(), e))?;
+        let data = std::fs::read(path).map_err(|e| anyhow!("could not read {}: {}", path.display(), e))?;
         let pw = CString::new(password.unwrap_or("")).unwrap_or_default();
         let doc =
             unsafe { (api.load_mem)(data.as_ptr() as *const c_void, data.len(), pw.as_ptr()) };
         if doc.is_null() {
             let code = unsafe { (api.last_error)() };
             let why = match code {
-                2 => "arquivo nao encontrado ou ilegivel",
-                3 => "nao e um PDF valido",
-                4 => "senha incorreta ou ausente",
-                5 => "esquema de seguranca nao suportado",
-                6 => "pagina invalida",
-                _ => "erro desconhecido",
+                2 => "file not found or unreadable",
+                3 => "not a valid PDF",
+                4 => "wrong or missing password",
+                5 => "unsupported security scheme",
+                6 => "invalid page",
+                _ => "unknown error",
             };
             return Err(anyhow!("{}: {}", path.display(), why));
         }
@@ -211,7 +211,7 @@ impl Document {
     fn new(api: &'static Api) -> anyhow::Result<Self> {
         let doc = unsafe { (api.new_doc)() };
         if doc.is_null() {
-            return Err(anyhow!("nao criou o documento"));
+            return Err(anyhow!("could not create the document"));
         }
         Ok(Document {
             api,
@@ -227,7 +227,7 @@ impl Document {
     fn page(&self, index: usize) -> anyhow::Result<PageRef<'_>> {
         let page = unsafe { (self.api.load_page)(self.doc, index as c_int) };
         if page.is_null() {
-            return Err(anyhow!("pagina {} nao abriu", index + 1));
+            return Err(anyhow!("page {} did not open", index + 1));
         }
         Ok(PageRef {
             api: self.api,
@@ -236,7 +236,7 @@ impl Document {
         })
     }
 
-    /// Copia páginas de `src` (números 1-based, na ordem dada) para o fim.
+    /// Copies pages from `src` (1-based numbers, in the given order) to the end.
     fn import(&self, src: &Document, pages: &[usize]) -> anyhow::Result<()> {
         let spec = pages
             .iter()
@@ -247,7 +247,7 @@ impl Document {
         let at = self.pages() as c_int;
         let ok = unsafe { (self.api.import_pages)(self.doc, src.doc, spec.as_ptr(), at) };
         if ok == 0 {
-            return Err(anyhow!("nao importou as paginas {:?}", pages));
+            return Err(anyhow!("could not import pages {:?}", pages));
         }
         Ok(())
     }
@@ -262,7 +262,7 @@ impl Document {
         };
         let ok = unsafe { (self.api.save_copy)(self.doc, &mut w.fw as *mut FileWrite, 0) };
         if ok == 0 {
-            return Err(anyhow!("nao gravou o PDF"));
+            return Err(anyhow!("could not save the PDF"));
         }
         Ok(w.buf)
     }
@@ -375,7 +375,7 @@ impl Drop for PageRef<'_> {
     }
 }
 
-/// "1-3, 5, 8-" → páginas 1-based na ordem dada. Vazio ou "all" = todas.
+/// "1-3, 5, 8-" → 1-based pages in the given order. Empty or "all" = all.
 pub fn parse_ranges(spec: &str, total: usize) -> anyhow::Result<Vec<usize>> {
     let spec = spec.trim();
     if spec.is_empty() || spec.eq_ignore_ascii_case("all") || spec == "*" {
@@ -393,18 +393,18 @@ pub fn parse_ranges(spec: &str, total: usize) -> anyhow::Result<Vec<usize>> {
             } else {
                 a.trim()
                     .parse()
-                    .map_err(|_| anyhow!("intervalo invalido: {}", part))?
+                    .map_err(|_| anyhow!("invalid range: {}", part))?
             };
             let b: usize = if b.trim().is_empty() {
                 total
             } else {
                 b.trim()
                     .parse()
-                    .map_err(|_| anyhow!("intervalo invalido: {}", part))?
+                    .map_err(|_| anyhow!("invalid range: {}", part))?
             };
             if a == 0 || b == 0 || a > total || b > total {
                 return Err(anyhow!(
-                    "pagina fora do documento ({} paginas): {}",
+                    "page outside the document ({} pages): {}",
                     total,
                     part
                 ));
@@ -417,10 +417,10 @@ pub fn parse_ranges(spec: &str, total: usize) -> anyhow::Result<Vec<usize>> {
         } else {
             let n: usize = part
                 .parse()
-                .map_err(|_| anyhow!("pagina invalida: {}", part))?;
+                .map_err(|_| anyhow!("invalid page: {}", part))?;
             if n == 0 || n > total {
                 return Err(anyhow!(
-                    "pagina fora do documento ({} paginas): {}",
+                    "page outside the document ({} pages): {}",
                     total,
                     n
                 ));
@@ -429,7 +429,7 @@ pub fn parse_ranges(spec: &str, total: usize) -> anyhow::Result<Vec<usize>> {
         }
     }
     if out.is_empty() {
-        return Err(anyhow!("nenhuma pagina selecionada"));
+        return Err(anyhow!("no page selected"));
     }
     Ok(out)
 }
@@ -437,7 +437,7 @@ pub fn parse_ranges(spec: &str, total: usize) -> anyhow::Result<Vec<usize>> {
 fn stem(path: &Path) -> String {
     path.file_stem()
         .map(|s| s.to_string_lossy().to_string())
-        .unwrap_or_else(|| "documento".into())
+        .unwrap_or_else(|| "document".into())
 }
 
 fn out_dir_for(input: &Path, output_dir: &str) -> PathBuf {
@@ -451,7 +451,7 @@ fn out_dir_for(input: &Path, output_dir: &str) -> PathBuf {
     }
 }
 
-/// Não sobrescreve: `nome.pdf`, `nome (2).pdf`, …
+/// Does not overwrite: `name.pdf`, `name (2).pdf`, …
 fn unique(path: PathBuf) -> PathBuf {
     if !path.exists() {
         return path;
@@ -562,9 +562,8 @@ pub async fn status() -> PdfStatus {
     }
 }
 
-/// Retângulo do que está desenhado em cada página, em pontos e com origem no
-/// canto inferior esquerdo — a "caixa de tinta". `None` quer dizer página em
-/// branco. Usado para cortar margem sem chutar valor.
+/// Rectangle of what is drawn on each page, in points and with origin at the
+/// bottom-left corner — the "ink box". `None` means a blank page. Used to trim margins without guessing a value.
 pub fn ink_boxes(path: &str, dpi: u32, threshold: u8) -> anyhow::Result<Vec<Option<[f32; 4]>>> {
     let api = api()?;
     let _g = OPS.lock().unwrap_or_else(|p| p.into_inner());
@@ -579,7 +578,7 @@ pub fn ink_boxes(path: &str, dpi: u32, threshold: u8) -> anyhow::Result<Vec<Opti
         let (mut x0, mut y0, mut x1, mut y1) = (u32::MAX, u32::MAX, 0u32, 0u32);
         for (x, y, px) in img.enumerate_pixels() {
             let p = px.0;
-            // Qualquer canal escuro o bastante conta como tinta.
+            // Any channel dark enough counts as ink.
             if p[0] < threshold || p[1] < threshold || p[2] < threshold {
                 x0 = x0.min(x);
                 y0 = y0.min(y);
@@ -590,7 +589,7 @@ pub fn ink_boxes(path: &str, dpi: u32, threshold: u8) -> anyhow::Result<Vec<Opti
         out.push(if x0 == u32::MAX {
             None
         } else {
-            // Pixel → ponto, virando o eixo Y (a imagem cresce para baixo).
+            // Pixel → point, flipping the Y axis (the image grows downward).
             Some([
                 x0 as f32 / scale,
                 h_pt - (y1 + 1) as f32 / scale,
@@ -602,17 +601,17 @@ pub fn ink_boxes(path: &str, dpi: u32, threshold: u8) -> anyhow::Result<Vec<Opti
     Ok(out)
 }
 
-// ── Tarja mal feita ────────────────────────────────────────────────────
+// ── Badly done redaction ────────────────────────────────────────────────────
 
-/// Uma sequência de caracteres que continua no PDF embaixo de uma área de cor
-/// chapada — o texto que a "tarja" só escondeu do olho.
+/// A run of characters that is still in the PDF under a flat-colored area
+/// — the text the "redaction" only hid from the eye.
 #[derive(Debug, Clone, Serialize)]
 pub struct HiddenRun {
     pub page: usize,
     pub text: String,
-    /// Cor média por baixo, em hex, para a UI dizer "barra preta" ou "caixa branca".
+    /// Average color underneath, in hex, so the UI can say "black bar" or "white box".
     pub cover: String,
-    /// Retângulo em pontos do PDF (x, y, largura, altura), origem em baixo.
+    /// Rectangle in PDF points (x, y, width, height), origin at the bottom.
     pub rect: (f32, f32, f32, f32),
 }
 
@@ -626,10 +625,10 @@ pub struct RedactionReport {
     pub runs: Vec<HiddenRun>,
 }
 
-/// Um caractere está escondido quando a área dele, na página renderizada, é de
-/// cor chapada: o glifo existe no texto mas não aparece no pixel.
+/// A character is hidden when its area, on the rendered page, is a
+/// flat color: the glyph exists in the text but does not show in the pixel.
 fn covered(img: &image::RgbImage, x0: f64, y0: f64, x1: f64, y1: f64) -> Option<[u8; 3]> {
-    // Encolhe a caixa: a borda pega antialias do que está em volta.
+    // Shrink the box: the border picks up antialiasing from what is around it.
     let (dx, dy) = ((x1 - x0) * 0.2, (y1 - y0) * 0.2);
     let (a, b) = ((x0 + dx).floor().max(0.0), (y0 + dy).floor().max(0.0));
     let (c, d) = (
@@ -653,7 +652,7 @@ fn covered(img: &image::RgbImage, x0: f64, y0: f64, x1: f64, y1: f64) -> Option<
             n += 1;
         }
     }
-    // Faixa de luminância quase nula = nada foi desenhado ali por cima do fundo.
+    // A near-zero luminance range = nothing was drawn there on top of the background.
     if n >= 4 && hi - lo <= 8 {
         return Some([(sr / n) as u8, (sg / n) as u8, (sb / n) as u8]);
     }
@@ -718,7 +717,7 @@ pub fn redaction_check(path: &str, dpi: u32, pages_spec: &str) -> anyhow::Result
                         });
                     }
                     None => {
-                        // Espaço entre dois trechos escondidos continua o mesmo trecho.
+                        // A space between two hidden runs continues the same run.
                         if !run.is_empty() && ch.is_whitespace() {
                             run.push(' ');
                         } else if !run.trim().is_empty() {
@@ -794,7 +793,7 @@ pub fn info(path: &str, password: Option<&str>) -> anyhow::Result<PdfInfo> {
     })
 }
 
-// ── Juntar ─────────────────────────────────────────────────────────────
+// ── Merge ─────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct MergeOptions {
@@ -811,7 +810,7 @@ pub struct PdfOut {
 
 pub fn merge(opts: &MergeOptions, progress: &super::ProgressFn) -> anyhow::Result<PdfOut> {
     if opts.inputs.len() < 2 {
-        return Err(anyhow!("escolha pelo menos dois PDFs"));
+        return Err(anyhow!("choose at least two PDFs"));
     }
     let api = api()?;
     let _g = OPS.lock().unwrap_or_else(|p| p.into_inner());
@@ -841,13 +840,13 @@ pub fn merge(opts: &MergeOptions, progress: &super::ProgressFn) -> anyhow::Resul
     })
 }
 
-// ── Dividir ────────────────────────────────────────────────────────────
+// ── Split ────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct SplitOptions {
     pub input: String,
-    /// "each" (uma página por arquivo) | "every" (blocos de N) | "ranges"
-    /// ("1-3; 4-10", um arquivo por trecho) | "extract" (um arquivo com "1,3,5-7").
+    /// "each" (one page per file) | "every" (blocks of N) | "ranges"
+    /// ("1-3; 4-10", one file per range) | "extract" (one file with "1,3,5-7").
     pub mode: String,
     #[serde(default)]
     pub every: usize,
@@ -870,7 +869,7 @@ pub fn split(opts: &SplitOptions, progress: &super::ProgressFn) -> anyhow::Resul
     let src = Document::open(api, input, None)?;
     let total = src.pages();
     if total == 0 {
-        return Err(anyhow!("o PDF nao tem paginas"));
+        return Err(anyhow!("the PDF has no pages"));
     }
     let groups: Vec<(String, Vec<usize>)> = match opts.mode.as_str() {
         "each" => (1..=total)
@@ -899,7 +898,7 @@ pub fn split(opts: &SplitOptions, progress: &super::ProgressFn) -> anyhow::Resul
         )],
     };
     if groups.is_empty() {
-        return Err(anyhow!("nenhum trecho para extrair"));
+        return Err(anyhow!("no range to extract"));
     }
     let dir = out_dir_for(input, &opts.output_dir);
     std::fs::create_dir_all(&dir)?;
@@ -921,7 +920,7 @@ pub fn split(opts: &SplitOptions, progress: &super::ProgressFn) -> anyhow::Resul
     })
 }
 
-// ── Renderizar (PDF → imagens) ─────────────────────────────────────────
+// ── Render (PDF → images) ─────────────────────────────────────────
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct RenderOptions {
@@ -958,7 +957,7 @@ pub fn render(opts: &RenderOptions, progress: &super::ProgressFn) -> anyhow::Res
             "progress",
             i as u64,
             Some(n),
-            Some(format!("pagina {}", p)),
+            Some(format!("page {}", p)),
         );
         let img = doc.page(p - 1)?.render(dpi)?;
         let bytes = encode(&img, format, quality)?;
@@ -970,7 +969,7 @@ pub fn render(opts: &RenderOptions, progress: &super::ProgressFn) -> anyhow::Res
     Ok(outputs)
 }
 
-// ── Texto ──────────────────────────────────────────────────────────────
+// ── Text ──────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize)]
 pub struct TextResult {
@@ -1012,7 +1011,7 @@ pub fn to_text(
     })
 }
 
-// ── Imagens → PDF ──────────────────────────────────────────────────────
+// ── Images → PDF ──────────────────────────────────────────────────────
 
 pub fn images_to_pdf(
     inputs: &[String],
@@ -1021,14 +1020,14 @@ pub fn images_to_pdf(
     progress: &super::ProgressFn,
 ) -> anyhow::Result<PdfOut> {
     if inputs.is_empty() {
-        return Err(anyhow!("escolha pelo menos uma imagem"));
+        return Err(anyhow!("choose at least one image"));
     }
     let quality = if quality == 0 { 90 } else { quality };
     let mut jpegs = Vec::with_capacity(inputs.len());
     let n = inputs.len() as u64;
     for (i, input) in inputs.iter().enumerate() {
         report(progress, "progress", i as u64, Some(n), Some(input.clone()));
-        let data = std::fs::read(input).map_err(|e| anyhow!("nao leu {}: {}", input, e))?;
+        let data = std::fs::read(input).map_err(|e| anyhow!("could not read {}: {}", input, e))?;
         if jpeg_pdf::is_jpeg(&data) {
             jpegs.push(data);
         } else {
@@ -1052,7 +1051,7 @@ pub fn images_to_pdf(
     })
 }
 
-// ── Rasterizar de volta para PDF (comprimir e sanitizar) ───────────────
+// ── Rasterize back to PDF (compress and sanitize) ───────────────
 
 fn rasterize(
     input: &Path,
@@ -1072,7 +1071,7 @@ fn rasterize(
             "progress",
             i as u64,
             Some(total as u64),
-            Some(format!("pagina {}", i + 1)),
+            Some(format!("page {}", i + 1)),
         );
         let img = doc.page(i)?.render(dpi)?;
         jpegs.push(encode(&img, "jpg", quality)?);
@@ -1096,7 +1095,7 @@ pub struct CompressOptions {
     pub input: String,
     #[serde(default)]
     pub output_dir: String,
-    /// "auto" (Ghostscript se existir, senao imagens) | "gs" | "raster"
+    /// "auto" (Ghostscript if it exists, else images) | "gs" | "raster"
     #[serde(default)]
     pub mode: String,
     /// Ghostscript: "screen" (72 dpi) | "ebook" (150) | "printer" (300)
@@ -1174,13 +1173,13 @@ pub async fn compress(
         }
         if opts.mode == "gs" {
             return Err(anyhow!(
-                "ghostscript falhou: {}",
+                "ghostscript failed: {}",
                 String::from_utf8_lossy(&o.stderr).trim()
             ));
         }
         let _ = std::fs::remove_file(&output);
     } else if opts.mode == "gs" {
-        return Err(anyhow!("Ghostscript nao encontrado"));
+        return Err(anyhow!("Ghostscript not found"));
     }
     let dpi = if opts.dpi == 0 { 110 } else { opts.dpi };
     let quality = if opts.quality == 0 { 60 } else { opts.quality };
@@ -1196,8 +1195,8 @@ pub async fn compress(
     })
 }
 
-/// Dangerzone sem contêiner: cada página vira pixels e o PDF é remontado
-/// só com imagens. Scripts, formulários, links e anexos não sobrevivem.
+/// Dangerzone without a container: each page becomes pixels and the PDF is rebuilt
+/// with images only. Scripts, forms, links and attachments do not survive.
 pub fn sanitize(
     input: &str,
     output_dir: &str,
@@ -1207,13 +1206,13 @@ pub fn sanitize(
 ) -> anyhow::Result<PdfOut> {
     let input = PathBuf::from(input.trim());
     let output =
-        unique(out_dir_for(&input, output_dir).join(format!("{} (seguro).pdf", stem(&input))));
+        unique(out_dir_for(&input, output_dir).join(format!("{} (safe).pdf", stem(&input))));
     let dpi = if dpi == 0 { 150 } else { dpi };
     let quality = if quality == 0 { 85 } else { quality };
     rasterize(&input, &output, dpi, quality, progress)
 }
 
-// ── OCR (PDF pesquisável) ──────────────────────────────────────────────
+// ── OCR (searchable PDF) ──────────────────────────────────────────────
 
 pub async fn ocr(
     input: String,
@@ -1224,7 +1223,7 @@ pub async fn ocr(
 ) -> anyhow::Result<PdfOut> {
     let tesseract = super::ocr::locate()
         .await
-        .ok_or_else(|| anyhow!("tesseract nao esta instalado"))?;
+        .ok_or_else(|| anyhow!("tesseract is not installed"))?;
     let input_path = PathBuf::from(input.trim());
     let langs = if langs.trim().is_empty() {
         "eng".to_string()
@@ -1235,7 +1234,7 @@ pub async fn ocr(
     let work = super::temp_dir().join(format!("pdf-ocr-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&work)?;
 
-    // 1) páginas → PNG
+    // 1) pages → PNG
     let (pngs, pages) = {
         let work = work.clone();
         let input = input_path.clone();
@@ -1252,7 +1251,7 @@ pub async fn ocr(
                     "render",
                     i as u64,
                     Some(total as u64),
-                    Some(format!("pagina {}", i + 1)),
+                    Some(format!("page {}", i + 1)),
                 );
                 let img = doc.page(i)?.render(dpi)?;
                 let p = work.join(format!("{:04}.png", i + 1));
@@ -1264,7 +1263,7 @@ pub async fn ocr(
         .await??
     };
 
-    // 2) tesseract com lista de imagens → um PDF só, com camada de texto
+    // 2) tesseract with a list of images → a single PDF, with a text layer
     let list = work.join("pages.txt");
     std::fs::write(
         &list,
@@ -1284,7 +1283,7 @@ pub async fn ocr(
     if !o.status.success() {
         let _ = std::fs::remove_dir_all(&work);
         return Err(anyhow!(
-            "tesseract falhou: {}",
+            "tesseract failed: {}",
             String::from_utf8_lossy(&o.stderr).trim()
         ));
     }
@@ -1318,13 +1317,13 @@ pub async fn office_convert(
 ) -> anyhow::Result<Vec<String>> {
     let soffice = find_soffice()
         .await
-        .ok_or_else(|| anyhow!("LibreOffice nao encontrado"))?;
+        .ok_or_else(|| anyhow!("LibreOffice not found"))?;
     let target = target.trim().trim_start_matches('.').to_ascii_lowercase();
     if !matches!(
         target.as_str(),
         "docx" | "odt" | "pptx" | "xlsx" | "pdf" | "html" | "txt" | "epub"
     ) {
-        return Err(anyhow!("formato nao suportado: {}", target));
+        return Err(anyhow!("unsupported format: {}", target));
     }
     let mut outputs = Vec::new();
     let n = inputs.len() as u64;
@@ -1357,7 +1356,7 @@ pub async fn office_convert(
         let produced = dir.join(format!("{}.{}", stem(&input_path), target));
         if !o.status.success() || !produced.exists() {
             return Err(anyhow!(
-                "LibreOffice nao converteu {}: {}",
+                "LibreOffice did not convert {}: {}",
                 input,
                 String::from_utf8_lossy(if o.stderr.is_empty() {
                     &o.stdout
@@ -1373,12 +1372,12 @@ pub async fn office_convert(
     Ok(outputs)
 }
 
-// ── Leitura posicionada (base do PDF → Markdown) ───────────────────────
+// ── Positioned reading (base of PDF → Markdown) ───────────────────────
 
-/// Um caractere com a caixa dele em pontos do PDF (origem embaixo à
-/// esquerda, `y` crescendo para cima), o corpo da fonte e duas marcas de
-/// estilo que o Markdown usa: monoespaçada vira bloco de código, negrito
-/// ajuda a achar título.
+/// A character with its box in PDF points (origin at the bottom left,
+/// `y` growing upward), the font size and two style marks that
+/// Markdown uses: monospace becomes a code block, bold
+/// helps find titles.
 #[derive(Debug, Clone)]
 pub struct TextChar {
     pub ch: char,
@@ -1389,13 +1388,13 @@ pub struct TextChar {
     pub size: f32,
     pub mono: bool,
     pub bold: bool,
-    /// Veio um espaço (ou quebra de linha) antes deste caractere no fluxo do
-    /// PDF. É o sinal mais confiável de separação de palavra: a caixa do
-    /// glifo é justa demais para servir de régua sozinha.
+    /// A space (or line break) came before this character in the PDF
+    /// stream. It is the most reliable sign of a word boundary: the glyph's
+    /// box is too tight to serve as a ruler on its own.
     pub space_before: bool,
 }
 
-/// Imagem embutida na página, já em PNG, com a caixa em pontos.
+/// Image embedded in the page, already as PNG, with its box in points.
 #[derive(Debug, Clone)]
 pub struct PageImage {
     pub x0: f32,
@@ -1407,7 +1406,7 @@ pub struct PageImage {
 
 #[derive(Debug, Clone, Default)]
 pub struct PageText {
-    /// Número 1-based da página no documento original.
+    /// 1-based page number in the original document.
     pub number: usize,
     pub width: f32,
     pub height: f32,
@@ -1417,9 +1416,9 @@ pub struct PageText {
 
 const FPDF_PAGEOBJ_IMAGE: c_int = 3;
 
-/// Estilo da fonte do caractere: `(monoespaçada, negrito)`. Usa os flags do
-/// descritor de fonte (bit 1 = passo fixo, bit 19 = negrito forçado) e cai no
-/// nome da fonte quando os flags vêm zerados, que é comum.
+/// The character's font style: `(monospace, bold)`. Uses the font
+/// descriptor flags (bit 1 = fixed pitch, bit 19 = forced bold) and falls back to the
+/// font name when the flags come in zeroed, which is common.
 unsafe fn font_traits(api: &Api, tp: TextPage, idx: c_int) -> (bool, bool) {
     let mut mono = false;
     let mut bold = false;
@@ -1452,9 +1451,9 @@ unsafe fn font_traits(api: &Api, tp: TextPage, idx: c_int) -> (bool, bool) {
     (mono, bold)
 }
 
-/// Imagens desenhadas na página, convertidas para PNG. Ignora as minúsculas
-/// (fio, marca d'água de 1 px) e devolve vazio se o PDFium instalado não
-/// expõe a API de objetos.
+/// Images drawn on the page, converted to PNG. Ignores the tiny ones
+/// (hairline, 1 px watermark) and returns empty if the installed PDFium does not
+/// expose the objects API.
 fn page_images(api: &'static Api, page: &PageRef<'_>, min_pt: f32) -> Vec<PageImage> {
     let (count, get, kind, bounds, bitmap_of, fmt, bw, bh) = match (
         api.obj_count,
@@ -1541,9 +1540,9 @@ fn page_images(api: &'static Api, page: &PageRef<'_>, min_pt: f32) -> Vec<PageIm
     out
 }
 
-/// Lê as páginas pedidas com posição, corpo de fonte e estilo de cada
-/// caractere — a matéria-prima do PDF → Markdown. `on_page` recebe
-/// `(feitas, total)` antes de cada página, para o progresso.
+/// Reads the requested pages with the position, font size and style of each
+/// character — the raw material of PDF → Markdown. `on_page` receives
+/// `(done, total)` before each page, for progress.
 pub fn read_pages(
     input: &str,
     password: Option<&str>,
@@ -1553,7 +1552,7 @@ pub fn read_pages(
 ) -> anyhow::Result<Vec<PageText>> {
     let api = api()?;
     let font_size = api.text_fontsize.ok_or_else(|| {
-        anyhow!("este PDFium nao expoe FPDFText_GetFontSize; atualize em Ajustes → Dependencias")
+        anyhow!("this PDFium does not expose FPDFText_GetFontSize; update it in Settings → Dependencies")
     })?;
     let _g = OPS.lock().unwrap_or_else(|p| p.into_inner());
     let path = Path::new(input.trim());
@@ -1571,14 +1570,14 @@ pub fn read_pages(
             if !tp.is_null() {
                 let count = (api.text_count)(tp).max(0);
                 chars.reserve(count as usize);
-                // Alguns glifos (hífen de fim de linha, por exemplo) voltam sem
-                // caixa; em vez de sumir com o caractere, ele cola no fim do
-                // anterior — é onde ele foi desenhado.
+                // Some glyphs (an end-of-line hyphen, for example) come back without
+                // a box; instead of dropping the character, it sticks to the end of the
+                // previous one — where it was drawn.
                 let mut last: Option<(f32, f32, f32)> = None;
                 let mut space = false;
                 for idx in 0..count {
-                    // O PDFium devolve 0x02 no lugar do hífen que quebra a
-                    // palavra no fim da linha: é hífen mesmo, não controle.
+                    // PDFium returns 0x02 in place of the hyphen that breaks the
+                    // word at the end of the line: it is a hyphen indeed, not a control char.
                     let ch = match (api.text_unicode)(tp, idx) {
                         2 => '-',
                         u => match char::from_u32(u) {
@@ -1644,11 +1643,11 @@ pub fn read_pages(
     Ok(out)
 }
 
-// ── Leitura crua de caracteres (base da tarja) ─────────────────────────
+// ── Raw character reading (base of redaction) ─────────────────────────
 
-/// Caractere como o PDFium o vê, sem filtro nenhum: espaço em branco entra,
-/// caractere inventado entra marcado. A tarja precisa da lista inteira e na
-/// ordem original para casar cada glifo com o byte dele no content stream.
+/// A character as PDFium sees it, with no filtering at all: whitespace comes in,
+/// invented characters come in marked. Redaction needs the whole list and in the
+/// original order to match each glyph to its byte in the content stream.
 #[derive(Debug, Clone)]
 pub struct RawChar {
     pub ch: char,
@@ -1656,14 +1655,14 @@ pub struct RawChar {
     pub x1: f32,
     pub y0: f32,
     pub y1: f32,
-    /// `true` quando o PDFium inventou o caractere (espaço de vão, quebra de
-    /// linha): ele não tem byte correspondente no fluxo do PDF.
+    /// `true` when PDFium invented the character (gap space, line
+    /// break): it has no corresponding byte in the PDF stream.
     pub generated: bool,
 }
 
 impl RawChar {
-    /// Centro da caixa, que é o ponto usado para decidir se o caractere cai
-    /// dentro da região a tarjar.
+    /// Center of the box, which is the point used to decide whether the character falls
+    /// inside the region to redact.
     pub fn center(&self) -> (f32, f32) {
         ((self.x0 + self.x1) / 2.0, (self.y0 + self.y1) / 2.0)
     }
@@ -1675,17 +1674,17 @@ impl RawChar {
 
 #[derive(Debug, Clone, Default)]
 pub struct RawPage {
-    /// Número 1-based da página no documento.
+    /// 1-based page number in the document.
     pub number: usize,
     pub width: f32,
     pub height: f32,
     pub chars: Vec<RawChar>,
-    /// `false` quando o PDFium instalado não expõe `FPDFText_IsGenerated` —
-    /// aí não dá para confiar no casamento glifo↔byte.
+    /// `false` when the installed PDFium does not expose `FPDFText_IsGenerated` —
+    /// then the glyph↔byte match cannot be trusted.
     pub generated_known: bool,
 }
 
-/// Lê todos os caracteres das páginas pedidas, na ordem do documento.
+/// Reads all the characters of the requested pages, in document order.
 pub fn read_raw_chars(
     input: &str,
     password: Option<&str>,
@@ -1707,7 +1706,7 @@ pub fn read_raw_chars(
                 chars.reserve(count as usize);
                 for idx in 0..count {
                     let ch = match (api.text_unicode)(tp, idx) {
-                        // O PDFium devolve 0x02 no lugar do hífen de quebra.
+                        // PDFium returns 0x02 in place of the breaking hyphen.
                         2 => '-',
                         u => char::from_u32(u).unwrap_or('\u{fffd}'),
                     };
@@ -1745,8 +1744,8 @@ pub fn read_raw_chars(
     Ok(out)
 }
 
-/// Renderiza uma página avulsa em JPEG, para quem precisa trocar o conteúdo
-/// da página por pixel (a tarja usa isso quando não dá para editar o texto).
+/// Renders a single page as JPEG, for whoever needs to replace the page's
+/// content with pixels (redaction uses this when the text cannot be edited).
 pub fn page_jpeg(
     input: &str,
     password: Option<&str>,
@@ -1758,7 +1757,7 @@ pub fn page_jpeg(
     let _g = OPS.lock().unwrap_or_else(|p| p.into_inner());
     let doc = Document::open(api, Path::new(input.trim()), password)?;
     if page == 0 || page > doc.pages() {
-        return Err(anyhow!("pagina {} fora do documento", page));
+        return Err(anyhow!("page {} outside the document", page));
     }
     let p = doc.page(page - 1)?;
     let (w, h) = p.size_pt();
@@ -1791,8 +1790,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// Exercita o FFI de verdade: baixa o PDFium gerido se faltar, monta um
-    /// PDF de 3 páginas com JPEGs, junta, divide, renderiza e extrai texto.
+    /// Exercises the real FFI: downloads the managed PDFium if missing, builds a
+    /// 3-page PDF with JPEGs, merges, splits, renders and extracts text.
     /// `cargo test -p gumballz-core --lib tools::pdf::tests::live -- --ignored --nocapture`
     #[tokio::test]
     #[ignore]
@@ -1882,8 +1881,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// PDF montado à mão: uma linha visível e outra coberta por um retângulo
-    /// preto desenhado por cima — a "tarja" que não apaga nada.
+    /// Hand-built PDF: one visible line and another covered by a black rectangle
+    /// drawn on top — the "redaction" that erases nothing.
     /// `cargo test -p gumballz-core --lib -- --ignored live_redaction`
     #[test]
     #[ignore]
@@ -1901,7 +1900,7 @@ mod tests {
             content.len(),
             String::from_utf8_lossy(content)
         ));
-        // A xref sai da própria tool de reparo — de quebra, valida ela também.
+        // The xref comes out of the repair tool itself — which also validates it.
         let (bytes, _) = super::super::pdf_repair::rebuild_xref(body.as_bytes()).unwrap();
 
         let dir = std::env::temp_dir().join("gumballz-get-redaction-live");
@@ -1916,18 +1915,18 @@ mod tests {
         let report = redaction_check(&p, 110, "").unwrap();
         assert!(
             report.chars_total >= 14,
-            "leu {} caracteres",
+            "read {} characters",
             report.chars_total
         );
         let found: Vec<&str> = report.runs.iter().map(|r| r.text.as_str()).collect();
         assert!(
             found.iter().any(|t| t.contains("SEGREDO")),
-            "não achou o texto sob a tarja: {:?}",
+            "did not find the text under the black bar: {:?}",
             found
         );
         assert!(
             !found.iter().any(|t| t.contains("VISIVEL")),
-            "acusou texto que está à vista: {:?}",
+            "flagged text that is in plain view: {:?}",
             found
         );
         let bar = report
@@ -1937,7 +1936,7 @@ mod tests {
             .unwrap();
         assert_eq!(bar.cover, "#000000", "a cobertura era preta");
         assert_eq!(bar.page, 1);
-        eprintln!("{} caracteres escondidos: {:?}", report.chars_hidden, found);
+        eprintln!("{} characters hidden: {:?}", report.chars_hidden, found);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

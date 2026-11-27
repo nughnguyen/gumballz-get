@@ -1,6 +1,6 @@
-//! Comandos da categoria Pinterest (estudo 67). Todos aceitam `cookies`
-//! opcional (caminho de cookies.txt ou string `a=1; b=2`) para boards
-//! secretos; sem cookies só o conteúdo público.
+//! Commands of the Pinterest category (study 67). All accept optional `cookies`
+//! (cookies.txt path or `a=1; b=2` string) for secret boards; without cookies
+//! only the public content.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -25,7 +25,7 @@ fn client(cookies: &Option<String>) -> Result<Arc<PinClient>, String> {
 }
 
 fn target_of(url: &str) -> Result<Target, String> {
-    parse_target(url).ok_or_else(|| "cole um link do Pinterest (pin, board, seção, perfil ou pin.it) ou um texto para buscar".to_string())
+    parse_target(url).ok_or_else(|| "paste a Pinterest link (pin, board, section, profile or pin.it) or a text to search".to_string())
 }
 
 async fn resolve(c: &PinClient, url: &str) -> Result<(Target, String), String> {
@@ -38,13 +38,13 @@ async fn resolve(c: &PinClient, url: &str) -> Result<(Target, String), String> {
     Ok((t, resolved))
 }
 
-// ───────────────────────── filtros ─────────────────────────
+// ───────────────────────── filters ─────────────────────────
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Filters {
     #[serde(default)]
     pub skip_promoted: bool,
-    /// 0 desliga; 1 esconde tudo com sinal fraco; 2 ferramentas citadas; 3 só frases explícitas/rótulo oficial
+    /// 0 off; 1 hides everything with a weak signal; 2 mentioned tools; 3 only explicit phrases / official label
     #[serde(default)]
     pub ai_level: u8,
     /// "" | "image" | "video" | "gif"
@@ -90,7 +90,7 @@ fn keep(p: &Pin, f: &Filters) -> bool {
     true
 }
 
-// ───────────────────────── inspecionar ─────────────────────────
+// ───────────────────────── inspect ─────────────────────────
 
 #[derive(Debug, Clone, Serialize)]
 pub struct InspectOut {
@@ -152,16 +152,16 @@ pub async fn tool_pin_inspect(url: String, cookies: Option<String>) -> Result<In
     Ok(out)
 }
 
-// ───────────────────────── listar ─────────────────────────
+// ───────────────────────── list ─────────────────────────
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ListOut {
     pub title: String,
     pub target: Target,
     pub pins: Vec<Pin>,
-    /// termos relacionados (busca)
+    /// related terms (search)
     pub guides: Vec<String>,
-    /// quantos foram escondidos pelos filtros
+    /// how many were hidden by the filters
     pub hidden: usize,
 }
 
@@ -180,7 +180,7 @@ async fn list_pins(
             guides = g;
         }
     }
-    // com filtro, pede um pouco mais para compensar o que cai
+    // with a filter, asks for a bit more to make up for what drops out
     let fetch = if limit == 0 {
         0
     } else if filters.skip_promoted || filters.ai_level > 0 || !filters.only_kind.is_empty() {
@@ -233,7 +233,7 @@ pub async fn tool_pin_list(
     })
 }
 
-/// Pins parecidos com um pin (o "More like this").
+/// Pins similar to a pin (the "More like this").
 #[tauri::command]
 pub async fn tool_pin_related(
     app: tauri::AppHandle,
@@ -245,7 +245,7 @@ pub async fn tool_pin_related(
     let c = client(&cookies)?;
     let (target, _) = resolve(&c, &url).await?;
     let Target::Pin { id } = &target else {
-        return Err("cole o link de um pin".into());
+        return Err("paste a pin link".into());
     };
     let filters = filters.unwrap_or_default();
     let p = progress(&app);
@@ -263,7 +263,7 @@ pub async fn tool_pin_related(
         .collect();
     kept.truncate(limit.unwrap_or(60));
     Ok(ListOut {
-        title: format!("parecidos com {}", id),
+        title: format!("similar to {}", id),
         target,
         hidden: before - kept.len(),
         pins: kept,
@@ -271,7 +271,7 @@ pub async fn tool_pin_related(
     })
 }
 
-/// Busca de boards por palavra.
+/// Board search by keyword.
 #[tauri::command]
 pub async fn tool_pin_boards_search(
     query: String,
@@ -284,7 +284,7 @@ pub async fn tool_pin_boards_search(
         .map_err(err)
 }
 
-// ───────────────────────── baixar ─────────────────────────
+// ───────────────────────── download ─────────────────────────
 
 #[tauri::command]
 pub async fn tool_pin_download(
@@ -296,7 +296,7 @@ pub async fn tool_pin_download(
     let c = client(&cookies)?;
     let (target, _) = resolve(&c, &url).await?;
     let Target::Pin { id } = &target else {
-        return Err("para boards, seções e perfis use o backup".into());
+        return Err("for boards, sections and profiles use the backup".into());
     };
     let p = progress(&app);
     report(&p, "pinterest:pin", "download", 0, Some(1), None);
@@ -400,7 +400,7 @@ async fn download_many(
     (files_by_id, out)
 }
 
-/// Baixa uma lista de pins já listada (resultados de busca selecionados).
+/// Downloads a list of pins already listed (selected search results).
 #[tauri::command]
 pub async fn tool_pin_download_many(
     app: tauri::AppHandle,
@@ -430,18 +430,18 @@ pub struct BackupOptions {
     pub download: DownloadOptions,
     #[serde(default)]
     pub cookies: Option<String>,
-    /// 0 = tudo
+    /// 0 = everything
     #[serde(default)]
     pub limit: usize,
     #[serde(default)]
     pub filters: Filters,
-    /// grava pins.csv e pins.json
+    /// writes pins.csv and pins.json
     #[serde(default = "yes")]
     pub metadata: bool,
-    /// grava index.html (galeria offline)
+    /// writes index.html (offline gallery)
     #[serde(default = "yes")]
     pub gallery: bool,
-    /// perfil: também os pins criados
+    /// profile: also the pins created
     #[serde(default)]
     pub include_created: bool,
 }
@@ -463,11 +463,11 @@ pub struct BackupOut {
     pub csv_path: Option<String>,
     pub json_path: Option<String>,
     pub html_path: Option<String>,
-    /// boards processados (perfil)
+    /// boards processed (profile)
     pub boards: usize,
 }
 
-/// Lista um board com as seções nomeadas (pins soltos + cada seção).
+/// Lists a board with its named sections (loose pins + each section).
 async fn board_with_sections(
     c: &PinClient,
     board: &Board,
@@ -569,7 +569,7 @@ async fn write_outputs(
     (csv_path, json_path, html_path)
 }
 
-/// Backup de board, seção, perfil (todos os boards), busca ou relacionados.
+/// Backup of board, section, profile (all boards), search or related.
 #[tauri::command]
 pub async fn tool_pin_backup(
     app: tauri::AppHandle,
@@ -582,7 +582,7 @@ pub async fn tool_pin_backup(
     let root = PathBuf::from(&opts.download.dest);
     std::fs::create_dir_all(&root).map_err(err)?;
 
-    // perfil: um subdiretório por board
+    // profile: one subdirectory per board
     if let Target::User { username } = &target {
         let user = c.user(username).await.map_err(err)?;
         let boards = c.user_boards(username).await.map_err(err)?;
@@ -661,7 +661,7 @@ pub async fn tool_pin_backup(
                         username: username.clone(),
                     },
                     opts.limit,
-                    |n| report(&p, pid, "list", n as u64, None, Some("criados".into())),
+                    |n| report(&p, pid, "list", n as u64, None, Some("created".into())),
                 )
                 .await
                 .unwrap_or_default();
@@ -743,7 +743,7 @@ pub async fn tool_pin_backup(
     })
 }
 
-// ───────────────────────── duplicados ─────────────────────────
+// ───────────────────────── duplicates ─────────────────────────
 
 #[derive(Debug, Clone, Serialize)]
 pub struct DupeGroupOut {
@@ -864,7 +864,7 @@ pub struct UnsaveOut {
     pub failed: Vec<(String, String)>,
 }
 
-/// Desfaz saves seus (exige cookies de sessão). Sequencial de propósito.
+/// Undoes your saves (requires session cookies). Sequential on purpose.
 #[tauri::command]
 pub async fn tool_pin_unsave(
     ids: Vec<String>,
@@ -872,7 +872,7 @@ pub async fn tool_pin_unsave(
 ) -> Result<UnsaveOut, String> {
     let c = client(&cookies)?;
     if !c.has_session() {
-        return Err("informe os cookies da sua sessao do Pinterest para desfazer saves".into());
+        return Err("provide your Pinterest session cookies to undo saves".into());
     }
     let mut out = UnsaveOut {
         done: vec![],
@@ -888,15 +888,15 @@ pub async fn tool_pin_unsave(
     Ok(out)
 }
 
-// ───────────────────────── paleta ─────────────────────────
+// ───────────────────────── palette ─────────────────────────
 
 #[derive(Debug, Clone, Serialize)]
 pub struct PaletteOut {
     pub title: String,
     pub pins_used: usize,
-    /// k-means sobre pixels dos thumbnails
+    /// k-means over the thumbnails' pixels
     pub swatches: Vec<Swatch>,
-    /// as `dominant_color` que o Pinterest calcula, agrupadas
+    /// the `dominant_color` Pinterest computes, grouped
     pub dominant: Vec<Swatch>,
 }
 
@@ -989,7 +989,7 @@ pub async fn tool_pin_palette(
     })
 }
 
-// ───────────────────────── exportar ─────────────────────────
+// ───────────────────────── export ─────────────────────────
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ExportOptions {
@@ -1003,7 +1003,7 @@ pub struct ExportOptions {
     pub limit: usize,
     #[serde(default)]
     pub filters: Filters,
-    /// html: baixar as imagens para a pasta (galeria 100% offline)
+    /// html: download the images into the folder (100% offline gallery)
     #[serde(default)]
     pub offline: bool,
 }
@@ -1042,7 +1042,7 @@ pub async fn tool_pin_export(
         }
     };
     if pins.is_empty() {
-        return Err("nenhum pin para exportar".into());
+        return Err("no pin to export".into());
     }
     let dest = PathBuf::from(&opts.dest);
     std::fs::create_dir_all(&dest).map_err(err)?;
@@ -1089,7 +1089,7 @@ pub async fn tool_pin_export(
             }
             let _ = std::fs::remove_dir_all(&work);
             if images.is_empty() {
-                return Err("nenhuma imagem baixada para o PDF".into());
+                return Err("no image downloaded for the PDF".into());
             }
             let pdf = gumballz_core::core::tools::jpeg_pdf::build_pdf(&images).map_err(err)?;
             let path = dest.join(format!("{}.pdf", stem));
@@ -1140,15 +1140,15 @@ pub async fn tool_pin_export(
     })
 }
 
-// ───────────────────────── palavras-chave ─────────────────────────
+// ───────────────────────── keywords ─────────────────────────
 
 #[derive(Debug, Clone, Serialize)]
 pub struct KeywordsOut {
     pub term: String,
     pub suggestions: Vec<String>,
-    /// refinamentos que o Pinterest mostra na barra da busca
+    /// refinements Pinterest shows in the search bar
     pub guides: Vec<String>,
-    /// hashtags e palavras mais comuns nos títulos/descrições dos primeiros resultados
+    /// hashtags and most common words in the titles/descriptions of the first results
     pub common: Vec<(String, usize)>,
     pub sample: usize,
 }
@@ -1231,7 +1231,7 @@ pub async fn tool_pin_keywords(
     })
 }
 
-// ───────────────────────── fonte ─────────────────────────
+// ───────────────────────── source ─────────────────────────
 
 #[derive(Debug, Clone, Serialize)]
 pub struct LinkCheck {
@@ -1308,7 +1308,7 @@ pub async fn tool_pin_source(url: String, cookies: Option<String>) -> Result<Sou
     let c = client(&cookies)?;
     let (target, resolved_url) = resolve(&c, &url).await?;
     let Target::Pin { id } = &target else {
-        return Err("cole o link de um pin".into());
+        return Err("paste a pin link".into());
     };
     let pin = c.pin(id).await.map_err(err)?;
     let img = pin
@@ -1368,7 +1368,7 @@ pub async fn tool_pin_source(url: String, cookies: Option<String>) -> Result<Sou
     })
 }
 
-/// Expande pin.it e devolve a URL final + alvo reconhecido.
+/// Expands pin.it and returns the final URL + recognized target.
 #[tauri::command]
 pub async fn tool_pin_expand(url: String) -> Result<(String, Target), String> {
     let c = client(&None)?;

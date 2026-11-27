@@ -1,12 +1,12 @@
-//! Reddit (categoria `reddit`). O site publica qualquer permalink em JSON só
-//! acrescentando `.json` ao caminho, e é disso que estas ferramentas vivem:
-//! nada de login, nada de chave de API, só conteúdo público.
+//! Reddit (`reddit` category). The site publishes any permalink as JSON just by
+//! appending `.json` to the path, and that is what these tools live on:
+//! no login, no API key, only public content.
 //!
-//! - `download.rs`: post de vídeo (v.redd.it, vídeo **com** áudio pelo yt-dlp),
-//!   galeria de imagens (gallery-dl), imagem única (i.redd.it) e link externo.
-//! - `thread.rs`: backup de uma thread inteira (post + árvore de comentários)
-//!   em Markdown, HTML navegável e JSON cru normalizado.
-//! - `gdpr.rs`: leitura do export oficial de dados (pilha de CSV), sem rede.
+//! - `download.rs`: video post (v.redd.it, video **with** audio via yt-dlp),
+//!   image gallery (gallery-dl), single image (i.redd.it) and external link.
+//! - `thread.rs`: backup of a whole thread (post + comment tree)
+//!   in Markdown, navigable HTML and normalized raw JSON.
+//! - `gdpr.rs`: reading the official data export (pile of CSVs), no network.
 
 pub mod download;
 pub mod gdpr;
@@ -18,20 +18,20 @@ use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, Result};
 
-/// O que um link do Reddit aponta.
+/// What a Reddit link points to.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Target {
-    /// Post: `/r/<sub>/comments/<id>/<slug>/[<comentário>]`.
+    /// Post: `/r/<sub>/comments/<id>/<slug>/[<comment>]`.
     Post {
         subreddit: Option<String>,
         id: String,
         comment: Option<String>,
     },
-    /// `redd.it/<id>` e `/r/<sub>/s/<código>`: só um GET diz para onde vai.
+    /// `redd.it/<id>` and `/r/<sub>/s/<code>`: only a GET says where it goes.
     Short {
         url: String,
     },
-    /// Mídia direta: `i.redd.it`, `preview.redd.it` (imagem) ou `v.redd.it`.
+    /// Direct media: `i.redd.it`, `preview.redd.it` (image) or `v.redd.it`.
     Media {
         url: String,
         video: bool,
@@ -52,7 +52,7 @@ fn is_reddit_host(host: &str) -> bool {
     host == "reddit.com" || host.ends_with(".reddit.com")
 }
 
-/// Base36 de post e de comentário: curto e só alfanumérico.
+/// Post and comment base36: short and only alphanumeric.
 fn is_thing_id(s: &str) -> bool {
     let s = s.trim_start_matches("t3_").trim_start_matches("t1_");
     !s.is_empty()
@@ -68,7 +68,7 @@ fn clean_id(s: &str) -> String {
         .to_ascii_lowercase()
 }
 
-/// Deixa a entrada com esquema para o `url::Url` conseguir ler.
+/// Gives the input a scheme so `url::Url` can read it.
 fn with_scheme(input: &str) -> String {
     let s = input.trim();
     if s.starts_with("http://") || s.starts_with("https://") {
@@ -83,14 +83,14 @@ fn with_scheme(input: &str) -> String {
     format!("https://{}", s)
 }
 
-/// Lê qualquer forma de link do Reddit: permalink, `redd.it/<id>`, link de
-/// compartilhamento `/s/<código>`, mídia direta, sub, perfil — ou só o id.
+/// Reads any form of Reddit link: permalink, `redd.it/<id>`, share link
+/// `/s/<code>`, direct media, sub, profile — or just the id.
 pub fn parse_target(input: &str) -> Option<Target> {
     let raw = input.trim();
     if raw.is_empty() {
         return None;
     }
-    // Só o id do post, colado da barra de endereço.
+    // Just the post id, pasted from the address bar.
     if !raw.contains('/') && !raw.contains('.') && is_thing_id(raw) && raw.len() >= 5 {
         return Some(Target::Post {
             subreddit: None,
@@ -169,7 +169,7 @@ pub fn parse_target(input: &str) -> Option<Target> {
     }
 }
 
-/// Depois do slug pode vir o id do comentário focado (`/<slug>/<id>/` ou
+/// After the slug may come the focused comment's id (`/<slug>/<id>/` or
 /// `/<slug>/comment/<id>/`).
 fn comment_of(segs: &[String], from: usize) -> Option<String> {
     let tail: Vec<&str> = segs
@@ -178,14 +178,14 @@ fn comment_of(segs: &[String], from: usize) -> Option<String> {
         .map(|s| s.as_str())
         .filter(|s| *s != "comment")
         .collect();
-    // O primeiro item é o slug do título; o id vem depois.
+    // The first item is the title slug; the id comes after.
     tail.iter()
         .skip(1)
         .find(|s| is_thing_id(s) && s.len() >= 5)
         .map(|s| clean_id(s))
 }
 
-/// JSON do post inteiro. `/comments/<id>.json` dispensa saber o sub.
+/// JSON of the whole post. `/comments/<id>.json` does not need to know the sub.
 pub fn post_json_url(id: &str, sort: &str, limit: u32) -> String {
     format!(
         "https://www.reddit.com/comments/{}.json?limit={}&raw_json=1&sort={}",
@@ -193,7 +193,7 @@ pub fn post_json_url(id: &str, sort: &str, limit: u32) -> String {
     )
 }
 
-/// JSON de um galho: o permalink do comentário com `context=0`.
+/// JSON of a branch: the comment's permalink with `context=0`.
 pub fn branch_json_url(post_id: &str, comment_id: &str, sort: &str, limit: u32) -> String {
     format!(
         "https://www.reddit.com/comments/{}/_/{}.json?limit={}&raw_json=1&sort={}&context=0",
@@ -201,8 +201,8 @@ pub fn branch_json_url(post_id: &str, comment_id: &str, sort: &str, limit: u32) 
     )
 }
 
-/// `api/morechildren`: os comentários que a página escondeu atrás de
-/// "carregar mais". Público, sem token.
+/// `api/morechildren`: the comments the page hid behind
+/// "load more". Public, no token.
 pub fn more_children_url(post_id: &str, children: &[String], sort: &str) -> String {
     format!(
         "https://www.reddit.com/api/morechildren.json?api_type=json&link_id=t3_{}&children={}&limit_children=false&sort={}&raw_json=1",
@@ -212,9 +212,9 @@ pub fn more_children_url(post_id: &str, children: &[String], sort: &str) -> Stri
     )
 }
 
-/// O desafio de JavaScript que o Reddit serve para quem chega sem cookie:
-/// uma página com um `jsc_token` e um script que dobra uma constante. Sem
-/// passar por ele, todo `.json` volta 403 ("blocked by network security").
+/// The JavaScript challenge Reddit serves to whoever arrives without a cookie:
+/// a page with a `jsc_token` and a script that doubles a constant. Without
+/// passing it, every `.json` comes back 403 ("blocked by network security").
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct JsChallenge {
     pub action: String,
@@ -222,7 +222,7 @@ pub struct JsChallenge {
     pub solution: String,
 }
 
-/// Lê o desafio de dentro do HTML. `None` quando a página é normal.
+/// Reads the challenge from inside the HTML. `None` when the page is normal.
 pub fn parse_js_challenge(html: &str) -> Option<JsChallenge> {
     if !html.contains("jsc_token") {
         return None;
@@ -230,8 +230,8 @@ pub fn parse_js_challenge(html: &str) -> Option<JsChallenge> {
     let token = between(html, "name=\"jsc_token\" value=\"", "\"")?;
     let action = between(html, "<form hidden method=\"GET\" action=\"", "\"")
         .unwrap_or_else(|| "/".to_string());
-    // `await(async e=>e+e)("2e40…")`: a resposta é a constante repetida uma
-    // vez por termo da soma.
+    // `await(async e=>e+e)("2e40…")`: the answer is the constant repeated once
+    // per term of the sum.
     let re = regex::Regex::new(
         r#"\(\s*async\s+(\w+)\s*=>\s*((?:\w+\s*\+\s*)*\w+)\s*\)\s*\(\s*"([0-9A-Za-z]+)"\s*\)"#,
     )
@@ -258,10 +258,9 @@ fn between(hay: &str, open: &str, close: &str) -> Option<String> {
     Some(rest[..end].to_string())
 }
 
-/// Cliente com freio: o Reddit devolve 429 com facilidade em conteúdo
-/// público, então uma requisição por vez, com espera entre elas e recuo
-/// crescente quando o servidor reclama. Guarda cookies porque o desafio de
-/// JavaScript da porta de entrada só vale enquanto eles durarem.
+/// Throttled client: Reddit returns 429 easily on public content, so one request at a time,
+/// with a wait between them and growing backoff when the server complains. It keeps cookies because the
+/// entry-door JavaScript challenge is only valid while they last.
 pub struct Fetcher {
     client: reqwest::Client,
     delay: Duration,
@@ -271,9 +270,9 @@ pub struct Fetcher {
     has_session: bool,
 }
 
-/// Filtra os cookies do bucket `reddit.com` de um arquivo Netscape e monta o
-/// pote do cliente. Reusa o parser que a sessão do Instagram já usa — é o
-/// mesmo formato que o gerenciador de cookies do app grava para todo mundo.
+/// Filters the `reddit.com` bucket cookies from a Netscape file and builds the
+/// client jar. It reuses the parser the Instagram session already uses — it is the
+/// same format the app's cookie manager writes for everyone.
 fn jar_from_netscape(content: &str) -> (Arc<reqwest::cookie::Jar>, usize) {
     let jar = reqwest::cookie::Jar::default();
     let mut n = 0;
@@ -296,8 +295,8 @@ fn jar_from_netscape(content: &str) -> (Arc<reqwest::cookie::Jar>, usize) {
     (Arc::new(jar), n)
 }
 
-/// Mesmo UA do `tools::client()`, mas com loja de cookies: sem guardar o que
-/// o desafio devolve, a próxima requisição volta a ser barrada.
+/// Same UA as `tools::client()`, but with a cookie store: without keeping what
+/// the challenge returns, the next request gets blocked again.
 fn cookie_client(session: Option<&str>) -> Result<(reqwest::Client, bool)> {
     use reqwest::header::{HeaderMap, HeaderValue, ACCEPT_LANGUAGE, USER_AGENT};
     let mut headers = HeaderMap::new();
@@ -311,8 +310,8 @@ fn cookie_client(session: Option<&str>) -> Result<(reqwest::Client, bool)> {
         ACCEPT_LANGUAGE,
         HeaderValue::from_static("en-US,en;q=0.9,pt-BR;q=0.8"),
     );
-    // O pote sempre existe: além de carregar a sessão do usuário (quando ela
-    // vem), é ele que guarda o que o desafio de JavaScript devolve.
+    // The jar always exists: besides carrying the user's session (when it
+    // comes), it is what keeps what the JavaScript challenge returns.
     let (jar, seeded) = match session {
         Some(content) => jar_from_netscape(content),
         None => (Arc::new(reqwest::cookie::Jar::default()), 0),
@@ -326,10 +325,10 @@ fn cookie_client(session: Option<&str>) -> Result<(reqwest::Client, bool)> {
 }
 
 impl Fetcher {
-    /// `session` é o conteúdo Netscape do bucket `reddit.com` capturado pela
-    /// extensão, quando existe. Com ele o Reddit responde como responde para o
-    /// navegador do usuário e o desafio de JavaScript nem aparece; sem ele, o
-    /// desafio continua sendo o caminho (é o que sustenta o modo anônimo).
+    /// `session` is the Netscape content of the `reddit.com` bucket captured by the
+    /// extension, when it exists. With it Reddit responds as it responds to the
+    /// user's browser and the JavaScript challenge does not even appear; without it, the
+    /// challenge remains the way through (it is what sustains anonymous mode).
     pub fn new(delay_ms: u64, session: Option<&str>) -> Result<Self> {
         let (client, has_session) = cookie_client(session)?;
         Ok(Self {
@@ -342,7 +341,7 @@ impl Fetcher {
         })
     }
 
-    /// Se a requisição está saindo com a sessão do usuário ou anônima.
+    /// Whether the request is going out with the user's session or anonymously.
     pub fn has_session(&self) -> bool {
         self.has_session
     }
@@ -366,9 +365,9 @@ impl Fetcher {
         *last = Some(Instant::now());
     }
 
-    /// Passa pela porta de entrada: abre uma página normal, resolve o desafio
-    /// de JavaScript se ele aparecer e guarda os cookies. Sem isso o Reddit
-    /// responde 403 em todo `.json`.
+    /// Goes through the entry door: opens a normal page, solves the JavaScript
+    /// challenge if it appears and keeps the cookies. Without this Reddit
+    /// answers 403 on every `.json`.
     pub async fn unlock(&self) -> Result<()> {
         let mut done = self.unlocked.lock().await;
         if *done {
@@ -409,8 +408,8 @@ impl Fetcher {
         Ok(())
     }
 
-    /// GET com JSON de volta. Repete em 429 e em erro de servidor, e passa
-    /// pelo desafio de JavaScript quando leva 403.
+    /// GET with JSON back. Retries on 429 and on server errors, and goes
+    /// through the JavaScript challenge when it gets a 403.
     pub async fn get_json(&self, url: &str) -> Result<serde_json::Value> {
         const TRIES: u32 = 4;
         let mut wait = Duration::from_secs(3);
@@ -426,13 +425,13 @@ impl Fetcher {
                 Ok(r) if r.status().is_success() => {
                     let text = r.text().await?;
                     return serde_json::from_str(&text).map_err(|e| {
-                        anyhow!("o Reddit respondeu algo que não é JSON ({}): {}", e, url)
+                        anyhow!("Reddit answered something that is not JSON ({}): {}", e, url)
                     });
                 }
                 Ok(r) if r.status().as_u16() == 429 || r.status().is_server_error() => {
                     if attempt == TRIES {
                         return Err(anyhow!(
-                            "o Reddit está limitando o acesso (HTTP {}). Tente de novo daqui a pouco",
+                            "Reddit is limiting access (HTTP {}). Try again in a bit",
                             r.status()
                         ));
                     }
@@ -447,12 +446,12 @@ impl Fetcher {
                 }
                 Ok(r) if r.status().as_u16() == 403 => {
                     return Err(anyhow!(
-                        "o Reddit barrou o acesso público (403). Costuma ser bloqueio de rede ou conteúdo restrito: tente de outra conexão"
+                        "Reddit blocked public access (403). Usually a network block or restricted content: try from another connection"
                     ));
                 }
                 Ok(r) if r.status().as_u16() == 404 => {
                     return Err(anyhow!(
-                        "post não encontrado (apagado, privado ou id errado)"
+                        "post not found (deleted, private or wrong id)"
                     ));
                 }
                 Ok(r) => {
@@ -466,10 +465,10 @@ impl Fetcher {
                 Err(e) => return Err(e.into()),
             }
         }
-        Err(anyhow!("não foi possível ler {}", url))
+        Err(anyhow!("could not read {}", url))
     }
 
-    /// Segue os redirecionamentos de um link curto e devolve a URL final.
+    /// Follows a short link's redirects and returns the final URL.
     pub async fn resolve(&self, url: &str) -> Result<String> {
         self.pace().await;
         self.requests.fetch_add(1, Ordering::Relaxed);
@@ -478,14 +477,14 @@ impl Fetcher {
     }
 }
 
-/// Data legível a partir do `created_utc` do Reddit.
+/// Readable date from Reddit's `created_utc`.
 pub fn fmt_utc(ts: f64) -> String {
     chrono::DateTime::from_timestamp(ts as i64, 0)
         .map(|d| d.format("%Y-%m-%d %H:%M UTC").to_string())
         .unwrap_or_default()
 }
 
-/// Escapa o que vai para dentro de um HTML gerado por nós.
+/// Escapes what goes into an HTML we generated.
 pub fn esc(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {
@@ -518,8 +517,8 @@ mod tests {
 
     #[test]
     fn o_pote_so_aceita_cookie_do_reddit() {
-        // Formato Netscape: dominio, flag de subdominio, path, secure, expira,
-        // nome, valor. A terceira linha e de outro site e nao pode entrar.
+        // Netscape format: domain, subdomain flag, path, secure, expires,
+        // name, value. The third line is from another site and cannot enter.
         let content = "\
 # Netscape HTTP Cookie File
 .reddit.com\tTRUE\t/\tTRUE\t0\treddit_session\tabc123

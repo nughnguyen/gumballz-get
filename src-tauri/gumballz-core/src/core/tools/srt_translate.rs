@@ -1,7 +1,7 @@
-//! Tradução de legendas em lote (estudos 08, 12, 13): pelo LLM configurado
-//! em `core/ai.rs` (prompt "faithfulness" do VideoLingo, com contexto) ou por
-//! um servidor LibreTranslate. O alinhamento é por índice: cada cue volta com
-//! o mesmo número, então nunca desloca a legenda.
+//! Batch subtitle translation (studies 08, 12, 13): via the configured LLM
+//! in `core/ai.rs` (VideoLingo's "faithfulness" prompt, with context) or via
+//! a LibreTranslate server. Alignment is by index: each cue comes back with
+//! the same number, so it never shifts the subtitles.
 
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
@@ -11,7 +11,7 @@ use crate::core::subtitle_merge::Cue;
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Translator {
-    /// Provedor de IA já configurado no GumballZ Get (OpenAI, Anthropic, local).
+    /// AI provider already configured in GumballZ Get (OpenAI, Anthropic, local).
     Llm,
     LibreTranslate {
         base_url: String,
@@ -25,7 +25,7 @@ pub struct TranslateOptions {
     pub translator: Translator,
     pub source_lang: String,
     pub target_lang: String,
-    /// Contexto extra (tema do vídeo, glossário) que entra no prompt do LLM.
+    /// Extra context (video topic, glossary) that goes into the LLM prompt.
     #[serde(default)]
     pub context: String,
     #[serde(default = "default_batch")]
@@ -111,12 +111,12 @@ async fn translate_batch_llm(
                 if let Some(parsed) = parse_llm_json(&text, lines.len()) {
                     return Ok(parsed);
                 }
-                last_err = "resposta fora do formato JSON".to_string();
+                last_err = "response not in JSON format".to_string();
             }
             Err(e) => last_err = e,
         }
     }
-    Err(anyhow!("tradução por IA falhou: {}", last_err))
+    Err(anyhow!("AI translation failed: {}", last_err))
 }
 
 async fn translate_batch_libre(
@@ -141,7 +141,7 @@ async fn translate_batch_libre(
     let v: serde_json::Value = resp
         .json()
         .await
-        .map_err(|e| anyhow!("LibreTranslate: resposta invalida ({})", e))?;
+        .map_err(|e| anyhow!("LibreTranslate: invalid response ({})", e))?;
     if !status.is_success() {
         return Err(anyhow!(
             "LibreTranslate: HTTP {} {}",

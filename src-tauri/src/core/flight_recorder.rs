@@ -1,28 +1,28 @@
-//! Caixa-preta: os ultimos N eventos do app, redigidos, para anexar a um bug
-//! report.
+//! Black box: the app's last N events, redacted, to attach to a bug report.
 //!
-//! O `download_log` que ja existe e por download e some no restart. Isto e
-//! global e atravessa downloads, plugins e bootstrap — o que falta quando
-//! alguem diz "parou de funcionar" e nao sabe dizer quando comecou.
+//! The `download_log` that already exists is per download and disappears on
+//! restart. This one is global and spans downloads, plugins and bootstrap —
+//! what is missing when someone says "it stopped working" and cannot say when
+//! it started.
 //!
-//! O item aqui e a **redacao**, nao o buffer. Um despejo de log que vaza cookie
-//! ou token e pior que nenhum despejo, porque o usuario cola em issue publica
-//! achando que e seguro. Por isso a redacao e funcao pura e testada por classe
-//! de segredo, e o buffer e so um `VecDeque`.
+//! The point here is the **redaction**, not the buffer. A log dump that leaks a
+//! cookie or token is worse than no dump, because the user pastes it into a
+//! public issue thinking it is safe. That is why redaction is a pure function
+//! tested per secret class, and the buffer is just a `VecDeque`.
 
 use std::collections::VecDeque;
 use std::sync::{Mutex, OnceLock};
 
-/// Quantos eventos ficam retidos. Alto o bastante para cobrir uma sessao de
-/// download, baixo o bastante para caber num comentario de issue.
+/// How many events are retained. High enough to cover a download session, low
+/// enough to fit in an issue comment.
 pub const CAPACITY: usize = 500;
 
-/// Substitui todo segredo conhecido por um marcador estavel.
+/// Replaces every known secret with a stable marker.
 ///
-/// Blocklist e o inverso do que se quer para seguranca, mas aqui e inevitavel:
-/// a entrada e log arbitrario de yt-dlp, ffmpeg e plugins, e nao existe forma de
-/// enumerar o que e seguro. A mitigacao e cobrir por *classe* de segredo e
-/// testar cada uma, em vez de por padrao literal.
+/// A blocklist is the opposite of what security wants, but here it is
+/// unavoidable: the input is arbitrary log from yt-dlp, ffmpeg and plugins, and
+/// there is no way to enumerate what is safe. The mitigation is to cover by
+/// *class* of secret and test each one, instead of by literal pattern.
 pub fn redact(line: &str) -> String {
     let mut out = String::with_capacity(line.len());
     let mut rest = line;
@@ -44,12 +44,12 @@ pub fn redact(line: &str) -> String {
     redact_home_paths(&out)
 }
 
-/// Acha o proximo segredo: `(offset, comprimento, substituto)`.
+/// Finds the next secret: `(offset, length, replacement)`.
 fn next_secret(hay: &str) -> Option<(usize, usize, &'static str)> {
     let lower = hay.to_lowercase();
     let mut best: Option<(usize, usize, &'static str)> = None;
 
-    // Chave=valor, em query string, header ou linha de config.
+    // Key=value, in a query string, header or config line.
     const KEYED: &[&str] = &[
         "cookie=",
         "cookies=",
@@ -101,10 +101,10 @@ fn next_secret(hay: &str) -> Option<(usize, usize, &'static str)> {
     best
 }
 
-/// Troca o diretorio pessoal por `~`, nas tres convencoes.
+/// Swaps the home directory for `~`, in all three conventions.
 ///
-/// Nome de usuario num path e identificavel e vaza sozinho — muita gente cola o
-/// log sem olhar.
+/// A username in a path is identifying and leaks on its own — many people paste
+/// the log without looking.
 fn redact_home_paths(line: &str) -> String {
     let mut out = line.to_string();
     for prefix in ["/Users/", "/home/", "\\Users\\"] {
@@ -116,7 +116,7 @@ fn redact_home_paths(line: &str) -> String {
                 .map(|e| after + e)
                 .unwrap_or(out.len());
             if end == after {
-                break; // prefixo sem nome de usuario depois; nada a redigir
+                break; // prefix with no username after it; nothing to redact
             }
             out.replace_range(i..end, "~");
         }
@@ -124,12 +124,12 @@ fn redact_home_paths(line: &str) -> String {
     out
 }
 
-/// Buffer circular, sem estado global.
+/// Circular buffer, with no global state.
 ///
-/// Extraido de proposito: com o buffer atras de um `static`, dois testes que
-/// gravam eventos disputam a mesma estrutura e um deles falha de forma
-/// intermitente. Testar a estrutura direto elimina a corrida em vez de
-/// contorna-la com serializacao de teste.
+/// Extracted on purpose: with the buffer behind a `static`, two tests that
+/// record events fight over the same structure and one of them fails
+/// intermittently. Testing the structure directly removes the race instead of
+/// working around it with test serialization.
 #[derive(Debug)]
 pub struct Recorder {
     events: VecDeque<String>,
@@ -144,9 +144,9 @@ impl Recorder {
         }
     }
 
-    /// Grava um evento. A redacao acontece **na entrada**, nao no despejo: um
-    /// segredo que entra em claro ja vazou para quem tiver acesso a memoria, e
-    /// o despejo pode ser esquecido.
+    /// Records an event. Redaction happens **at entry**, not at dump time: a
+    /// secret that comes in in the clear has already leaked to anyone with
+    /// access to memory, and the dump can be forgotten.
     pub fn record(&mut self, event: &str) {
         if self.events.len() >= self.capacity {
             self.events.pop_front();
@@ -154,7 +154,7 @@ impl Recorder {
         self.events.push_back(redact(event));
     }
 
-    /// Do mais antigo ao mais recente.
+    /// From oldest to newest.
     pub fn dump(&self) -> Vec<String> {
         self.events.iter().cloned().collect()
     }
@@ -203,7 +203,7 @@ mod tests {
         let s = redact("GET /video?id=42&cookie=abc123def&x=1");
         assert!(!s.contains("abc123def"), "{s}");
         assert!(s.contains("cookie=[REDACTED]"), "{s}");
-        // O resto da linha precisa sobreviver, senao o log perde utilidade.
+        // The rest of the line has to survive, or the log loses its usefulness.
         assert!(s.contains("id=42"), "{s}");
         assert!(s.contains("x=1"), "{s}");
     }
@@ -221,29 +221,29 @@ mod tests {
         ];
         for (entrada, segredo) in casos {
             let s = redact(entrada);
-            assert!(!s.contains(segredo), "vazou {segredo:?} em {s:?}");
+            assert!(!s.contains(segredo), "leaked {segredo:?} in {s:?}");
             assert!(s.contains("[REDACTED]"), "{s}");
         }
     }
 
     #[test]
     fn redige_o_nome_de_usuario_do_caminho() {
-        // Path pessoal identifica a pessoa sozinho, e e o que mais aparece em
-        // log colado em issue publica.
+        // A personal path identifies the person on its own, and it is what shows
+        // up most in logs pasted into public issues.
         for (entrada, proibido) in [
             ("/Users/nughnguyen/Downloads/x.mp4", "nughnguyen"),
             ("/home/maria/videos", "maria"),
             ("C:\\Users\\Joao\\AppData", "Joao"),
         ] {
             let s = redact(entrada);
-            assert!(!s.contains(proibido), "vazou usuario em {s:?}");
+            assert!(!s.contains(proibido), "leaked username in {s:?}");
             assert!(s.contains('~'), "{s}");
         }
     }
 
     #[test]
     fn linha_sem_segredo_atravessa_intacta() {
-        // Redacao agressiva demais destroi o valor do log.
+        // Redaction that is too aggressive destroys the log's value.
         let limpa = "[ytdlp] merging formats 137+140 into out.mp4";
         assert_eq!(redact(limpa), limpa);
     }
@@ -270,8 +270,8 @@ mod tests {
 
     #[test]
     fn o_buffer_guarda_redigido_e_nao_o_original() {
-        // Redigir so no despejo deixaria o segredo em memoria e dependeria de
-        // ninguem esquecer de chamar a redacao no caminho de saida.
+        // Redacting only at dump time would leave the secret in memory and depend
+        // on nobody forgetting to call redaction on the way out.
         let mut r = Recorder::new(4);
         r.record("cookie=segredo_absoluto");
         assert!(!r.dump()[0].contains("segredo_absoluto"), "{:?}", r.dump());

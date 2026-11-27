@@ -1,9 +1,9 @@
-//! Comprimir vídeo para um alvo exato de tamanho (o limite de anexo do
-//! Discord, do e-mail, do WhatsApp) com duas passagens do FFmpeg já gerido.
+//! Compress a video to an exact size target (Discord, email, WhatsApp
+//! attachment limits) with two passes of the already-managed FFmpeg.
 //!
-//! O padrão é o mesmo do ffmpeg4discord: mede a duração, divide o orçamento
-//! de bits pelo tempo, tira o áudio da conta e roda `-pass 1` / `-pass 2`.
-//! Uma passagem só erra o alvo para cima ou para baixo; duas acertam.
+//! The pattern is the same as ffmpeg4discord: measure the duration, divide the bit
+//! budget by the time, take the audio out of the equation and run `-pass 1` / `-pass 2`.
+//! One pass alone misses the target up or down; two hit it.
 
 use std::path::{Path, PathBuf};
 
@@ -13,15 +13,15 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Deserialize)]
 pub struct CompressOptions {
     pub inputs: Vec<String>,
-    /// Alvo em MB (base 1024, que é o que o Discord conta).
+    /// Target in MB (base 1024, which is what Discord counts).
     pub target_mb: f64,
     /// "h264" | "h265" | "vp9"
     #[serde(default = "default_codec")]
     pub codec: String,
-    /// 0 = escolher sozinho (128k estéreo, 96k mono); o áudio sai do orçamento.
+    /// 0 = choose on its own (128k stereo, 96k mono); the audio comes out of the budget.
     #[serde(default)]
     pub audio_kbps: u32,
-    /// 0 = manter a resolução original.
+    /// 0 = keep the original resolution.
     #[serde(default)]
     pub max_height: u32,
     /// 0 = manter o frame rate original.
@@ -62,11 +62,11 @@ pub struct CompressResult {
     pub items: Vec<CompressItem>,
 }
 
-/// Divide o orçamento de bits entre vídeo e áudio. Devolve `(vídeo, áudio)`
-/// em kbps, ou `None` quando nem cortando o áudio o alvo cabe.
+/// Splits the bit budget between video and audio. Returns `(video, audio)`
+/// in kbps, or `None` when the target does not fit even after cutting the audio.
 ///
-/// `headroom` desconta o overhead do container (moov box, índices): mirar
-/// 100% do alvo estoura por alguns por cento em arquivo curto.
+/// `headroom` discounts the container overhead (moov box, indexes): aiming at
+/// 100% of the target overshoots by a few percent on a short file.
 pub fn plan_bitrates(
     duration_s: f64,
     target_bytes: u64,
@@ -82,7 +82,7 @@ pub fn plan_bitrates(
         let v = total_kbps.floor() as u32;
         return (v >= 60).then_some((v, 0));
     }
-    // Vai cedendo o áudio antes de desistir: 96k já é aceitável para fala.
+    // Yields the audio before giving up: 96k is already fine for speech.
     for a in [audio_kbps, 96, 64, 48, 32] {
         if a == 0 {
             continue;
@@ -136,7 +136,7 @@ fn scale_filter(max_height: u32) -> Option<String> {
     })
 }
 
-/// Argumentos comuns às duas passagens (entrada, filtros, bitrate de vídeo).
+/// Common arguments of the two passes (input, filters, video bitrate).
 fn common_args(opts: &CompressOptions, video_kbps: u32) -> Vec<String> {
     let mut a: Vec<String> = vec![
         "-c:v".into(),
@@ -178,7 +178,7 @@ async fn run_pass(
     let out = cmd
         .output()
         .await
-        .map_err(|e| anyhow!("ffmpeg nao iniciou: {}", e))?;
+        .map_err(|e| anyhow!("ffmpeg did not start: {}", e))?;
     if !out.status.success() {
         return Err(anyhow!(
             "ffmpeg passagem {}: {}",
@@ -232,7 +232,7 @@ async fn compress_one(
     )
     .ok_or_else(|| {
         anyhow!(
-            "alvo pequeno demais para {:.0}s de vídeo — aumente o tamanho ou corte o clipe",
+            "target too small for {:.0}s of video — increase the size or trim the clip",
             probe.duration_seconds
         )
     })?;
@@ -260,8 +260,8 @@ async fn compress_one(
 
     let mut kbps = video_kbps;
     let mut bytes_after = 0u64;
-    // Uma correção só: se a primeira tentativa passar do alvo, reencaixa o
-    // bitrate na proporção do estouro e refaz a passagem 2 (o log da 1 vale).
+    // A single correction: if the first attempt goes past the target, refit the
+    // bitrate in proportion to the overshoot and redo pass 2 (pass 1's log still counts).
     for attempt in 0..2u8 {
         let args = common_args(opts, kbps);
         let mut tail: Vec<String> = Vec::new();
@@ -374,10 +374,10 @@ mod tests {
 
     #[test]
     fn budget_splits_audio_out() {
-        // 10 MB para 60 s: ~1356 kbps no total, menos 128 de áudio.
+        // 10 MB for 60 s: ~1356 kbps in total, minus 128 of audio.
         let (v, a) = plan_bitrates(60.0, 10 * 1024 * 1024, 128, true, 0.97).unwrap();
         assert_eq!(a, 128);
-        assert!((1200..1260).contains(&v), "bitrate fora da faixa: {}", v);
+        assert!((1200..1260).contains(&v), "bitrate outside the range: {}", v);
     }
 
     #[test]
@@ -389,16 +389,16 @@ mod tests {
 
     #[test]
     fn budget_degrades_audio_before_failing() {
-        // 8 MB para 10 min: com 128k de áudio não sobra vídeo; tem que ceder.
+        // 8 MB for 10 min: with 128k of audio no video is left; it has to yield.
         let (v, a) = plan_bitrates(600.0, 8 * 1024 * 1024, 128, true, 0.97).unwrap();
         assert_eq!(a, 48);
-        assert!(v >= 60, "vídeo ficou abaixo do piso: {}", v);
+        assert!(v >= 60, "video fell below the floor: {}", v);
     }
 
     #[test]
     fn budget_refuses_the_impossible() {
         assert!(plan_bitrates(7200.0, 1024 * 1024, 128, true, 0.97).is_none());
-        // 8 MB para 30 min não cabe nem cortando o áudio ao mínimo.
+        // 8 MB for 30 min does not fit even after cutting the audio to the minimum.
         assert!(plan_bitrates(1800.0, 8 * 1024 * 1024, 128, true, 0.97).is_none());
         assert!(plan_bitrates(0.0, 10 * 1024 * 1024, 128, true, 0.97).is_none());
     }
@@ -409,8 +409,8 @@ mod tests {
         assert!(scale_filter(721).unwrap().contains("min(720,ih)"));
     }
 
-    /// Ponta a ponta com o FFmpeg gerido: gera um clipe, comprime para 1 MB
-    /// e confere que o alvo foi respeitado sem perder áudio nem duração.
+    /// End to end with the managed FFmpeg: generates a clip, compresses it to 1 MB
+    /// and checks the target was respected without losing audio or duration.
     /// `cargo test -p gumballz-core --lib -- --ignored live_compress`
     #[tokio::test]
     #[ignore]
@@ -446,7 +446,7 @@ mod tests {
             .output()
             .await
             .unwrap();
-        assert!(gen.status.success(), "não consegui gerar o clipe de teste");
+        assert!(gen.status.success(), "could not generate the test clip");
         let original = std::fs::metadata(&src).unwrap().len();
 
         let opts = CompressOptions {
@@ -471,7 +471,7 @@ mod tests {
             item.bytes_after,
             item.target_bytes
         );
-        assert!(item.bytes_after < original, "não comprimiu nada");
+        assert!(item.bytes_after < original, "did not compress anything");
 
         let out = item.output.as_ref().unwrap();
         let probe = crate::core::ffmpeg::probe(std::path::Path::new(out))
@@ -479,24 +479,24 @@ mod tests {
             .unwrap();
         assert!(
             (probe.duration_seconds - 20.0).abs() < 1.0,
-            "duração mudou: {}",
+            "duration changed: {}",
             probe.duration_seconds
         );
         assert!(
             probe.streams.iter().any(|s| s.codec_type == "audio"),
-            "perdeu o áudio"
+            "lost the audio"
         );
         eprintln!(
-            "{} → {} bytes (alvo {}), vídeo {} kbps",
+            "{} → {} bytes (target {}), video {} kbps",
             original, item.bytes_after, item.target_bytes, item.video_kbps
         );
-        // O log de duas passagens não pode ficar para trás.
+        // The two-pass log must not be left behind.
         assert!(
             !std::fs::read_dir(&dir)
                 .unwrap()
                 .flatten()
                 .any(|e| e.file_name().to_string_lossy().contains("pass")),
-            "sobrou log de passagem na pasta de saída"
+            "pass log left in the output folder"
         );
     }
 

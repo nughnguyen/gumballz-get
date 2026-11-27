@@ -1,6 +1,6 @@
-//! Tabela filtravel do `Connections.csv`: normaliza, busca, filtra por
-//! periodo, agrupa por empresa e cargo, acha duplicados e marca quem veio sem
-//! email. Exporta o resultado filtrado em CSV ou JSON.
+//! Filterable table of `Connections.csv`: normalizes, searches, filters by
+//! period, groups by company and role, finds duplicates and marks who came without
+//! email. Exports the filtered result as CSV or JSON.
 
 use std::collections::HashMap;
 
@@ -16,21 +16,21 @@ const ID: &str = "li-connections";
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Options {
-    /// Zip do export ou pasta ja extraida.
+    /// Export zip or already-extracted folder.
     pub path: String,
-    /// Busca livre em nome, empresa e cargo.
+    /// Free search in name, company and role.
     pub query: Option<String>,
     pub company: Option<String>,
     pub position: Option<String>,
-    /// Recorte por data de conexao, em `YYYY-MM-DD` ou `YYYY-MM`.
+    /// Cut by connection date, in `YYYY-MM-DD` or `YYYY-MM`.
     pub from: Option<String>,
     pub to: Option<String>,
     pub only_without_email: Option<bool>,
     pub only_duplicates: Option<bool>,
-    /// "date" (padrao), "name" ou "company".
+    /// "date" (default), "name" or "company".
     pub sort: Option<String>,
     pub limit: Option<usize>,
-    /// "csv" ou "json" para gravar o filtrado.
+    /// "csv" or "json" to write the filtered result.
     pub export: Option<String>,
     pub out_dir: Option<String>,
 }
@@ -44,9 +44,9 @@ pub struct Connection {
     pub email: String,
     pub company: String,
     pub position: String,
-    /// Data como veio no CSV.
+    /// Date as it came in the CSV.
     pub connected_on: String,
-    /// Mesma data em `YYYY-MM-DD`, vazio quando nao deu para ler.
+    /// Same date in `YYYY-MM-DD`, empty when it could not be read.
     pub date: String,
     pub month: String,
 }
@@ -75,7 +75,7 @@ pub struct ConnectionsResult {
     pub exports: Vec<String>,
 }
 
-/// Slug do perfil (`/in/<slug>`), que e o identificador estavel da conexao.
+/// Profile slug (`/in/<slug>`), which is the connection's stable identifier.
 fn slug(url: &str) -> String {
     let u = url
         .split(['?', '#'])
@@ -88,7 +88,7 @@ fn slug(url: &str) -> String {
     }
 }
 
-/// Le o `Connections.csv` ja normalizado.
+/// Reads the already-normalized `Connections.csv`.
 pub fn load(src: &Source) -> Vec<Connection> {
     let t: Table = src.table_or_empty(&["Connections.csv"]);
     let mut out = Vec::with_capacity(t.len());
@@ -123,8 +123,8 @@ pub fn load(src: &Source) -> Vec<Connection> {
     out
 }
 
-/// Conjuntos disjuntos simples para juntar duplicados que casam por chaves
-/// diferentes (mesmo perfil, mesmo nome+empresa, mesmo email).
+/// Simple disjoint sets to join duplicates that match on different keys
+/// (same profile, same name+company, same email).
 struct Dsu(Vec<usize>);
 
 impl Dsu {
@@ -152,7 +152,7 @@ impl Dsu {
     }
 }
 
-/// Agrupa duplicados. A razao do grupo diz por que eles casaram.
+/// Groups duplicates. The group's reason says why they matched.
 pub fn duplicates(items: &[Connection]) -> Vec<DupGroup> {
     let mut dsu = Dsu::new(items.len());
     let mut reasons: HashMap<usize, &str> = HashMap::new();
@@ -224,7 +224,7 @@ fn in_range(date: &str, from: Option<&str>, to: Option<&str>) -> bool {
                 }
             }
             if let Some(t) = to.filter(|s| !s.trim().is_empty()) {
-                // `to` em `YYYY-MM` pega o mes inteiro.
+                // `to` in `YYYY-MM` takes the whole month.
                 let t = t.trim();
                 let cut = if t.len() <= 7 {
                     format!("{}-31", t)

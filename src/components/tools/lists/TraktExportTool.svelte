@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Trakt: device flow com as credenciais do próprio usuário, e o export. */
+  /** Trakt: device flow with the user's own credentials, plus the export. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

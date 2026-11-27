@@ -1,14 +1,14 @@
 /**
- * Catálogo da seção Tools.
+ * Catalog of the Tools section.
  *
- * Cada ferramenta pertence a uma categoria (YouTube, Edição de vídeo,
- * Instagram…) e declara em quais sistemas roda. A busca do hub é genérica:
- * "instagram" acha a categoria e tudo que está dentro dela, "legenda" acha
- * ferramentas de qualquer categoria. Para isso cada entrada carrega uma
- * lista de palavras-chave em português e inglês além do nome traduzido.
+ * Each tool belongs to a category (YouTube, Video editing,
+ * Instagram…) and declares which systems it runs on. Hub search is generic:
+ * "instagram" finds the category and everything in it, "legenda" finds
+ * tools from any category. For that, each entry carries a
+ * list of keywords in Portuguese and English besides the translated name.
  *
- * Nome e descrição ficam no i18n (`tools.categories.<id>.*` e
- * `tools.catalog.<id>.*`); aqui só vive o que não muda com o idioma.
+ * Name and description live in i18n (`tools.categories.<id>.*` and
+ * `tools.catalog.<id>.*`); only what doesn't change with the language lives here.
  */
 
 export type OsName = "windows" | "macos" | "linux";
@@ -16,18 +16,18 @@ export const ALL_OS: OsName[] = ["windows", "macos", "linux"];
 
 export type ToolStatus = "ready" | "beta" | "soon";
 
-/** Filtro de plataforma do hub. `cross` = roda nos três sistemas. */
+/** Hub platform filter. `cross` = runs on all three systems. */
 export type PlatformFilter = "all" | "cross" | OsName;
 
 export type ToolIconSpec = {
   /**
-   * `brand:<arquivo em static/brands>`, `glyph:<arquivo em static/icons>` ou
-   * `app:<arquivo .png em static/apps>` (ícone de app pronto, sem gradiente).
+   * `brand:<file in static/brands>`, `glyph:<file in static/icons>` or
+   * `app:<.png file in static/apps>` (ready-made app icon, no gradient).
    */
   icon: string;
   from: string;
   to: string;
-  /** Gradiente com três paradas (Instagram). */
+  /** Gradient with three stops (Instagram). */
   via?: string;
 };
 
@@ -44,14 +44,14 @@ export type ToolEntry = ToolIconSpec & {
   platforms: OsName[];
   status: ToolStatus;
   /**
-   * Para onde o tile leva. Ferramentas que já existem em outra parte do app
-   * apontam para a rota delas; as que rodam dentro do Tools apontam para
-   * `/tools/<categoria>/<id>` e o runner decide o que montar.
+   * Where the tile leads. Tools that already exist elsewhere in the app
+   * point at their own route; the ones that run inside Tools point at
+   * `/tools/<category>/<id>` and the runner decides what to mount.
    */
   href?: string;
   /**
-   * Qual componente a página da ferramenta monta. Os `yt-*` vêm do painel de
-   * downloads; o resto é uma chave do mapa RUNNERS em
+   * Which component the tool page mounts. The `yt-*` ones come from the
+   * downloads panel; the rest is a key of the RUNNERS map in
    * `routes/tools/[category]/[tool]/+page.svelte`.
    */
   runner?: string;
@@ -113,7 +113,7 @@ export const TOOLS: ToolEntry[] = [
   { id: "yt-frames", category: "youtube", icon: "glyph:film-strip", ...P.orange, platforms: ALL_OS, status: "ready", runner: "yt-frames", keywords: ["thumbnail", "frame", "quadro", "clickbait", "capa real", "hq1", "hq2", "hq3", "miniatura"] },
   { id: "yt-codec", category: "youtube", icon: "glyph:cpu", ...P.ink, platforms: ALL_OS, status: "ready", runner: "codec", keywords: ["h264", "codec", "vp9", "av1", "60fps", "extensao", "extensão", "h264ify", "hardware"] },
 
-  // ── Edição de vídeo ──────────────────────────────────────────────────
+  // ── Video editing ──────────────────────────────────────────────────
   { id: "video-clip", category: "video", icon: "glyph:scissors", ...P.purple, platforms: ALL_OS, status: "ready", href: "/misc/file-clip", keywords: ["cortar", "corte", "clip", "trim", "trecho", "recortar", "cut"] },
   { id: "video-convert", category: "video", icon: "glyph:arrows-clockwise", ...P.red, platforms: ALL_OS, status: "ready", href: "/convert", keywords: ["converter", "convert", "reencodar", "reencode", "formato", "format", "mp4", "mkv", "webm", "gif", "compress", "comprimir"] },
   { id: "video-compress", category: "video", icon: "glyph:arrows-in-line-horizontal", ...P.green, platforms: ALL_OS, status: "ready", runner: "video-compress", keywords: ["comprimir", "compress", "tamanho", "size", "discord", "10mb", "8mb", "whatsapp", "email", "anexo", "attachment", "2-pass", "duas passagens", "bitrate", "reduzir"] },
@@ -141,7 +141,7 @@ export const TOOLS: ToolEntry[] = [
   { id: "x-grok", category: "x", icon: "app:grok", from: "#2B2B2B", to: "#0A0A0A", platforms: ALL_OS, status: "beta", runner: "x-grok", keywords: ["grok", "xai", "ia", "ai", "chat", "resumir", "summarize", "busca no x", "x search", "live search", "api key", "perguntar"] },
 
   // ── Instagram ────────────────────────────────────────────────────────
-  // Tudo pela sessão web (cookies capturados pela extensão). Estudos 67-68.
+  // All via the web session (cookies captured by the extension). Studies 67-68.
   { id: "ig-download", category: "instagram", icon: "glyph:download-simple", from: "#FCAF45", to: "#F77737", platforms: ALL_OS, status: "ready", runner: "ig-download", keywords: ["baixar", "download", "post", "foto", "photo", "video", "vídeo", "reel", "reels", "igtv", "carrossel", "carousel", "link", "url"] },
   { id: "ig-bulk", category: "instagram", icon: "glyph:list-checks", from: "#F77737", to: "#E1306C", platforms: ALL_OS, status: "ready", runner: "ig-bulk", keywords: ["baixar varios", "baixar vários", "bulk", "lote", "lista de links", "muitos links", "txt"] },
   { id: "ig-audio", category: "instagram", icon: "glyph:music-notes", from: "#E1306C", to: "#C13584", platforms: ALL_OS, status: "ready", runner: "ig-audio", keywords: ["audio", "áudio", "mp3", "m4a", "som do reel", "musica", "música", "extrair audio"] },
@@ -183,19 +183,19 @@ export const TOOLS: ToolEntry[] = [
   { id: "spotify-spicetify", category: "spotify", icon: "glyph:palette", ...P.green, platforms: ALL_OS, status: "beta", runner: "spicetify", keywords: ["spicetify", "tema", "theme", "cor", "color", "css", "personalizar", "customize", "aparencia", "aparência"] },
   { id: "spotify-extensions", category: "spotify", icon: "glyph:puzzle-piece", ...P.teal, platforms: ALL_OS, status: "beta", runner: "spicetify", keywords: ["spicetify", "extensao", "extensão", "extension", "marketplace", "custom app", "plugin"] },
 
-  // ── Voz e legendas ──────────────────────────────────────────────────
+  // ── Voice & subtitles ──────────────────────────────────────────────────
   { id: "speech-transcribe", category: "speech", icon: "glyph:microphone", ...P.pink, platforms: ALL_OS, status: "ready", runner: "whisper", keywords: ["transcrever", "transcribe", "transcricao", "transcrição", "whisper", "whisper.cpp", "legenda", "subtitle", "srt", "audio para texto", "speech to text", "offline", "local"] },
   { id: "speech-tts", category: "speech", icon: "glyph:speaker-high", ...P.orange, platforms: ALL_OS, status: "ready", runner: "tts", keywords: ["tts", "texto para voz", "text to speech", "narracao", "narração", "voz", "voice", "edge", "locucao", "locução", "mp3", "gratis", "grátis"] },
   { id: "speech-translate", category: "speech", icon: "glyph:translate", ...P.blue, platforms: ALL_OS, status: "ready", runner: "srt-translate", keywords: ["traduzir legenda", "translate subtitle", "srt", "libretranslate", "ia", "llm", "bilingue", "bilíngue", "traducao", "tradução"] },
   { id: "speech-dub", category: "speech", icon: "glyph:user-sound", ...P.purple, platforms: ALL_OS, status: "beta", runner: "dub", keywords: ["dublar", "dublagem", "dub", "dubbing", "voz", "voice over", "narrar video", "legenda para voz"] },
-  // VoiceStudio-style features that do not exist yet (see docs/tools-reference.md, lote 2)
+  // VoiceStudio-style features that do not exist yet (see docs/tools-reference.md, batch 2)
   { id: "speech-clone", category: "speech", icon: "glyph:record", ...P.pink, platforms: ALL_OS, status: "beta", runner: "voicestudio", keywords: ["clonar voz", "clone", "voice cloning", "zero-shot", "amostra", "sample", "elevenlabs", "voicestudio"] },
   { id: "speech-design", category: "speech", icon: "glyph:sparkle", ...P.purple, platforms: ALL_OS, status: "beta", runner: "voicestudio", keywords: ["design de voz", "voice design", "criar voz", "sotaque", "accent", "locutor", "narrador", "voicestudio"] },
   { id: "speech-isolate", category: "speech", icon: "glyph:headphones", ...P.teal, platforms: ALL_OS, status: "beta", runner: "voicestudio", keywords: ["isolar voz", "vocal isolation", "separar", "demucs", "instrumental", "acapella", "karaoke", "remover fundo"] },
   { id: "speech-dictation", category: "speech", icon: "glyph:text-aa", ...P.orange, platforms: ALL_OS, status: "beta", runner: "dictation", keywords: ["ditado", "dictation", "ditar", "speech to text", "atalho", "hotkey"] },
 
   // ── PDF ──────────────────────────────────────────────────────────────
-  // ── Áudio ───────────────────────────────────────────────────────────
+  // ── Audio ───────────────────────────────────────────────────────────
   { id: "audio-loudness", category: "audio", icon: "glyph:gauge", ...P.green, platforms: ALL_OS, status: "ready", runner: "audio-clean", keywords: ["loudness", "lufs", "normalizar", "normalize", "volume", "ebu", "r128", "podcast", "youtube", "spotify", "baixo", "alto"] },
   { id: "audio-denoise", category: "audio", icon: "glyph:waveform", ...P.purple, platforms: ALL_OS, status: "ready", runner: "audio-clean", keywords: ["ruido", "ruído", "noise", "chiado", "hiss", "ar condicionado", "ventilador", "limpar", "clean", "microfone", "mic", "rnnoise", "denoise"] },
 
@@ -212,7 +212,7 @@ export const TOOLS: ToolEntry[] = [
   { id: "pdf-redaction", category: "pdf", icon: "glyph:eye-slash", ...P.ink, platforms: ALL_OS, status: "ready", runner: "pdf-redaction", keywords: ["tarja", "redaction", "redact", "censura", "censored", "vazamento", "leak", "texto escondido", "hidden text", "confidencial", "lgpd", "auditoria"] },
   { id: "pdf-sanitize", category: "pdf", icon: "glyph:shield-check", ...P.green, platforms: ALL_OS, status: "ready", runner: "pdf", keywords: ["sanitizar", "sanitize", "seguro", "safe", "dangerzone", "malware", "javascript", "limpar pdf"] },
 
-  // ── CTF e análise ───────────────────────────────────────────────────
+  // ── CTF & analysis ───────────────────────────────────────────────────
   { id: "ctf-hash", category: "ctf", icon: "glyph:hash", ...P.blue, platforms: ALL_OS, status: "ready", runner: "ctf", keywords: ["hash", "md5", "sha1", "sha256", "sha512", "crc32", "hmac", "checksum", "verificar", "verify", "identificar", "hashid", "bcrypt", "integridade"] },
   { id: "ctf-magic", category: "ctf", icon: "glyph:binoculars", ...P.orange, platforms: ALL_OS, status: "ready", runner: "ctf", keywords: ["magic bytes", "assinatura", "signature", "tipo de arquivo", "file type", "strings", "entropia", "entropy", "embutido", "embedded", "esteganografia", "steganography", "extensao errada", "extensão errada"] },
   { id: "ctf-cipher", category: "ctf", icon: "glyph:key", ...P.purple, platforms: ALL_OS, status: "ready", runner: "ctf", keywords: ["cifra", "cipher", "cesar", "césar", "caesar", "rot13", "atbash", "vigenere", "vigenère", "rail fence", "criptografia classica", "criptografia clássica", "quebrar", "brute force"] },
@@ -220,14 +220,14 @@ export const TOOLS: ToolEntry[] = [
   { id: "ctf-encode", category: "ctf", icon: "glyph:arrows-clockwise", ...P.teal, platforms: ALL_OS, status: "ready", runner: "ctf", keywords: ["base64", "base32", "hex", "url", "percent", "html", "entidade", "entity", "binario", "binário", "binary", "morse", "codificar", "encode", "decodificar", "decode", "cyberchef"] },
   { id: "ctf-freq", category: "ctf", icon: "glyph:chart-bar", ...P.green, platforms: ALL_OS, status: "ready", runner: "ctf", keywords: ["frequencia", "frequência", "frequency", "histograma", "histogram", "entropia", "entropy", "indice de coincidencia", "índice de coincidência", "analise", "análise", "criptanalise", "criptanálise"] },
 
-  // ── Documentos ──────────────────────────────────────────────────────
+  // ── Documents ──────────────────────────────────────────────────────
   { id: "doc-slideshare", category: "documents", icon: "glyph:presentation-chart", ...P.orange, platforms: ALL_OS, status: "ready", runner: "slideshare", keywords: ["slideshare", "slides", "apresentacao", "apresentação", "pdf", "baixar slides"] },
   { id: "doc-google", category: "documents", icon: "glyph:file-doc", ...P.blue, platforms: ALL_OS, status: "ready", runner: "gdocs", keywords: ["google docs", "google slides", "google sheets", "planilha", "documento", "apresentacao", "apresentação", "exportar", "export", "docx", "pptx", "xlsx"] },
   { id: "doc-calameo", category: "documents", icon: "glyph:book-open-text", ...P.teal, platforms: ALL_OS, status: "beta", runner: "calameo", keywords: ["calameo", "revista", "magazine", "svg", "paginas", "páginas", "flipbook"] },
   { id: "doc-gallery", category: "documents", icon: "glyph:images", ...P.purple, platforms: ALL_OS, status: "ready", runner: "gallery", keywords: ["gallery-dl", "galeria", "gallery", "imagens", "images", "pinterest", "instagram", "artstation", "behance", "deviantart", "reddit", "twitter", "x", "pixiv", "em massa", "bulk"] },
   { id: "doc-scribd", category: "documents", icon: "glyph:book-open-text", ...P.red, platforms: ALL_OS, status: "soon", keywords: ["scribd", "everand", "ebook", "livro", "book", "audiobook"] },
 
-  // ── Imagens ─────────────────────────────────────────────────────────
+  // ── Images ─────────────────────────────────────────────────────────
   { id: "img-upscale", category: "images", icon: "glyph:arrows-out", ...P.purple, platforms: ALL_OS, status: "beta", runner: "upscale", keywords: ["upscale", "upscayl", "aumentar resolucao", "aumentar resolução", "real-esrgan", "esrgan", "ia", "ai", "melhorar imagem", "4x", "gpu", "vulkan"] },
   { id: "img-resize", category: "images", icon: "glyph:frame-corners", ...P.yellow, platforms: ALL_OS, status: "ready", runner: "resize", keywords: ["redimensionar", "resize", "reduzir", "shrink", "lote", "batch", "largura", "width", "porcentagem", "percent", "converter imagem", "jpg", "png", "webp"] },
   { id: "img-exif", category: "images", icon: "glyph:eye-slash", ...P.pink, platforms: ALL_OS, status: "ready", runner: "img-exif", keywords: ["exif", "metadados", "metadata", "gps", "localizacao", "localização", "location", "privacidade", "privacy", "limpar", "strip", "camera", "câmera", "serial"] },
@@ -236,7 +236,7 @@ export const TOOLS: ToolEntry[] = [
   { id: "img-dupes", category: "images", icon: "glyph:copy", ...P.brown, platforms: ALL_OS, status: "ready", runner: "img-dupes", keywords: ["duplicadas", "duplicates", "repetidas", "parecidas", "similar", "phash", "dhash", "fotos", "photos", "galeria", "espaco", "espaço", "limpar", "whatsapp", "recomprimida"] },
   { id: "img-ocr", category: "images", icon: "glyph:text-aa", ...P.teal, platforms: ALL_OS, status: "beta", runner: "ocr", keywords: ["ocr", "texto da imagem", "text extractor", "copiar texto", "powertoys", "tesseract"] },
 
-  // ── Arquivos ────────────────────────────────────────────────────────
+  // ── Files ────────────────────────────────────────────────────────
   { id: "files-dupes", category: "files", icon: "glyph:copy", ...P.brown, platforms: ALL_OS, status: "ready", runner: "dupes", keywords: ["duplicados", "duplicates", "duplicate", "repetidos", "czkawka", "espaco", "espaço", "space", "limpar", "clean", "hash"] },
   { id: "files-rename", category: "files", icon: "glyph:pencil-simple", ...P.indigo, platforms: ALL_OS, status: "ready", runner: "rename", keywords: ["renomear", "rename", "em massa", "bulk", "regex", "powerrename", "numerar", "contador", "counter", "aulas"] },
   { id: "files-shred", category: "files", icon: "glyph:trash-simple", ...P.red, platforms: ALL_OS, status: "ready", runner: "shred", keywords: ["apagar", "delete", "seguro", "secure", "shred", "sobrescrever", "overwrite", "wipe", "recuperar", "irrecuperavel", "irrecuperável", "privacidade", "vender pc"] },
@@ -247,10 +247,10 @@ export const TOOLS: ToolEntry[] = [
   { id: "dl-aria2", category: "downloads", icon: "glyph:rocket-launch", ...P.red, platforms: ALL_OS, status: "ready", runner: "aria2", keywords: ["aria2", "acelerado", "accelerated", "multi conexao", "multi conexão", "conexoes", "connections", "arquivo grande", "large file", "zip", "iso", "resume", "retomar"] },
   { id: "dl-manifest", category: "downloads", icon: "glyph:broadcast", ...P.indigo, platforms: ALL_OS, status: "ready", runner: "manifest", keywords: ["m3u8", "mpd", "hls", "dash", "manifesto", "manifest", "stream", "ffmpeg", "player", "aula", "referer", "cookie"] },
 
-  // ── Celular ─────────────────────────────────────────────────────────
+  // ── Phone ─────────────────────────────────────────────────────────
   { id: "phone-send", category: "phone", icon: "glyph:device-mobile", ...P.green, platforms: ALL_OS, status: "ready", runner: "kdeconnect", keywords: ["kde connect", "kdeconnect", "celular", "phone", "enviar arquivo", "send file", "compartilhar", "share", "android", "iphone", "link", "clipboard"] },
 
-  // ── Sistema ──────────────────────────────────────────────────────────
+  // ── System ──────────────────────────────────────────────────────────
   { id: "sys-clean", category: "system", icon: "glyph:broom", ...P.teal, platforms: ALL_OS, status: "ready", runner: "sysclean", keywords: ["limpar", "limpeza", "clean", "cleaner", "cache", "temporarios", "temporários", "temp", "logs", "lixo", "junk", "ccleaner", "navegador", "browser"] },
   { id: "sys-disk", category: "system", icon: "glyph:hard-drives", ...P.blue, platforms: ALL_OS, status: "ready", runner: "disk", keywords: ["disco", "disk", "espaco", "espaço", "space", "treemap", "analisador", "analyzer", "armazenamento", "storage", "pastas grandes"] },
   { id: "sys-startup", category: "system", icon: "glyph:lightning", ...P.yellow, platforms: ALL_OS, status: "beta", runner: "startup", keywords: ["inicializacao", "inicialização", "startup", "boot", "login items", "iniciar com o sistema", "autostart"] },
@@ -261,10 +261,10 @@ export const TOOLS: ToolEntry[] = [
   { id: "sys-harden", category: "system", icon: "glyph:shield-check", ...P.red, platforms: ["windows"], status: "beta", runner: "win-harden", keywords: ["endurecer", "harden", "hardentools", "seguranca", "segurança", "security", "macros", "office", "autorun", "uac", "defender", "windows"] },
   { id: "sys-updater", category: "system", icon: "glyph:arrows-clockwise", ...P.indigo, platforms: ["windows"], status: "beta", runner: "updater", keywords: ["atualizar programas", "update apps", "winget", "chocolatey", "scoop", "atualizador", "updater", "windows"] },
 
-  // ── Automação ────────────────────────────────────────────────────────
+  // ── Automation ────────────────────────────────────────────────────────
   { id: "auto-clicker", category: "automation", icon: "glyph:cursor-click", ...P.orange, platforms: ALL_OS, status: "beta", runner: "autoclick", keywords: ["autoclicker", "auto clicker", "auto click", "cliques", "clicks", "cps", "mouse", "hotkey", "atalho", "windows"] },
 
-  // ── IA ───────────────────────────────────────────────────────────────
+  // ── AI ───────────────────────────────────────────────────────────────
   { id: "ai-keys", category: "ai", icon: "glyph:key", ...P.indigo, platforms: ALL_OS, status: "ready", runner: "keys", keywords: ["chaves", "keys", "api key", "token", "saldo", "balance", "uso", "usage", "relay", "openai", "anthropic", "claude", "gemini"] },
   { id: "ai-prices", category: "ai", icon: "glyph:coins", ...P.teal, platforms: ALL_OS, status: "ready", runner: "pricing", keywords: ["preco", "preço", "price", "prices", "comparar", "compare", "custo", "cost", "tokens", "modelo", "model", "litellm", "contexto", "context"] },
   { id: "ai-usage", category: "ai", icon: "glyph:chart-bar", ...P.indigo, platforms: ALL_OS, status: "ready", runner: "usage", keywords: ["uso", "usage", "gasto", "spent", "custo", "cost", "tokens", "ledger", "quanto gastei", "ccusage", "relatorio", "relatório"] },
@@ -307,7 +307,7 @@ export function toolsOf(categoryId: string): ToolEntry[] {
   return TOOLS.filter((t) => t.category === categoryId);
 }
 
-/** Rota que o tile abre. */
+/** Route the tile opens. */
 export function toolHref(tool: ToolEntry): string {
   return tool.href ?? `/tools/${tool.category}/${tool.id}`;
 }
@@ -322,7 +322,7 @@ export function matchesPlatform(tool: ToolEntry, filter: PlatformFilter): boolea
   return tool.platforms.includes(filter);
 }
 
-/** Minúsculas e sem acento, para "vídeo" e "video" acharem a mesma coisa. */
+/** Lowercase and unaccented, so "vídeo" and "video" find the same thing. */
 export function normalize(s: string): string {
   return s
     .toLowerCase()
@@ -337,14 +337,14 @@ export type IndexedTool = {
   tool: ToolEntry;
   name: string;
   desc: string;
-  /** Texto normalizado onde a busca procura. */
+  /** Normalized text the search looks in. */
   hay: string;
 };
 
 /**
- * Monta o índice com os textos traduzidos. O nome da categoria entra no
- * texto de cada ferramenta, então "instagram" acha tudo de Instagram mesmo
- * que a ferramenta não repita a palavra.
+ * Builds the index with the translated texts. The category name goes into
+ * each tool's text, so "instagram" finds all of Instagram even
+ * when the tool doesn't repeat the word.
  */
 let cachedIndex: IndexedTool[] | null = null;
 let cachedSampleName: string | null = null;
@@ -366,7 +366,7 @@ export function buildIndex(t: Translate): IndexedTool[] {
   return cachedIndex;
 }
 
-/** Todas as palavras da busca precisam aparecer, em qualquer ordem. */
+/** Every search word must appear, in any order. */
 export function matchesQuery(entry: IndexedTool, query: string): boolean {
   const tokens = normalize(query).split(/\s+/).filter(Boolean);
   if (tokens.length === 0) return true;
@@ -375,7 +375,7 @@ export function matchesQuery(entry: IndexedTool, query: string): boolean {
 
 export type CategoryGroup = { category: ToolCategory; tools: IndexedTool[] };
 
-/** Resultado da busca agrupado por categoria, na ordem do catálogo. */
+/** Search result grouped by category, in catalog order. */
 export function search(index: IndexedTool[], query: string, filter: PlatformFilter, categoryId?: string): CategoryGroup[] {
   const groups: CategoryGroup[] = [];
   for (const category of [...CATEGORIES].sort((a, b) => a.order - b.order)) {

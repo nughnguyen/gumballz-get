@@ -147,9 +147,9 @@ pub async fn install_dependency(
     match name.as_str() {
         "yt-dlp" => {
             if force {
-                // B37: guardar o binario atual antes de sobrescrever. Uma versao
-                // nova do yt-dlp que quebra um site e o modo de falha mais comum
-                // deste app, e sem copia nao ha como voltar sem internet.
+                // B37: keep the current binary before overwriting. A new yt-dlp
+                // version that breaks a site is this app's most common failure
+                // mode, and without a copy there is no way back without internet.
                 archive_before_update("yt-dlp").await;
                 crate::core::ytdlp::update_ytdlp()
                     .await
@@ -203,7 +203,7 @@ pub async fn install_dependency(
     .ok_or_else(|| "Installed but version check failed".into())
 }
 
-/// Caminho do binario gerenciado de uma dependencia, quando ha um.
+/// Path of a dependency's managed binary, when there is one.
 /// Locates the managed binary without touching it. Previously this called
 /// `ensure_ytdlp`, which downloads a missing binary and spawns a freshness
 /// check plus a JS-runtime check (yt-dlp and deno processes) on every call.
@@ -228,17 +228,17 @@ fn agora_ms() -> u128 {
         .unwrap_or(0)
 }
 
-/// Arquiva a versao instalada e poda as antigas.
+/// Archives the installed version and prunes the old ones.
 ///
-/// Falha em silencio de proposito: nao poder guardar copia e motivo para nao
-/// ter rollback, nao para impedir o update que o usuario pediu.
+/// Fails silently on purpose: not being able to keep a copy is a reason to have
+/// no rollback, not a reason to block the update the user asked for.
 async fn archive_before_update(name: &str) {
     let Some(bin) = managed_binary_path(name).await else {
         return;
     };
     match crate::core::binary_versions::archive_current(&bin, agora_ms()) {
         Ok(Some(dest)) => {
-            tracing::info!("[deps] {} arquivado em {}", name, dest.display());
+            tracing::info!("[deps] {} archived at {}", name, dest.display());
             let arquivadas = crate::core::binary_versions::list_archived(&bin);
             for velha in crate::core::binary_versions::prune_list(
                 &arquivadas,
@@ -248,7 +248,7 @@ async fn archive_before_update(name: &str) {
             }
         }
         Ok(None) => {}
-        Err(e) => tracing::warn!("[deps] nao foi possivel arquivar {}: {}", name, e),
+        Err(e) => tracing::warn!("[deps] could not archive {}: {}", name, e),
     }
 }
 
@@ -258,7 +258,7 @@ pub struct ArchivedVersion {
     pub path: String,
 }
 
-/// Versoes anteriores guardadas de uma dependencia, da mais nova para a mais velha.
+/// Saved previous versions of a dependency, newest first.
 #[tauri::command]
 pub async fn dependency_archived_versions(name: String) -> Result<Vec<ArchivedVersion>, String> {
     let Some(bin) = managed_binary_path(&name).await else {
@@ -267,7 +267,7 @@ pub async fn dependency_archived_versions(name: String) -> Result<Vec<ArchivedVe
     let mut lista: Vec<ArchivedVersion> = crate::core::binary_versions::list_archived(&bin)
         .into_iter()
         .map(|(stamp, path)| ArchivedVersion {
-            // String porque u128 nao sobrevive ao JSON do JavaScript.
+            // String because u128 does not survive JavaScript's JSON.
             stamp_ms: stamp.to_string(),
             path: path.to_string_lossy().to_string(),
         })
@@ -276,21 +276,21 @@ pub async fn dependency_archived_versions(name: String) -> Result<Vec<ArchivedVe
     Ok(lista)
 }
 
-/// Volta uma dependencia para uma versao guardada.
+/// Rolls a dependency back to a saved version.
 #[tauri::command]
 pub async fn rollback_dependency(name: String, stamp_ms: String) -> Result<String, String> {
     let alvo: u128 = stamp_ms
         .parse()
-        .map_err(|_| format!("stamp invalido: {stamp_ms}"))?;
+        .map_err(|_| format!("invalid stamp: {stamp_ms}"))?;
     let bin = managed_binary_path(&name)
         .await
-        .ok_or_else(|| format!("{name} nao tem binario gerenciado"))?;
+        .ok_or_else(|| format!("{name} has no managed binary"))?;
 
     let arquivada = crate::core::binary_versions::list_archived(&bin)
         .into_iter()
         .find(|(s, _)| *s == alvo)
         .map(|(_, p)| p)
-        .ok_or_else(|| "versao guardada nao encontrada".to_string())?;
+        .ok_or_else(|| "saved version not found".to_string())?;
 
     crate::core::binary_versions::rollback_to(&bin, &arquivada).map_err(|e| e.to_string())?;
 
@@ -300,7 +300,7 @@ pub async fn rollback_dependency(name: String, stamp_ms: String) -> Result<Strin
 
     crate::core::dependencies::check_version(&name)
         .await
-        .ok_or_else(|| "voltou, mas a checagem de versao falhou".to_string())
+        .ok_or_else(|| "rolled back, but the version check failed".to_string())
 }
 
 #[tauri::command]
@@ -336,9 +336,9 @@ pub fn dependency_install_dir(name: String) -> Result<String, String> {
 pub async fn set_dependency_path(name: String, source_path: String) -> Result<String, String> {
     let src = PathBuf::from(&source_path);
 
-    // Issue #222: referenciar no lugar, nao copiar. Uma copia dentro do
-    // diretorio do app envelhece sozinha — o usuario atualiza o binario dele e
-    // o GumballZ Get segue usando a versao velha sem avisar.
+    // Issue #222: reference in place, do not copy. A copy inside the app
+    // directory ages on its own — the user updates their binary and GumballZ Get
+    // keeps using the old version without saying so.
     gumballz_core::core::binary_overrides::set(&name, &src)?;
 
     if name == "yt-dlp" {
@@ -359,10 +359,10 @@ pub async fn set_dependency_path(name: String, source_path: String) -> Result<St
     )
 }
 
-/// Volta a usar o binario gerenciado pelo GumballZ Get.
+/// Goes back to using the binary managed by GumballZ Get.
 ///
-/// Existe porque escolher um caminho tem que ser reversivel com o mesmo esforco
-/// de escolher — sem isso, o usuario que apontou o arquivo errado fica preso.
+/// Exists because picking a path has to be reversible with the same effort as
+/// picking it — without that, the user who pointed at the wrong file is stuck.
 #[tauri::command]
 pub async fn clear_dependency_path(name: String) -> Result<(), String> {
     gumballz_core::core::binary_overrides::clear(&name)?;
@@ -376,7 +376,7 @@ pub async fn clear_dependency_path(name: String) -> Result<(), String> {
     Ok(())
 }
 
-/// Caminho customizado em uso, se houver.
+/// Custom path in use, if any.
 #[tauri::command]
 pub fn dependency_custom_path(name: String) -> Option<String> {
     gumballz_core::core::binary_overrides::get(&name).map(|p| p.to_string_lossy().to_string())

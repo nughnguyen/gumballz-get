@@ -1,8 +1,8 @@
-//! ⚠️ SOMENTE WINDOWS. Ajustes de privacidade e endurecimento derivados do
-//! Sophia Script (MIT, estudo 25) e do hardentools (GPL-3, estudo 31), como
-//! regras declarativas de registro. Fora do Windows a lista existe (para a UI
-//! explicar o que faria) mas nada é aplicado. Cada regra guarda o valor
-//! padrão do Windows para reverter.
+//! ⚠️ WINDOWS ONLY. Privacy and hardening tweaks derived from
+//! Sophia Script (MIT, study 25) and hardentools (GPL-3, study 31), as
+//! declarative registry rules. Outside Windows the list exists (so the UI can
+//! explain what it would do) but nothing is applied. Each rule keeps the
+//! Windows default value so it can be reverted.
 
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 pub enum RegValue {
     Dword(u32),
     Str(String),
-    /// Apagar o valor (o Windows volta ao padrão).
+    /// Delete the value (Windows goes back to the default).
     Delete,
 }
 
@@ -27,7 +27,7 @@ pub struct Rule {
     pub off: RegValue,
     pub requires_admin: bool,
     pub restart: bool,
-    /// `None` fora do Windows ou se não deu para ler.
+    /// `None` outside Windows or if it could not be read.
     pub applied: Option<bool>,
 }
 
@@ -545,7 +545,7 @@ async fn reg_set(key: &str, name: &str, value: &RegValue) -> anyhow::Result<()> 
     let out = cmd.output().await?;
     if !out.status.success() {
         let msg = String::from_utf8_lossy(&out.stderr).trim().to_string();
-        // apagar o que não existe não é erro
+        // deleting what does not exist is not an error
         if matches!(value, RegValue::Delete)
             && (msg.contains("unable to find")
                 || msg.contains("não foi possível")
@@ -553,7 +553,7 @@ async fn reg_set(key: &str, name: &str, value: &RegValue) -> anyhow::Result<()> 
         {
             return Ok(());
         }
-        return Err(anyhow!("reg falhou: {}", msg));
+        return Err(anyhow!("reg failed: {}", msg));
     }
     Ok(())
 }
@@ -592,8 +592,8 @@ pub async fn status() -> TweaksStatus {
     }
 }
 
-/// Aplica (`enable`) ou reverte uma regra. Guarda o valor anterior em
-/// `<app_data>/tools/win_tweaks_backup.json` para o botão "restaurar".
+/// Applies (`enable`) or reverts a rule. Keeps the previous value in
+/// `<app_data>/tools/win_tweaks_backup.json` for the "restore" button.
 #[allow(unused_mut, unused_variables)]
 pub async fn apply(id: &str, enable: bool) -> anyhow::Result<Rule> {
     let mut rule = rules()
@@ -610,7 +610,7 @@ pub async fn apply(id: &str, enable: bool) -> anyhow::Result<Rule> {
     {
         if rule.requires_admin && !is_admin().await {
             return Err(anyhow!(
-                "essa regra precisa do GumballZ Get aberto como administrador"
+                "this rule needs GumballZ Get open as administrator"
             ));
         }
         if let Some(prev) = reg_query(&rule.key, &rule.name).await {

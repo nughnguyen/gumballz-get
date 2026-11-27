@@ -67,7 +67,7 @@ pub struct SrtTranslateOut {
     pub failed: usize,
 }
 
-/// Traduz um arquivo de legenda inteiro e grava `<nome>.<lang>.srt`.
+/// Translates a whole subtitle file and writes `<name>.<lang>.srt`.
 #[tauri::command]
 pub async fn tool_srt_translate(
     app: tauri::AppHandle,
@@ -79,7 +79,7 @@ pub async fn tool_srt_translate(
     let text = tokio::fs::read_to_string(&srt_path).await.map_err(err)?;
     let cues = parse_cues(&text);
     if cues.is_empty() {
-        return Err("a legenda esta vazia ou num formato desconhecido".into());
+        return Err("the subtitle is empty or in an unknown format".into());
     }
     let target = opts.target_lang.clone();
     let result = srt_translate::translate_cues(&cues, &opts, progress(&app))

@@ -11,7 +11,7 @@
 //! `resolve_active_cookies` path picks the login up with no changes to the
 //! download flow.
 //!
-//! Fully automatic from the user's side: click "Đăng nhập" -> the login
+//! Fully automatic from the user's side: click "Sign in" -> the login
 //! window opens -> the user signs in normally (or is already signed in) ->
 //! the session cookie is detected and saved with no further click -> the
 //! window closes and the UI shows the logged-in state. No password is ever
@@ -86,7 +86,7 @@ fn config_for(platform: &str) -> Result<PlatformConfig, String> {
 fn login_window_title(cfg: &PlatformConfig) -> String {
     // A Tauri webview window has no address bar, so the window title carries
     // the domain as the visible trust signal that this is the real site.
-    format!("Đăng nhập {} · {}", cfg.display_name, cfg.login_host)
+    format!("Sign in to {} · {}", cfg.display_name, cfg.login_host)
 }
 
 fn to_extension_cookie(c: &AuthCookie, expires: i64) -> ExtensionCookie {
@@ -183,7 +183,7 @@ pub async fn social_media_open_login_window(
         &cookies,
         IngestSource {
             source_url: Some(cfg.home_url.to_string()),
-            source_label: "Đăng nhập trong app".to_string(),
+            source_label: "Sign in in app".to_string(),
             alias_hint: Some(cfg.display_name.to_string()),
         },
     )
@@ -306,7 +306,7 @@ mod tests {
         let fb = config_for("facebook").expect("facebook");
         assert_eq!(
             login_window_title(&fb),
-            "Đăng nhập Facebook · www.facebook.com"
+            "Sign in to Facebook · www.facebook.com"
         );
     }
 

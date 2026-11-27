@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Uma imagem → favicon.ico, PNG de web, apple-touch-icon e .icns. */
+  /** One image → favicon.ico, web PNG, apple-touch-icon and .icns. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

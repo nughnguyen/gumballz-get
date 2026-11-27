@@ -1,5 +1,5 @@
-//! "Que arquivo é esse?" — assinatura de formato (magic bytes) e as cadeias
-//! de texto legível de dentro do binário, que é por onde uma análise começa.
+//! "What file is this?" — format signature (magic bytes) and the readable
+//! text strings inside the binary, which is where an analysis starts.
 
 use serde::Serialize;
 
@@ -8,7 +8,7 @@ pub struct TypeGuess {
     pub label: String,
     pub extension: String,
     pub mime: String,
-    /// Onde a assinatura foi achada (0 = começo do arquivo).
+    /// Where the signature was found (0 = start of the file).
     pub offset: usize,
 }
 
@@ -17,50 +17,50 @@ pub struct MagicReport {
     pub path: String,
     pub bytes: u64,
     pub guess: Option<TypeGuess>,
-    /// Assinaturas achadas depois do começo: arquivo embutido em arquivo.
+    /// Signatures found after the start: a file embedded in a file.
     pub embedded: Vec<TypeGuess>,
     pub entropy: f64,
     pub strings: Vec<String>,
-    /// Extensão do nome não bate com o conteúdo.
+    /// The filename extension does not match the content.
     pub extension_mismatch: bool,
 }
 
-/// (assinatura, deslocamento fixo, rótulo, extensão, mime)
+/// (signature, fixed offset, label, extension, mime)
 const SIGNATURES: &[(&[u8], usize, &str, &str, &str)] = &[
-    (b"\x89PNG\r\n\x1a\n", 0, "Imagem PNG", "png", "image/png"),
-    (b"\xFF\xD8\xFF", 0, "Imagem JPEG", "jpg", "image/jpeg"),
-    (b"GIF87a", 0, "Imagem GIF", "gif", "image/gif"),
-    (b"GIF89a", 0, "Imagem GIF", "gif", "image/gif"),
-    (b"BM", 0, "Imagem BMP", "bmp", "image/bmp"),
-    (b"II*\x00", 0, "Imagem TIFF", "tiff", "image/tiff"),
-    (b"MM\x00*", 0, "Imagem TIFF", "tiff", "image/tiff"),
+    (b"\x89PNG\r\n\x1a\n", 0, "PNG image", "png", "image/png"),
+    (b"\xFF\xD8\xFF", 0, "JPEG image", "jpg", "image/jpeg"),
+    (b"GIF87a", 0, "GIF image", "gif", "image/gif"),
+    (b"GIF89a", 0, "GIF image", "gif", "image/gif"),
+    (b"BM", 0, "BMP image", "bmp", "image/bmp"),
+    (b"II*\x00", 0, "TIFF image", "tiff", "image/tiff"),
+    (b"MM\x00*", 0, "TIFF image", "tiff", "image/tiff"),
     (
         b"RIFF",
         0,
-        "Contêiner RIFF (WAV/AVI/WebP)",
+        "RIFF container (WAV/AVI/WebP)",
         "riff",
         "application/octet-stream",
     ),
-    (b"%PDF-", 0, "Documento PDF", "pdf", "application/pdf"),
+    (b"%PDF-", 0, "PDF document", "pdf", "application/pdf"),
     (
         b"PK\x03\x04",
         0,
-        "Zip (ou docx/xlsx/jar/apk)",
+        "Zip (or docx/xlsx/jar/apk)",
         "zip",
         "application/zip",
     ),
-    (b"PK\x05\x06", 0, "Zip vazio", "zip", "application/zip"),
+    (b"PK\x05\x06", 0, "Empty zip", "zip", "application/zip"),
     (
         b"Rar!\x1a\x07",
         0,
-        "Arquivo RAR",
+        "RAR archive",
         "rar",
         "application/vnd.rar",
     ),
     (
         b"7z\xBC\xAF\x27\x1C",
         0,
-        "Arquivo 7-Zip",
+        "7-Zip archive",
         "7z",
         "application/x-7z-compressed",
     ),
@@ -71,28 +71,28 @@ const SIGNATURES: &[(&[u8], usize, &str, &str, &str)] = &[
     (
         b"\x7FELF",
         0,
-        "Executável ELF (Linux)",
+        "ELF executable (Linux)",
         "elf",
         "application/x-elf",
     ),
     (
         b"MZ",
         0,
-        "Executável do Windows (PE)",
+        "Windows executable (PE)",
         "exe",
         "application/vnd.microsoft.portable-executable",
     ),
     (
         b"\xCF\xFA\xED\xFE",
         0,
-        "Executável Mach-O (macOS)",
+        "Mach-O executable (macOS)",
         "macho",
         "application/x-mach-binary",
     ),
     (
         b"\xCA\xFE\xBA\xBE",
         0,
-        "Java class ou Mach-O universal",
+        "Java class or universal Mach-O",
         "class",
         "application/java-vm",
     ),
@@ -104,8 +104,8 @@ const SIGNATURES: &[(&[u8], usize, &str, &str, &str)] = &[
         "application/wasm",
     ),
     (b"OggS", 0, "Ogg", "ogg", "audio/ogg"),
-    (b"fLaC", 0, "Áudio FLAC", "flac", "audio/flac"),
-    (b"ID3", 0, "Áudio MP3 com ID3", "mp3", "audio/mpeg"),
+    (b"fLaC", 0, "FLAC audio", "flac", "audio/flac"),
+    (b"ID3", 0, "MP3 audio with ID3", "mp3", "audio/mpeg"),
     (b"ftyp", 4, "MP4/MOV/M4A", "mp4", "video/mp4"),
     (
         b"\x1A\x45\xDF\xA3",
@@ -117,14 +117,14 @@ const SIGNATURES: &[(&[u8], usize, &str, &str, &str)] = &[
     (
         b"SQLite format 3\x00",
         0,
-        "Banco SQLite",
+        "SQLite database",
         "sqlite",
         "application/vnd.sqlite3",
     ),
     (
         b"-----BEGIN ",
         0,
-        "Chave/certificado PEM",
+        "PEM key/certificate",
         "pem",
         "application/x-pem-file",
     ),
@@ -135,8 +135,8 @@ const SIGNATURES: &[(&[u8], usize, &str, &str, &str)] = &[
         "ps",
         "application/postscript",
     ),
-    (b"wOFF", 0, "Fonte WOFF", "woff", "font/woff"),
-    (b"wOF2", 0, "Fonte WOFF2", "woff2", "font/woff2"),
+    (b"wOFF", 0, "WOFF font", "woff", "font/woff"),
+    (b"wOF2", 0, "WOFF2 font", "woff2", "font/woff2"),
     (
         b"\x00\x01\x00\x00\x00",
         0,
@@ -144,7 +144,7 @@ const SIGNATURES: &[(&[u8], usize, &str, &str, &str)] = &[
         "ttf",
         "font/ttf",
     ),
-    (b"OTTO", 0, "Fonte OpenType", "otf", "font/otf"),
+    (b"OTTO", 0, "OpenType font", "otf", "font/otf"),
 ];
 
 fn matches_at(data: &[u8], sig: &[u8], at: usize) -> bool {
@@ -163,10 +163,10 @@ pub fn identify(data: &[u8]) -> Option<TypeGuess> {
         })
 }
 
-/// Assinaturas depois do byte 1: é assim que se acha um zip escondido no fim
-/// de um PNG, o truque de esteganografia mais comum de CTF.
+/// Signatures after byte 1: how you find a zip hidden at the end
+/// of a PNG, the most common CTF steganography trick.
 pub fn find_embedded(data: &[u8], limit: usize) -> Vec<TypeGuess> {
-    // Só formatos que fazem sentido "escondidos" — evita ruído de 2 bytes.
+    // Only formats that make sense "hidden" — avoids 2-byte noise.
     const INTERESTING: &[&[u8]] = &[
         b"PK\x03\x04",
         b"Rar!\x1a\x07",
@@ -200,8 +200,8 @@ pub fn find_embedded(data: &[u8], limit: usize) -> Vec<TypeGuess> {
     out
 }
 
-/// Entropia de Shannon em bits por byte. Perto de 8 = comprimido ou cifrado;
-/// perto de 4-5 = texto; perto de 0 = enchimento.
+/// Shannon entropy in bits per byte. Near 8 = compressed or encrypted;
+/// near 4-5 = text; near 0 = padding.
 pub fn entropy(data: &[u8]) -> f64 {
     if data.is_empty() {
         return 0.0;
@@ -221,7 +221,7 @@ pub fn entropy(data: &[u8]) -> f64 {
         .sum::<f64>()
 }
 
-/// O `strings` clássico: sequências ASCII imprimíveis de tamanho mínimo.
+/// The classic `strings`: printable ASCII sequences of a minimum length.
 pub fn strings(data: &[u8], min_len: usize, limit: usize) -> Vec<String> {
     let mut out = Vec::new();
     let mut cur = Vec::new();
@@ -298,18 +298,18 @@ mod tests {
         let mut data = b"\x89PNG\r\n\x1a\nIHDR....IEND".to_vec();
         data.extend_from_slice(b"PK\x03\x04segredo.txt");
         let g = identify(&data).unwrap();
-        assert_eq!(g.extension, "png", "o começo continua sendo PNG");
+        assert_eq!(g.extension, "png", "the start is still PNG");
         let hidden = find_embedded(&data, 10);
         assert_eq!(hidden.len(), 1);
         assert_eq!(hidden[0].extension, "zip");
-        assert_eq!(hidden[0].offset, 20, "8 do cabeçalho + 12 do corpo falso");
+        assert_eq!(hidden[0].offset, 20, "8 from the header + 12 from the fake body");
     }
 
     #[test]
     fn entropy_separates_random_from_repetitive() {
-        assert!(entropy(&[0u8; 1000]) < 0.01, "tudo igual é entropia zero");
+        assert!(entropy(&[0u8; 1000]) < 0.01, "all equal is zero entropy");
         let spread: Vec<u8> = (0..=255).cycle().take(4096).collect();
-        assert!(entropy(&spread) > 7.9, "todos os bytes = 8 bits");
+        assert!(entropy(&spread) > 7.9, "all bytes = 8 bits");
         assert!(entropy(b"").abs() < f64::EPSILON);
     }
 
@@ -318,7 +318,7 @@ mod tests {
         let data = b"\x00\x01FLAG{isso_aqui}\x00\xFFab\x00GumballZ Get";
         let s = strings(data, 4, 10);
         assert_eq!(s, vec!["FLAG{isso_aqui}", "GumballZ Get"]);
-        // "ab" tem 2 caracteres e fica de fora.
+        // "ab" has 2 characters and stays out.
         assert!(!s.iter().any(|x| x == "ab"));
     }
 

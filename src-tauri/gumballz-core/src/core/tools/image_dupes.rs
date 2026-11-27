@@ -1,9 +1,9 @@
-//! Fotos duplicadas e parecidas. O `files-dupes` acha arquivo byte a byte;
-//! este acha a mesma foto salva duas vezes com qualidade diferente, o print
-//! recortado, o WhatsApp que recomprimiu — coisas que o hash de bytes não vê.
+//! Duplicate and similar photos. `files-dupes` finds byte-for-byte files;
+//! this one finds the same photo saved twice at different quality, the cropped
+//! screenshot, the WhatsApp recompression — things a byte hash cannot see.
 //!
-//! Reusa o dHash que a categoria Pinterest já usa, então "parecido" quer dizer
-//! a mesma coisa nas duas telas.
+//! It reuses the dHash the Pinterest category already uses, so "similar" means
+//! the same thing on both screens.
 
 use std::path::{Path, PathBuf};
 
@@ -18,7 +18,7 @@ const IMAGE_EXTS: &[&str] = &[
 #[derive(Debug, Clone, Deserialize)]
 pub struct ImgDupesOptions {
     pub dirs: Vec<String>,
-    /// 0 = só idênticas; 5 é o padrão do Pinterest para "parecidas".
+    /// 0 = only identical; 5 is Pinterest's default for "similar".
     #[serde(default = "default_threshold")]
     pub threshold: u32,
     #[serde(default = "default_min")]
@@ -43,13 +43,13 @@ pub struct ImgFile {
     pub bytes: u64,
     pub width: u32,
     pub height: u32,
-    /// A cópia que vale a pena manter do grupo.
+    /// The copy worth keeping from the group.
     pub best: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ImgGroup {
-    /// "exact" = bytes idênticos · "same" = mesma imagem reencodada · "near"
+    /// "exact" = identical bytes · "same" = same image re-encoded · "near"
     pub kind: String,
     pub distance: u32,
     pub files: Vec<ImgFile>,
@@ -91,8 +91,8 @@ fn walk(root: &Path, skip_hidden: bool, min_size: u64, out: &mut Vec<(PathBuf, u
     }
 }
 
-/// A melhor cópia é a de maior resolução; empatou, a de maior arquivo (menos
-/// recomprimida). É a que fica marcada para o usuário não apagar sem querer.
+/// The best copy is the highest resolution; on a tie, the largest file (least
+/// recompressed). It is the one marked so the user does not delete it by accident.
 pub fn pick_best(files: &[ImgFile]) -> usize {
     let mut best = 0usize;
     for (i, f) in files.iter().enumerate() {
@@ -108,8 +108,8 @@ pub fn pick_best(files: &[ImgFile]) -> usize {
     best
 }
 
-/// União-busca sobre as distâncias de dHash. Devolve o índice do grupo de cada
-/// arquivo, ou `None` para quem ficou sozinho.
+/// Union-find over the dHash distances. Returns the group index of each
+/// file, or `None` for one that stayed alone.
 pub fn cluster(hashes: &[u64], threshold: u32) -> Vec<Option<usize>> {
     let n = hashes.len();
     let mut parent: Vec<usize> = (0..n).collect();
@@ -277,7 +277,7 @@ mod tests {
         assert_eq!(
             pick_best(&files),
             1,
-            "resolução ganha do tamanho do arquivo"
+            "resolution wins over file size"
         );
     }
 
@@ -289,12 +289,12 @@ mod tests {
 
     #[test]
     fn cluster_groups_by_distance() {
-        // 0 e 1 diferem em 1 bit; 2 está longe.
+        // 0 and 1 differ in 1 bit; 2 is far away.
         let hashes = vec![0b1010, 0b1011, 0xFFFF_FFFF_FFFF_FFFF];
         let c = cluster(&hashes, 2);
         assert_eq!(c[0], c[1]);
         assert!(c[0].is_some());
-        assert_eq!(c[2], None, "sozinho não vira grupo");
+        assert_eq!(c[2], None, "alone it does not become a group");
     }
 
     #[test]
@@ -307,10 +307,10 @@ mod tests {
 
     #[test]
     fn transitive_grouping_holds() {
-        // a~b e b~c, mesmo com a e c a 4 bits de distância.
+        // a~b and b~c, even with a and c 4 bits apart.
         let hashes = vec![0b0000, 0b0011, 0b1111];
         let c = cluster(&hashes, 2);
-        assert_eq!(c[0], c[2], "o grupo tem que ser transitivo");
+        assert_eq!(c[0], c[2], "the group must be transitive");
     }
 
     #[test]

@@ -1,35 +1,35 @@
-//! Quando da para comecar a assistir um torrent que ainda esta baixando.
+//! When a torrent that is still downloading can start playing.
 //!
-//! B46. O modulo `core::torrent_stream` foi escrito supondo que o GumballZ Get
-//! escolheria a ordem das pecas. Ao ligar, apareceu que o `librqbit` **ja faz
-//! isso**: `ManagedTorrent::stream(file_id)` devolve um `FileStream` que
-//! prioriza as pecas sob o cursor de leitura sozinho.
+//! B46. The `core::torrent_stream` module was written assuming GumballZ Get
+//! would choose the piece order. When wired up, it turned out `librqbit`
+//! **already does that**: `ManagedTorrent::stream(file_id)` returns a `FileStream`
+//! that prioritizes the pieces under the read cursor on its own.
 //!
-//! Entao a ordem das pecas fica com o motor — dois escalonadores disputando as
-//! mesmas pecas seria pior que um so. O que sobra, e que o motor nao responde, e
-//! a pergunta da interface: **ja da para apertar play?** E o `can_start_playback`
-//! que decide, e e isso que este modulo expoe.
+//! So the piece order stays with the engine — two schedulers fighting over the
+//! same pieces would be worse than one. What is left, and what the engine does
+//! not answer, is the UI's question: **can you press play yet?** And it is
+//! `can_start_playback` that decides that, and that is what this module exposes.
 
 use crate::core::torrent_stream::{can_start_playback, request_order, StreamPlan};
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct PlaybackReadiness {
     pub ready: bool,
-    /// Pecas que faltam a partir do playhead, em ordem de urgencia.
+    /// Pieces missing from the playhead onward, in order of urgency.
     pub missing_head: Vec<u32>,
     pub have_count: usize,
     pub total_pieces: usize,
 }
 
-/// Responde se ha disco suficiente a partir do playhead para tocar.
+/// Answers whether there is enough on disk from the playhead to play.
 ///
-/// Serve tanto para o play inicial quanto para o seek: o playhead e a peca que
-/// a posicao atual exige, e pular para o meio de um torrent incompleto e o caso
-/// em que "50% baixado" mais engana.
+/// Works both for the initial play and for seeking: the playhead is the piece
+/// the current position requires, and jumping to the middle of an incomplete
+/// torrent is the case where "50% downloaded" misleads most.
 ///
-/// Recebe o bitfield em vez de ler do motor porque quem tem a sessao viva e o
-/// downloader; passar o estado para ca mantem a decisao testavel e sem depender
-/// de um torrent rodando.
+/// It takes the bitfield instead of reading from the engine because whoever has
+/// the live session is the downloader; passing the state in here keeps the
+/// decision testable and independent of a running torrent.
 #[tauri::command]
 pub fn torrent_playback_readiness(
     total_pieces: u32,
@@ -56,18 +56,20 @@ mod tests {
 
     #[test]
     fn torrent_vazio_nao_esta_pronto() {
-        // O caso que importa: apertar play com nada baixado abre um arquivo
-        // truncado e o player mostra erro, que e pior do que o botao desativado.
+        // The case that matters: pressing play with nothing downloaded opens a
+        // truncated file and the player shows an error, which is worse than the
+        // disabled button.
         let r = torrent_playback_readiness(100, 0, vec![false; 100]);
         assert!(!r.ready);
         assert_eq!(r.have_count, 0);
-        assert!(!r.missing_head.is_empty(), "tem que dizer o que falta");
+        assert!(!r.missing_head.is_empty(), "has to say what is missing");
     }
 
     #[test]
     fn com_inicio_e_ultima_peca_da_para_tocar() {
-        // A ultima peca entra junto porque em muitos MP4 o `moov` (o indice do
-        // container) fica no fim: sem ele o player nao sabe nem a duracao.
+        // The last piece comes along because in many MP4s the `moov` (the
+        // container's index) sits at the end: without it the player does not even
+        // know the duration.
         let mut have = vec![false; 100];
         for h in have.iter_mut().take(20) {
             *h = true;
@@ -80,22 +82,22 @@ mod tests {
 
     #[test]
     fn so_o_inicio_nao_basta_sem_a_ultima_peca() {
-        // Escrevi este teste esperando que passasse com so o inicio. Passou o
-        // contrario, e o modulo estava certo: sem o fim do container o player
-        // abre e falha.
+        // I wrote this test expecting it to pass with only the start. The opposite
+        // passed, and the module was right: without the end of the container the
+        // player opens and fails.
         let mut have = vec![false; 100];
         for h in have.iter_mut().take(20) {
             *h = true;
         }
         let r = torrent_playback_readiness(100, 0, have);
-        assert!(!r.ready, "falta a ultima peca, com o indice do container");
+        assert!(!r.ready, "missing the last piece, with the container index");
     }
 
     #[test]
     fn baixar_o_fim_primeiro_nao_ajuda_a_comecar() {
-        // Torrent comum baixa as pecas mais raras primeiro, que costuma ser
-        // qualquer lugar menos o inicio. E exatamente por isso que "50% baixado"
-        // nao significa "da para assistir".
+        // A common torrent downloads the rarest pieces first, which tends to be
+        // anywhere but the start. That is exactly why "50% downloaded" does not
+        // mean "can watch".
         let mut have = vec![false; 100];
         for h in have.iter_mut().skip(50) {
             *h = true;

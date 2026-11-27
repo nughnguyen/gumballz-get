@@ -1,14 +1,14 @@
-//! Contagem estimada de tokens e custo por modelo (tool `ai-token-cost`).
+//! Estimated token count and cost per model (tool `ai-token-cost`).
 //!
-//! Contar token exato exige o tokenizador de cada família de modelo (BPE do
-//! GPT, o do Claude, SentencePiece do Llama/Gemini) — são megabytes de vocabulário
-//! por família e nenhum deles é publicado para todas. O caminho honesto aqui é
-//! uma heurística calibrada por segmento (palavra, número, pontuação, espaço,
-//! CJK) com um fator por família, e a UI deixando claro que é **estimativa**
-//! com margem declarada. Nunca apresente o número como exato.
+//! Counting exact tokens needs each model family's tokenizer (GPT's BPE,
+//! Claude's, Llama/Gemini's SentencePiece) — megabytes of vocabulary
+//! per family and none of them is published for all of them. The honest path here is
+//! a heuristic calibrated per segment (word, number, punctuation, space,
+//! CJK) with a factor per family, and the UI making clear that it is an **estimate**
+//! with a declared margin. Never present the number as exact.
 //!
-//! A tabela de preços é a mesma de `super::pricing` (LiteLLM); aqui só entra a
-//! contagem e a multiplicação.
+//! The price table is the same as `super::pricing` (LiteLLM); only the
+//! counting and the multiplication live here.
 
 use serde::{Deserialize, Serialize};
 
@@ -17,10 +17,10 @@ use super::{report, ProgressFn};
 
 const ID: &str = "ai-token-cost";
 
-/// Margem declarada da estimativa, em porcento, para cima e para baixo.
+/// Declared margin of the estimate, in percent, up and down.
 pub const MARGIN_PCT: f64 = 25.0;
 
-/// Teto padrão por arquivo (5 MiB) — acima disso o arquivo é ignorado.
+/// Default cap per file (5 MiB) — above that the file is ignored.
 const DEFAULT_MAX_BYTES: u64 = 5 * 1024 * 1024;
 const DEFAULT_MAX_FILES: usize = 2000;
 
@@ -31,8 +31,8 @@ const DEFAULT_EXTENSIONS: &[&str] = &[
     "sql", "tex", "log", "srt", "vtt",
 ];
 
-/// Modelos mostrados quando a UI não pede nenhum em particular. São chaves
-/// estáveis do LiteLLM; o que não existir na tabela do dia volta em `missing`.
+/// Models shown when the UI does not ask for any in particular. They are stable
+/// LiteLLM keys; whatever is not in the day's table comes back in `missing`.
 pub const DEFAULT_MODELS: &[&str] = &[
     "gpt-4o",
     "gpt-4o-mini",
@@ -43,13 +43,13 @@ pub const DEFAULT_MODELS: &[&str] = &[
     "deepseek-chat",
 ];
 
-// ── Famílias de tokenizador ────────────────────────────────────────────
+// ── Tokenizer families ────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Family {
     pub key: &'static str,
     pub label: &'static str,
-    /// Multiplicador sobre a estimativa base (calibrada no BPE do GPT-4o).
+    /// Multiplier over the base estimate (calibrated on GPT-4o's BPE).
     pub factor: f64,
 }
 
@@ -103,14 +103,14 @@ fn family(key: &str) -> &'static Family {
         .unwrap_or(&FAMILIES[FAMILIES.len() - 1])
 }
 
-/// Descobre a família pelo nome do modelo. Sem rede e sem tabela.
+/// Figures out the family from the model name. No network and no table.
 pub fn family_for(model: &str) -> &'static Family {
     let m = model.to_lowercase();
     let has = |needle: &str| m.contains(needle);
     if has("gpt-4o") || has("gpt-4.1") || has("gpt-5") || has("chatgpt-4o") {
         return family("o200k");
     }
-    // o1/o3/o4 são o200k, mas "o1" casaria dentro de outras palavras.
+    // o1/o3/o4 are o200k, but "o1" would match inside other words.
     for p in ["o1", "o3", "o4"] {
         if m == p || m.starts_with(&format!("{}-", p)) || m.contains(&format!("/{}-", p)) {
             return family("o200k");
@@ -137,7 +137,7 @@ pub fn family_for(model: &str) -> &'static Family {
     family("generic")
 }
 
-// ── Heurística de contagem ─────────────────────────────────────────────
+// ── Counting heuristic ─────────────────────────────────────────────
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Class {
@@ -151,7 +151,7 @@ enum Class {
 fn is_cjk(c: char) -> bool {
     matches!(c as u32,
         0x3040..=0x30FF      // kana
-        | 0x3400..=0x4DBF    // extensão A
+        | 0x3400..=0x4DBF    // Extension A
         | 0x4E00..=0x9FFF    // unificado
         | 0xF900..=0xFAFF    // compatibilidade
         | 0xAC00..=0xD7AF) // hangul
@@ -175,14 +175,14 @@ fn ceil_div(n: usize, d: usize) -> f64 {
     (n.div_ceil(d.max(1))) as f64
 }
 
-/// Custo de uma palavra: até seis letras costuma ser um token só; a partir daí
-/// o BPE quebra devagar, porque o vocabulário guarda os pedaços comuns.
+/// Cost of a word: up to six letters is usually a single token; from there
+/// the BPE breaks slowly, because the vocabulary stores the common pieces.
 fn word_tokens(n: usize) -> f64 {
     1.0 + (n.saturating_sub(6) as f64) * 0.12
 }
 
-/// Estimativa base, calibrada no BPE do GPT-4o. Devolve fracionário de
-/// propósito: arredondar só no fim evita empilhar erro em texto grande.
+/// Base estimate, calibrated on GPT-4o's BPE. Returns a fractional value on
+/// purpose: rounding only at the end avoids stacking error on large text.
 pub fn estimate_tokens(text: &str) -> f64 {
     let mut total = 0.0f64;
     let mut run_class: Option<Class> = None;
@@ -200,7 +200,7 @@ pub fn estimate_tokens(text: &str) -> f64 {
             Class::Cjk => len as f64 * 0.9,
             Class::Space => {
                 if len == 1 && !newline {
-                    // Um espaço simples entra no token da próxima palavra.
+                    // A single space joins the next word's token.
                     0.0
                 } else {
                     ceil_div(len, 4).max(1.0)
@@ -226,40 +226,40 @@ pub fn estimate_tokens(text: &str) -> f64 {
     total
 }
 
-/// Estimativa já com o fator da família (`o200k`, `claude`, `llama`…).
+/// Estimate already with the family factor (`o200k`, `claude`, `llama`…).
 pub fn tokens_for_family(text: &str, family_key: &str) -> u64 {
     (estimate_tokens(text) * family(family_key).factor).round() as u64
 }
 
-/// Estimativa para um modelo pelo nome (usa `family_for`).
+/// Estimate for a model by name (uses `family_for`).
 pub fn tokens_for_model(text: &str, model: &str) -> u64 {
     (estimate_tokens(text) * family_for(model).factor).round() as u64
 }
 
-// ── Entrada ────────────────────────────────────────────────────────────
+// ── Input ────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Options {
-    /// Texto colado.
+    /// Pasted text.
     #[serde(default)]
     pub text: String,
-    /// Arquivos e/ou pastas. Pasta é varrida recursivamente.
+    /// Files and/or folders. A folder is scanned recursively.
     #[serde(default)]
     pub paths: Vec<String>,
-    /// Filtro de extensões, separado por vírgula. Vazio = lista padrão de texto.
+    /// Extension filter, comma-separated. Empty = default text list.
     #[serde(default)]
     pub extensions: String,
     #[serde(default)]
     pub max_files: usize,
     #[serde(default)]
     pub max_bytes: u64,
-    /// Modelos a comparar. Vazio = `DEFAULT_MODELS`.
+    /// Models to compare. Empty = `DEFAULT_MODELS`.
     #[serde(default)]
     pub models: Vec<String>,
-    /// Tokens de saída assumidos para o cálculo de custo.
+    /// Assumed output tokens for the cost calculation.
     #[serde(default)]
     pub output_tokens: u64,
-    /// Quantas vezes o mesmo prompt seria enviado.
+    /// How many times the same prompt would be sent.
     #[serde(default)]
     pub calls: u64,
 }
@@ -274,9 +274,9 @@ pub struct FileCount {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ModelCost {
-    /// O que o usuário pediu.
+    /// What the user asked for.
     pub model: String,
-    /// A chave que casou na tabela do LiteLLM.
+    /// The key that matched in the LiteLLM table.
     pub matched: String,
     pub provider: String,
     pub family: String,
@@ -290,9 +290,9 @@ pub struct ModelCost {
     pub total_usd: Option<f64>,
     pub total_low_usd: Option<f64>,
     pub total_high_usd: Option<f64>,
-    /// Custo da entrada se ela estivesse toda em cache lido (quando o preço distingue).
+    /// Cost of the input if it were all in read cache (when the price distinguishes).
     pub cached_input_usd: Option<f64>,
-    /// Custo de gravar essa entrada no cache (quando o preço distingue).
+    /// Cost of writing this input to the cache (when the price distinguishes).
     pub cache_write_usd: Option<f64>,
     pub max_input_tokens: Option<u64>,
     pub fits_context: Option<bool>,
@@ -307,16 +307,16 @@ pub struct Report {
     pub files: Vec<FileCount>,
     pub files_read: u64,
     pub files_skipped: u64,
-    /// Estimativa na base GPT-4o, antes do fator de família.
+    /// Estimate on the GPT-4o base, before the family factor.
     pub tokens: u64,
     pub tokens_low: u64,
     pub tokens_high: u64,
     pub margin_pct: f64,
-    /// Sempre `true`: nunca apresente estes números como contagem exata.
+    /// Always `true`: never present these numbers as an exact count.
     pub estimated: bool,
     pub calls: u64,
     pub models: Vec<ModelCost>,
-    /// Modelos que o usuário pediu e a tabela de preços não conhece.
+    /// Models the user asked for that the price table does not know.
     pub missing: Vec<String>,
 }
 
@@ -337,8 +337,8 @@ fn looks_binary(bytes: &[u8]) -> bool {
     bytes.iter().take(8192).any(|b| *b == 0)
 }
 
-/// Junta o texto colado com o conteúdo dos arquivos/pastas pedidos.
-/// Bloqueante de propósito: quem chama roda em `spawn_blocking`.
+/// Joins the pasted text with the content of the requested files/folders.
+/// Blocking on purpose: the caller runs in `spawn_blocking`.
 pub fn collect(opts: &Options, p: &ProgressFn) -> anyhow::Result<(String, Vec<FileCount>, u64)> {
     let mut parts: Vec<String> = Vec::new();
     let mut files: Vec<FileCount> = Vec::new();
@@ -439,14 +439,14 @@ pub fn collect(opts: &Options, p: &ProgressFn) -> anyhow::Result<(String, Vec<Fi
     Ok((parts.join("\n"), files, skipped))
 }
 
-// ── Custo ──────────────────────────────────────────────────────────────
+// ── Cost ──────────────────────────────────────────────────────────────
 
 fn per_token(per_m: Option<f64>) -> Option<f64> {
     per_m.map(|v| v / 1_000_000.0)
 }
 
-/// Custo de um prompt num modelo, com a tabela de preços já resolvida.
-/// Puro: dá para testar sem rede.
+/// Cost of a prompt in a model, with the price table already resolved.
+/// Pure: testable without network.
 pub fn cost_for(
     asked: &str,
     price: &ModelPrice,
@@ -465,8 +465,8 @@ pub fn cost_for(
     let out_rate = per_token(price.output_per_m);
     let input_usd = in_rate.map(|r| r * exact * calls);
     let output_usd = out_rate.map(|r| r * output_tokens as f64 * calls);
-    // O total sai do mesmo caminho que o resto do app usa (`pricing::cost`),
-    // para não haver duas contas de custo divergindo.
+    // The total comes from the same path the rest of the app uses (`pricing::cost`),
+    // so there are no two diverging cost accounts.
     let total_usd = pricing::cost(price, input_tokens, output_tokens).map(|c| c * calls);
     let total_low_usd = in_rate.map(|r| r * low * calls + output_usd.unwrap_or(0.0));
     let total_high_usd = in_rate.map(|r| r * high * calls + output_usd.unwrap_or(0.0));
@@ -493,7 +493,7 @@ pub fn cost_for(
     }
 }
 
-/// Só a contagem, sem tocar na tabela de preços (nem na rede).
+/// Only the count, without touching the price table (or the network).
 pub fn count(opts: &Options, p: &ProgressFn) -> anyhow::Result<Report> {
     report(p, ID, "started", 0, None, None);
     let (text, files, skipped) = collect(opts, p)?;
@@ -526,8 +526,8 @@ pub fn count(opts: &Options, p: &ProgressFn) -> anyhow::Result<Report> {
     Ok(r)
 }
 
-/// Contagem + custo por modelo. A parte de preço usa `super::pricing`, que
-/// pode ir à rede uma vez por dia para atualizar a tabela do LiteLLM.
+/// Count + cost per model. The price part uses `super::pricing`, which
+/// may go to the network once a day to update the LiteLLM table.
 pub async fn run(opts: Options, p: ProgressFn) -> anyhow::Result<Report> {
     let opts_for_count = opts.clone();
     let p2 = p.clone();
@@ -582,7 +582,7 @@ mod tests {
         }
     }
 
-    // Casos conhecidos: o BPE do GPT dá 4 e 9 tokens nestas duas frases.
+    // Known cases: GPT's BPE gives 4 and 9 tokens on these two sentences.
     #[test]
     fn casos_conhecidos_de_contagem() {
         assert_eq!(estimate_tokens("Hello, world!").round() as u64, 4);
@@ -607,7 +607,7 @@ mod tests {
 
     #[test]
     fn numeros_agrupam_de_tres() {
-        // "1234567" vira ~3 pedaços no BPE moderno.
+        // "1234567" becomes ~3 pieces in modern BPE.
         assert_eq!(estimate_tokens("1234567").round() as u64, 3);
     }
 
@@ -651,7 +651,7 @@ mod tests {
         assert!((total - 12.5).abs() < 1e-6, "{}", total);
         assert!((c.input_usd.unwrap_or(0.0) - 2.5).abs() < 1e-6);
         assert!((c.output_usd.unwrap_or(0.0) - 10.0).abs() < 1e-6);
-        // Cache lido custa metade neste preço de teste.
+        // Read cache costs half at this test price.
         assert!((c.cached_input_usd.unwrap_or(0.0) - 1.25).abs() < 1e-6);
         assert!((c.cache_write_usd.unwrap_or(0.0) - 3.125).abs() < 1e-6);
         assert_eq!(c.fits_context, Some(false));

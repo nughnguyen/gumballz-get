@@ -29,8 +29,8 @@
   import SubtitleWorkshop from "$components/downloads/SubtitleWorkshop.svelte";
 
   /**
-   * A seção Tools monta uma ferramenta por página; a aba Tools de Downloads
-   * continua mostrando todas. Sem `only`, nada muda.
+   * The Tools section mounts one tool per page; the Tools tab in Downloads
+   * keeps showing all of them. Without `only`, nothing changes.
    */
   let { only }: { only?: ToolSection[] } = $props();
   const show = (s: ToolSection) => !only || only.includes(s);

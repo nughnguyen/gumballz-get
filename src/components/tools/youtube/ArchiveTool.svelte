@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Arquivar canal, playlist ou Watch Later, com estado por item e retomada. */
+  /** Archive a channel, playlist or Watch Later, with per-item state and resume. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Vídeo → GIF/WebP com paleta em duas passagens. */
+  /** Video → GIF/WebP with a two-pass palette. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

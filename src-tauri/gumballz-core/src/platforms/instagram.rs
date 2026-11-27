@@ -191,7 +191,7 @@ impl InstagramDownloader {
 
         if Self::is_login_redirect(&html) {
             return Err(anyhow!(
-                "Instagram redirecionou para login — post pode ser privado"
+                "Instagram redirected to login — the post may be private"
             ));
         }
 

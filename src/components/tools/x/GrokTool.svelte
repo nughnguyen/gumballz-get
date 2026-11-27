@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Grok (estudo 67): API oficial da xAI com busca no X, ou o Grok do X pela sessão. */
+  /** Grok (study 67): official xAI API with X search, or the X Grok via the session. */
   import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
   import { t } from "$lib/i18n";

@@ -18,8 +18,8 @@
 
 <script lang="ts">
   /**
-   * Transcrever com whisper.cpp local (estudo 01). Três blocos: motor
-   * (binário), modelos (download do Hugging Face) e a transcrição em si.
+   * Transcribe with local whisper.cpp (study 01). Three blocks: engine
+   * (binary), models (Hugging Face download) and the transcription itself.
    */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";

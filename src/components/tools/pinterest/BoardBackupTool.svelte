@@ -18,9 +18,9 @@
 
 <script lang="ts">
   /**
-   * Backup de board / seção / perfil (estudo 67): a resposta ao "Mass-saving
-   * your pins" do Reddit sem linha de comando. Originais, vídeos, pastas por
-   * seção, pins.csv/pins.json, galeria offline e sincronização incremental.
+   * Backup of a board / section / profile (study 67): the answer to Reddit's "Mass-saving
+   * your pins" without a command line. Originals, videos, folders per
+   * section, pins.csv/pins.json, offline gallery and incremental sync.
    */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";

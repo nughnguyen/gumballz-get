@@ -1,13 +1,13 @@
-//! `tt-download`: vídeo do TikTok sem marca d'água, em lote.
+//! `tt-download`: TikTok video without watermark, in batch.
 //!
-//! A entrada aceita três formas ao mesmo tempo: uma lista colada (uma URL por
-//! linha), um `.txt` de links e um perfil/coleção inteiro. Tudo vira uma só
-//! fila de URLs limpas, sem repetição.
+//! The input accepts three forms at the same time: a pasted list (one URL per
+//! line), a `.txt` of links and a whole profile/collection. Everything becomes one
+//! queue of clean URLs, without repetition.
 //!
-//! Cada item é um processo de yt-dlp, um de cada vez, com espera entre eles —
-//! o TikTok fecha a porta para quem dispara em rajada. O que já existe no
-//! destino é pulado antes de tocar na rede, e o resumo final diz por item se
-//! foi ok, pulado ou o motivo da falha.
+//! Each item is one yt-dlp process, one at a time, with a wait between them —
+//! TikTok closes the door on whoever fires in bursts. What already exists in the
+//! destination is skipped before touching the network, and the final summary says per item whether it
+//! was ok, skipped or the reason for the failure.
 
 use std::path::PathBuf;
 
@@ -37,41 +37,41 @@ fn def_limit() -> u32 {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Options {
-    /// Lista colada: uma URL por linha (vírgula e espaço também servem).
+    /// Pasted list: one URL per line (comma and space work too).
     #[serde(default)]
     pub urls: String,
-    /// Arquivo `.txt` com uma URL por linha.
+    /// `.txt` file with one URL per line.
     #[serde(default)]
     pub list_file: Option<String>,
-    /// Perfil (`@usuario` ou a URL) ou coleção: entra inteiro na fila.
+    /// Profile (`@user` or the URL) or collection: enters the queue whole.
     #[serde(default)]
     pub profile: Option<String>,
     pub dest: String,
-    /// Baixar a versão **com** marca d'água (o `download_addr`). Padrão: não.
+    /// Download the version **with** watermark (the `download_addr`). Default: no.
     #[serde(default)]
     pub watermark: bool,
-    /// "best" (h265 1080p quando existe) ou "h264" (compatibilidade).
+    /// "best" (h265 1080p when it exists) or "h264" (compatibility).
     #[serde(default = "def_quality")]
     pub quality: String,
-    /// Teto de itens vindos do perfil/coleção. 0 = sem teto.
+    /// Cap of items from the profile/collection. 0 = no cap.
     #[serde(default = "def_limit")]
     pub limit: u32,
-    /// Pular o que já está no destino.
+    /// Skip what is already in the destination.
     #[serde(default = "def_true")]
     pub skip_existing: bool,
-    /// Gravar o `.info.json` ao lado de cada vídeo.
+    /// Write the `.info.json` next to each video.
     #[serde(default)]
     pub write_info: bool,
     #[serde(default = "def_delay")]
     pub delay_ms: u64,
-    /// Um cookies.txt escolhido à mão (tem prioridade sobre a sessão).
+    /// A hand-picked cookies.txt (takes priority over the session).
     #[serde(default)]
     pub cookies: Option<String>,
-    /// Conta do gerenciador de cookies (None = `_default`).
+    /// Cookie-manager account (None = `_default`).
     #[serde(default)]
     pub account_slug: Option<String>,
-    /// Conteúdo Netscape do bucket `tiktok.com`. Quem preenche é o comando
-    /// Tauri, nunca o front — daí o `skip`.
+    /// Netscape content of the `tiktok.com` bucket. The Tauri command fills it,
+    /// never the frontend — hence the `skip`.
     #[serde(skip)]
     pub session_netscape: Option<String>,
 }
@@ -95,12 +95,12 @@ pub struct DownloadResult {
     pub skipped: usize,
     pub dest: String,
     pub used_session: bool,
-    /// Se saiu a versão sem marca d'água (o inverso de `watermark`).
+    /// Whether the no-watermark version came out (the inverse of `watermark`).
     pub no_watermark: bool,
 }
 
-/// Junta as três entradas numa fila só, sem repetir e respeitando o teto.
-/// O perfil/coleção não entra aqui (precisa de rede); o resto é puro.
+/// Joins the three inputs into a single queue, without repeating and respecting the cap.
+/// The profile/collection does not enter here (it needs network); the rest is pure.
 pub fn queue_from_text(pasted: &str, list: &str, limit: u32) -> Vec<String> {
     let mut out = expand_inputs(pasted);
     for url in expand_inputs(list) {
@@ -114,17 +114,17 @@ pub fn queue_from_text(pasted: &str, list: &str, limit: u32) -> Vec<String> {
     out
 }
 
-/// Lista os vídeos de um perfil ou coleção com uma só chamada de yt-dlp.
+/// Lists the videos of a profile or collection with a single yt-dlp call.
 async fn expand_profile(
     input: &str,
     limit: u32,
     cookies: Option<&std::path::Path>,
 ) -> Result<Vec<String>> {
     let target = parse_target(input)
-        .ok_or_else(|| anyhow!("não reconheci esse perfil ou coleção: {}", input))?;
+        .ok_or_else(|| anyhow!("did not recognize this profile or collection: {}", input))?;
     match target {
         Target::User { .. } | Target::Collection { .. } | Target::Music { .. } => {}
-        _ => return Err(anyhow!("isso é um vídeo, não um perfil: {}", input)),
+        _ => return Err(anyhow!("this is a video, not a profile: {}", input)),
     }
     let url = canonical_url(&target);
     let v = super::ytdlp_json(&super::ytdlp_list_args(&url, limit, cookies)).await?;
@@ -142,7 +142,7 @@ fn cookies_path(opts: &Options, session: &TempCookies) -> Option<PathBuf> {
 pub async fn run(opts: &Options, progress: ProgressFn) -> Result<DownloadResult> {
     let dest = PathBuf::from(&opts.dest);
     if opts.dest.trim().is_empty() {
-        return Err(anyhow!("escolha a pasta de destino"));
+        return Err(anyhow!("choose the destination folder"));
     }
     std::fs::create_dir_all(&dest)?;
 
@@ -152,7 +152,7 @@ pub async fn run(opts: &Options, progress: ProgressFn) -> Result<DownloadResult>
 
     let list_text = match opts.list_file.as_deref().filter(|p| !p.trim().is_empty()) {
         Some(path) => std::fs::read_to_string(path)
-            .map_err(|e| anyhow!("não consegui ler a lista {}: {}", path, e))?,
+            .map_err(|e| anyhow!("could not read the list {}: {}", path, e))?,
         None => String::new(),
     };
     let mut queue = queue_from_text(&opts.urls, &list_text, 0);
@@ -212,12 +212,12 @@ pub async fn run(opts: &Options, progress: ProgressFn) -> Result<DownloadResult>
                 id,
                 author,
                 status: "skipped".to_string(),
-                reason: "já está na pasta".to_string(),
+                reason: "already in the folder".to_string(),
                 files: Vec::new(),
             });
             continue;
         }
-        // Sem id no link (link curto), o yt-dlp escolhe o nome pelo próprio id.
+        // Without an id in the link (short link), yt-dlp picks the name by its own id.
         let template = if stem.is_empty() {
             "%(uploader,channel)s-%(id)s".to_string()
         } else {

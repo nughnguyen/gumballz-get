@@ -270,7 +270,7 @@ impl PlatformDownloader for YouTubeDownloader {
     async fn get_media_info(&self, url: &str) -> anyhow::Result<MediaInfo> {
         let ytdlp_path = ytdlp::ensure_ytdlp().await.map_err(|e| {
             anyhow!(
-                "YouTube requer yt-dlp para funcionar. Falha ao obter yt-dlp: {}",
+                "YouTube requires yt-dlp to work. Failed to obtain yt-dlp: {}",
                 e
             )
         })?;

@@ -1,46 +1,46 @@
-//! Ordem de peças para assistir um torrent enquanto ele baixa.
+//! Piece order for watching a torrent while it downloads.
 //!
-//! Um torrent comum baixa as peças mais raras primeiro, que é ótimo para a
-//! saúde do enxame e péssimo para assistir: o arquivo só abre quando termina.
-//! Para streaming a ordem é outra, e a troca é explícita — pior para o enxame,
-//! utilizável para quem está esperando.
+//! A common torrent downloads the rarest pieces first, which is great for the
+//! health of the swarm and terrible for watching: the file only opens when it
+//! finishes. For streaming the order is different, and the trade-off is explicit
+//! — worse for the swarm, usable for whoever is waiting.
 //!
-//! A decisão de **qual peça pedir agora** é pura e testável. Falar com o
-//! `librqbit` e escrever no disco é I/O.
+//! The decision of **which piece to ask for now** is pure and testable. Talking
+//! to `librqbit` and writing to disk is I/O.
 //!
-//! Origem: rqbit, mais o primeira-e-última-peça do qBittorrent.
+//! Origin: rqbit, plus qBittorrent's first-and-last-piece.
 
 use serde::Serialize;
 
-/// Quantas peças à frente da posição de leitura mantemos garantidas.
+/// How many pieces ahead of the read position we keep guaranteed.
 ///
-/// Oito: o suficiente para o player não parar em cada seek, sem travar o
-/// download inteiro esperando uma janela grande demais.
+/// Eight: enough for the player not to stop at every seek, without stalling the
+/// whole download waiting for too large a window.
 pub const READAHEAD_PIECES: u32 = 8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Priority {
-    /// Sem isto o player nem abre o arquivo.
+    /// Without this the player cannot even open the file.
     Critical,
-    /// Dentro da janela de leitura.
+    /// Inside the read window.
     High,
-    /// O resto, em ordem.
+    /// The rest, in order.
     Normal,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct StreamPlan {
     pub total_pieces: u32,
-    /// Peça que a posição atual de reprodução exige.
+    /// The piece the current playback position requires.
     pub playhead_piece: u32,
 }
 
-/// Prioridade de uma peça, dado o plano.
+/// Priority of a piece, given the plan.
 ///
-/// Primeira e última peça são críticas porque o container guarda o cabeçalho no
-/// início e, em MP4 não otimizado, o índice (`moov`) no fim. Sem as duas o
-/// player não consegue nem descobrir a duração, quanto mais fazer seek.
+/// The first and last pieces are critical because the container keeps the header
+/// at the start and, in unoptimized MP4, the index (`moov`) at the end. Without
+/// both, the player cannot even find out the duration, let alone seek.
 pub fn priority_of(plan: &StreamPlan, piece: u32) -> Priority {
     if plan.total_pieces == 0 {
         return Priority::Normal;
@@ -56,11 +56,11 @@ pub fn priority_of(plan: &StreamPlan, piece: u32) -> Priority {
     Priority::Normal
 }
 
-/// Ordem em que pedir as peças que ainda faltam.
+/// The order in which to request the pieces that are still missing.
 ///
-/// Sequencial a partir do playhead, com as críticas na frente. O que ficou para
-/// trás vai para o fim: reproduzir já passou por ali, e só interessa para quem
-/// voltar.
+/// Sequential from the playhead, with the critical ones first. What was left
+/// behind goes to the end: playback already passed through there, and it only
+/// matters to whoever goes back.
 pub fn request_order(plan: &StreamPlan, have: &[bool]) -> Vec<u32> {
     if plan.total_pieces == 0 {
         return Vec::new();
@@ -88,11 +88,11 @@ pub fn request_order(plan: &StreamPlan, have: &[bool]) -> Vec<u32> {
     order
 }
 
-/// Dá para começar a assistir?
+/// Can playback start?
 ///
-/// Exige as duas peças críticas mais a janela de leitura. Liberar antes faz o
-/// player abrir e travar em seguida, que é pior do que esperar — o usuário
-/// interpreta como aplicativo quebrado, não como download em andamento.
+/// Requires both critical pieces plus the read window. Releasing earlier makes
+/// the player open and stall right after, which is worse than waiting — the user
+/// reads it as a broken app, not as a download in progress.
 pub fn can_start_playback(plan: &StreamPlan, have: &[bool]) -> bool {
     if plan.total_pieces == 0 {
         return false;
@@ -120,8 +120,8 @@ mod tests {
 
     #[test]
     fn primeira_e_ultima_peca_sao_criticas() {
-        // Cabeçalho no início, índice moov no fim. Sem as duas o player não
-        // descobre nem a duração.
+        // Header at the start, moov index at the end. Without both, the player
+        // cannot even find out the duration.
         let p = plan(100, 50);
         assert_eq!(priority_of(&p, 0), Priority::Critical);
         assert_eq!(priority_of(&p, 99), Priority::Critical);
@@ -132,8 +132,8 @@ mod tests {
         let p = plan(100, 50);
         assert_eq!(priority_of(&p, 50), Priority::High);
         assert_eq!(priority_of(&p, 57), Priority::High);
-        assert_eq!(priority_of(&p, 58), Priority::Normal, "fora da janela");
-        assert_eq!(priority_of(&p, 49), Priority::Normal, "ja passou");
+        assert_eq!(priority_of(&p, 58), Priority::Normal, "outside the window");
+        assert_eq!(priority_of(&p, 49), Priority::Normal, "already passed");
     }
 
     #[test]
@@ -141,8 +141,8 @@ mod tests {
         let p = plan(10, 5);
         let have = vec![false; 10];
         let ordem = request_order(&p, &have);
-        assert_eq!(&ordem[..2], &[0, 9], "criticas primeiro: {ordem:?}");
-        assert_eq!(ordem[2], 5, "depois sequencial do playhead");
+        assert_eq!(&ordem[..2], &[0, 9], "critical first: {ordem:?}");
+        assert_eq!(ordem[2], 5, "then sequential from the playhead");
     }
 
     #[test]
@@ -158,29 +158,29 @@ mod tests {
 
     #[test]
     fn o_que_ficou_para_tras_vai_para_o_fim() {
-        // Reproduzir já passou por ali; só interessa para quem voltar.
+        // Playback already passed through there; it only matters to whoever goes back.
         let p = plan(8, 5);
         let have = vec![false; 8];
         let ordem = request_order(&p, &have);
         let pos_de = |x: u32| ordem.iter().position(|&y| y == x).unwrap();
-        assert!(pos_de(6) < pos_de(1), "adiante antes de atras: {ordem:?}");
+        assert!(pos_de(6) < pos_de(1), "ahead before behind: {ordem:?}");
         assert!(pos_de(6) < pos_de(4));
     }
 
     #[test]
     fn nao_libera_a_reproducao_cedo_demais() {
-        // Abrir e travar em seguida é pior que esperar: o usuário lê como
-        // aplicativo quebrado, não como download em andamento.
+        // Opening and stalling right after is worse than waiting: the user reads
+        // it as a broken app, not as a download in progress.
         let p = plan(100, 0);
         let mut have = vec![false; 100];
         have[0] = true;
         assert!(
             !can_start_playback(&p, &have),
-            "so a primeira peca nao basta"
+            "the first piece alone is not enough"
         );
 
         have[99] = true;
-        assert!(!can_start_playback(&p, &have), "falta a janela de leitura");
+        assert!(!can_start_playback(&p, &have), "the read window is missing");
 
         for i in 0..READAHEAD_PIECES {
             have[i as usize] = true;
@@ -190,8 +190,8 @@ mod tests {
 
     #[test]
     fn seek_para_o_meio_exige_a_janela_de_la() {
-        // O ponto do seek em arquivo parcial: ter o começo não ajuda em nada
-        // se o usuário pulou para o meio.
+        // The point of seeking in a partial file: having the start helps in no
+        // way if the user jumped to the middle.
         let mut have = vec![false; 100];
         have[0] = true;
         have[99] = true;
@@ -201,7 +201,7 @@ mod tests {
         assert!(can_start_playback(&plan(100, 0), &have));
         assert!(
             !can_start_playback(&plan(100, 60), &have),
-            "sem a janela do meio"
+            "without the middle window"
         );
 
         for h in have.iter_mut().take(68).skip(60) {
@@ -228,7 +228,7 @@ mod tests {
 
     #[test]
     fn have_menor_que_o_total_nao_estoura_indice() {
-        // Estado parcial vindo do librqbit não pode derrubar o cálculo.
+        // Partial state coming from librqbit must not bring down the calculation.
         let p = plan(10, 3);
         let have = vec![true; 2];
         assert!(!can_start_playback(&p, &have));

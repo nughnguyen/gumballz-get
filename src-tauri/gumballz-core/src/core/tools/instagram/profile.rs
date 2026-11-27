@@ -1,7 +1,7 @@
-//! Perfil, posts, reels, marcações, salvos, stories e highlights. Os
-//! endpoints e os cabeçalhos foram verificados numa sessão real em
-//! 2026-09-05 (ver mod.rs); `feed/user/{id}/` morreu para a web, então os
-//! posts vêm do GraphQL `PolarisProfilePostsQuery` + `…TabContentQuery_connection`.
+//! Profile, posts, reels, tags, saved, stories and highlights. The
+//! endpoints and headers were verified in a real session on
+//! 2026-09-05 (see mod.rs); `feed/user/{id}/` died for the web, so posts
+//! come from GraphQL `PolarisProfilePostsQuery` + `…TabContentQuery_connection`.
 
 use std::sync::atomic::AtomicBool;
 
@@ -116,18 +116,18 @@ pub async fn user_by_id(client: &IgClient, id: &str) -> Result<UserInfo, IgError
         .await?;
     let user = json
         .get("user")
-        .ok_or_else(|| IgError::NotFound(format!("usuario {}", id)))?;
+        .ok_or_else(|| IgError::NotFound(format!("user {}", id)))?;
     let mut info = parse_user_info(user);
     info.is_self = info.pk == client.session.user_id;
     Ok(info)
 }
 
-/// Nome → id: `web_profile_info` primeiro (traz follows_viewer); se ele
-/// estiver limitado (429 é comum), `topsearch` e depois `users/{id}/info`.
+/// Name → id: `web_profile_info` first (brings follows_viewer); if it
+/// is limited (429 is common), `topsearch` and then `users/{id}/info`.
 pub async fn resolve_user(client: &IgClient, name_or_id: &str) -> Result<UserInfo, IgError> {
     let name = name_or_id.trim().trim_start_matches('@').to_lowercase();
     if name.is_empty() {
-        return Err(IgError::NotFound("usuario vazio".into()));
+        return Err(IgError::NotFound("empty user".into()));
     }
     if name.chars().all(|c| c.is_ascii_digit()) {
         return user_by_id(client, &name).await;
@@ -181,7 +181,7 @@ pub async fn resolve_user(client: &IgClient, name_or_id: &str) -> Result<UserInf
     Ok(info)
 }
 
-/// Quem está logado (pelo `ds_user_id` dos cookies).
+/// Who is logged in (from the cookies' `ds_user_id`).
 pub async fn whoami(client: &IgClient) -> Result<UserInfo, IgError> {
     let id = client.session.user_id.clone();
     let mut me = user_by_id(client, &id).await?;
@@ -193,7 +193,7 @@ fn page_pause_check(flag: &AtomicBool) -> bool {
     !super::cancelled(flag)
 }
 
-/// Posts do perfil (fotos, vídeos e carrosséis) via GraphQL, mais novos primeiro.
+/// Profile posts (photos, videos and carousels) via GraphQL, newest first.
 pub async fn user_posts(
     client: &IgClient,
     username: &str,
@@ -403,7 +403,7 @@ async fn rest_feed(
     Ok(out)
 }
 
-/// Posts em que o perfil foi marcado.
+/// Posts the profile was tagged in.
 pub async fn user_tagged(
     client: &IgClient,
     user_id: &str,
@@ -425,7 +425,7 @@ pub async fn user_tagged(
     .await
 }
 
-/// Posts salvos da própria conta (todos, sem separar por coleção).
+/// Saved posts of the account itself (all, without splitting by collection).
 pub async fn saved(
     client: &IgClient,
     limit: usize,
@@ -497,12 +497,12 @@ pub struct Reel {
     pub user_id: String,
     pub items: Vec<MediaItem>,
     pub expiring_at: Option<i64>,
-    /// `true` quando o story é só para melhores amigos.
+    /// `true` when the story is only for close friends.
     pub close_friends: bool,
 }
 
-/// `GET /api/v1/feed/reels_media/?reel_ids=…` para stories (id do usuário)
-/// ou highlights (`highlight:<id>`). Buscar assim não marca o story como visto.
+/// `GET /api/v1/feed/reels_media/?reel_ids=…` for stories (user id)
+/// or highlights (`highlight:<id>`). Fetching this way does not mark the story as seen.
 pub async fn reels_media(client: &IgClient, reel_ids: &[String]) -> Result<Vec<Reel>, IgError> {
     let q: Vec<(&str, String)> = reel_ids.iter().map(|r| ("reel_ids", r.clone())).collect();
     let json = client.get_json("/api/v1/feed/reels_media/", &q).await?;
@@ -585,7 +585,7 @@ pub struct TrayEntry {
     pub close_friends: bool,
 }
 
-/// Bandeja de stories da própria conta (quem tem story agora).
+/// Story tray of the account itself (who has a story now).
 pub async fn stories_tray(client: &IgClient) -> Result<Vec<TrayEntry>, IgError> {
     let json = client.get_json("/api/v1/feed/reels_tray/", &[]).await?;
     let tray = json

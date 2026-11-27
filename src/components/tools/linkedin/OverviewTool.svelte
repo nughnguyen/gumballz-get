@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Panorama do export oficial do LinkedIn: inventario, conexoes, mensagens, posts e anuncios. */
+  /** Overview of the official LinkedIn export: inventory, connections, messages, posts and ads. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

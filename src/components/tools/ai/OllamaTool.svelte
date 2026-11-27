@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Modelos locais com Ollama (estudo 18): detectar, listar, baixar, remover. */
+  /** Local models with Ollama (study 18): detect, list, download, remove. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

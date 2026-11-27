@@ -18,9 +18,9 @@
 
 <script lang="ts">
   /**
-   * Etiquetas de música: lê a pasta, aponta o que está errado e corrige em
-   * lote. Nada é gravado sem o usuário ver o diff antes — o botão de aplicar
-   * só liga depois de uma prévia.
+   * Music tags: reads the folder, points out what is wrong and fixes it in
+   * bulk. Nothing is written until the user sees the diff first — the apply
+   * button only enables after a preview.
    */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";

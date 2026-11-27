@@ -1,14 +1,14 @@
-//! Remover o fundo de uma imagem (pessoa, produto, o que for), uma ou em lote.
+//! Remove the background of an image (person, product, whatever), one or in batch.
 //!
-//! Roda **local**: nenhuma imagem sai da máquina. A segmentação é um modelo
-//! ONNX gerido (`core/tools/onnx.rs`) rodando na runtime gerida
-//! (`core/onnxrt.rs`). O pré e o pós-processamento seguem o que o rembg
-//! (danielgatis/rembg, MIT) faz com os mesmos pesos — o mesmo `resize` para a
-//! entrada do modelo, a mesma normalização por média/desvio, e a máscara de
-//! saída normalizada por mín-máx antes de virar alfa.
+//! Runs **locally**: no image leaves the machine. Segmentation is a managed ONNX model
+//! (`core/tools/onnx.rs`) running on the managed runtime
+//! (`core/onnxrt.rs`). The pre- and post-processing follow what rembg
+//! (danielgatis/rembg, MIT) does with the same weights — the same `resize` for the
+//! model input, the same mean/std normalization, and the output mask
+//! min-max normalized before becoming alpha.
 //!
-//! O que sai é um PNG RGBA com o fundo transparente, ou um JPEG/PNG sobre uma
-//! cor sólida escolhida pelo usuário. A máscara sozinha também pode ser salva.
+//! The output is an RGBA PNG with a transparent background, or a JPEG/PNG over a
+//! solid colour chosen by the user. The mask alone can also be saved.
 
 use std::path::{Path, PathBuf};
 
@@ -22,9 +22,9 @@ use super::ProgressFn;
 const TOOL_ID: &str = "img-bg";
 const DEFAULT_SUFFIX: &str = "-nobg";
 
-/// Pré-processamento de cada modelo de segmentação. Vem do rembg: cada família
-/// de pesos foi treinada com um tamanho de entrada e uma normalização próprios,
-/// e trocar isso estraga a máscara sem dar erro nenhum.
+/// Pre-processing of each segmentation model. Comes from rembg: each weight
+/// family was trained with its own input size and normalization,
+/// and swapping that ruins the mask without any error.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BgParams {
     pub model_id: &'static str,
@@ -67,7 +67,7 @@ pub fn params_for(model_id: &str) -> Option<&'static BgParams> {
     PARAMS.iter().find(|p| p.model_id == model_id)
 }
 
-/// Modelo padrão: o menor da família, para o primeiro uso não pedir 175 MB.
+/// Default model: the smallest of the family, so first use does not ask for 175 MB.
 pub fn default_model() -> &'static str {
     "u2netp"
 }
@@ -77,19 +77,19 @@ pub struct BgOptions {
     /// Arquivos escolhidos um a um.
     #[serde(default)]
     pub inputs: Vec<String>,
-    /// Pasta inteira (não entra em subpastas).
+    /// Whole folder (does not enter subfolders).
     #[serde(default)]
     pub input_dir: String,
-    /// Id do modelo do catálogo ONNX. Vazio = o padrão.
+    /// Id of the model in the ONNX catalog. Empty = the default.
     #[serde(default)]
     pub model: String,
-    /// Vazio = mesma pasta do arquivo de entrada.
+    /// Empty = same folder as the input file.
     #[serde(default)]
     pub output_dir: String,
     /// Vazio = `-nobg`.
     #[serde(default)]
     pub suffix: String,
-    /// Vazio = fundo transparente. `#RRGGBB` ou `#RRGGBBAA` = cor sólida.
+    /// Empty = transparent background. `#RRGGBB` or `#RRGGBBAA` = solid colour.
     #[serde(default)]
     pub background: String,
     /// "png" | "jpg"
@@ -97,13 +97,13 @@ pub struct BgOptions {
     pub format: String,
     #[serde(default = "default_quality")]
     pub quality: u8,
-    /// Alfa abaixo disso vira zero, para matar a poeira do fundo. 0 = desligado.
+    /// Alpha below this becomes zero, to kill background dust. 0 = off.
     #[serde(default)]
     pub alpha_threshold: u8,
-    /// Borda dura: alfa vira 0 ou 255. Bom para logotipo, ruim para cabelo.
+    /// Hard edge: alpha becomes 0 or 255. Good for logos, bad for hair.
     #[serde(default)]
     pub hard_edges: bool,
-    /// Salva só a máscara em tons de cinza, sem cortar a imagem.
+    /// Saves only the mask in greyscale, without cutting the image.
     #[serde(default)]
     pub mask_only: bool,
 }
@@ -134,16 +134,16 @@ pub struct BgResult {
     pub failed: usize,
 }
 
-// ── Peças puras (testadas sem modelo nem runtime) ──────────────────────
+// ── Pure pieces (tested without model or runtime) ──────────────────────
 
-/// `#RGB`, `#RRGGBB` ou `#RRGGBBAA`. Vazio devolve `None` (= transparente).
+/// `#RGB`, `#RRGGBB` or `#RRGGBBAA`. Empty returns `None` (= transparent).
 pub fn parse_hex_color(raw: &str) -> anyhow::Result<Option<Rgba<u8>>> {
     let s = raw.trim().trim_start_matches('#');
     if s.is_empty() {
         return Ok(None);
     }
     let byte = |i: usize| -> anyhow::Result<u8> {
-        u8::from_str_radix(&s[i..i + 2], 16).map_err(|_| anyhow!("cor inválida: {raw}"))
+        u8::from_str_radix(&s[i..i + 2], 16).map_err(|_| anyhow!("invalid color: {raw}"))
     };
     let px = match s.len() {
         3 => {
@@ -151,22 +151,22 @@ pub fn parse_hex_color(raw: &str) -> anyhow::Result<Option<Rgba<u8>>> {
             for (i, c) in s.chars().enumerate() {
                 let d = c
                     .to_digit(16)
-                    .ok_or_else(|| anyhow!("cor inválida: {raw}"))? as u8;
+                    .ok_or_else(|| anyhow!("invalid color: {raw}"))? as u8;
                 v[i] = d * 17;
             }
             Rgba([v[0], v[1], v[2], 255])
         }
         6 => Rgba([byte(0)?, byte(2)?, byte(4)?, 255]),
         8 => Rgba([byte(0)?, byte(2)?, byte(4)?, byte(6)?]),
-        _ => return Err(anyhow!("cor inválida: {raw}")),
+        _ => return Err(anyhow!("invalid color: {raw}")),
     };
     Ok(Some(px))
 }
 
-/// Imagem → tensor `NCHW` normalizado, do jeito que os pesos esperam.
+/// Image → normalized `NCHW` tensor, the way the weights expect.
 ///
-/// O rembg divide o array pelo **maior valor do próprio array** e só depois
-/// aplica média/desvio; manter isso é o que faz a máscara sair igual à dele.
+/// rembg divides the array by the **largest value of the array itself** and only then
+/// applies mean/std; keeping that is what makes the mask come out like its own.
 pub fn normalize_input(img: &DynamicImage, p: &BgParams) -> Array4<f32> {
     let size = p.size as usize;
     let rgb = image::imageops::resize(&img.to_rgb8(), p.size, p.size, FilterType::Lanczos3);
@@ -184,14 +184,14 @@ pub fn normalize_input(img: &DynamicImage, p: &BgParams) -> Array4<f32> {
     t
 }
 
-/// Saída bruta do modelo → máscara em tons de cinza, normalizada por mín-máx.
-/// Saída constante (imagem toda fundo ou toda objeto) vira máscara zerada em
-/// vez de dividir por zero.
+/// Raw model output → greyscale mask, min-max normalized.
+/// Constant output (image all background or all object) becomes a zeroed mask
+/// instead of dividing by zero.
 pub fn mask_from_raw(raw: &[f32], w: u32, h: u32) -> anyhow::Result<GrayImage> {
     let n = (w as usize) * (h as usize);
     if raw.len() < n {
         return Err(anyhow!(
-            "a saída do modelo tem {} valores, esperava {}",
+            "the model output has {} values, expected {}",
             raw.len(),
             n
         ));
@@ -214,10 +214,10 @@ pub fn mask_from_raw(raw: &[f32], w: u32, h: u32) -> anyhow::Result<GrayImage> {
             .map(|v| (((v - mi) / span) * 255.0).round().clamp(0.0, 255.0) as u8)
             .collect()
     };
-    GrayImage::from_raw(w, h, buf).ok_or_else(|| anyhow!("máscara com tamanho inconsistente"))
+    GrayImage::from_raw(w, h, buf).ok_or_else(|| anyhow!("mask with inconsistent size"))
 }
 
-/// Limpeza opcional da máscara: corte de alfa fraco e/ou borda dura.
+/// Optional mask cleanup: weak-alpha cut and/or hard edge.
 pub fn clean_mask(mask: &GrayImage, alpha_threshold: u8, hard_edges: bool) -> GrayImage {
     let mut out = mask.clone();
     for px in out.pixels_mut() {
@@ -233,10 +233,10 @@ pub fn clean_mask(mask: &GrayImage, alpha_threshold: u8, hard_edges: bool) -> Gr
     out
 }
 
-/// Aplica a máscara como alfa e, se houver cor, compõe sobre ela.
+/// Applies the mask as alpha and, if there is a colour, composites over it.
 ///
-/// O alfa da imagem original é preservado (multiplicado pela máscara), então
-/// um PNG que já tinha transparência não a perde.
+/// The original image's alpha is preserved (multiplied by the mask), so
+/// a PNG that already had transparency does not lose it.
 pub fn compose(base: &RgbaImage, mask: &GrayImage, background: Option<Rgba<u8>>) -> RgbaImage {
     let (w, h) = base.dimensions();
     let mut out = RgbaImage::new(w, h);
@@ -284,7 +284,7 @@ fn is_image_file(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
-/// Junta arquivos escolhidos e pasta, sem repetir e em ordem estável.
+/// Joins chosen files and folder, without repeats and in stable order.
 pub fn collect_inputs(inputs: &[String], input_dir: &str) -> Vec<PathBuf> {
     let mut out: Vec<PathBuf> = Vec::new();
     for raw in inputs {
@@ -310,7 +310,7 @@ pub fn collect_inputs(inputs: &[String], input_dir: &str) -> Vec<PathBuf> {
     out
 }
 
-/// Caminho de saída de um arquivo, respeitando pasta, sufixo e formato.
+/// Output path of a file, respecting folder, suffix and format.
 pub fn output_path(input: &Path, output_dir: &str, suffix: &str, ext: &str) -> PathBuf {
     let dir = if output_dir.trim().is_empty() {
         input.parent().map(|p| p.to_path_buf()).unwrap_or_default()
@@ -320,7 +320,7 @@ pub fn output_path(input: &Path, output_dir: &str, suffix: &str, ext: &str) -> P
     let stem = input
         .file_stem()
         .map(|s| s.to_string_lossy().to_string())
-        .unwrap_or_else(|| "imagem".into());
+        .unwrap_or_else(|| "image".into());
     let suffix = if suffix.is_empty() {
         DEFAULT_SUFFIX
     } else {
@@ -329,9 +329,9 @@ pub fn output_path(input: &Path, output_dir: &str, suffix: &str, ext: &str) -> P
     dir.join(format!("{stem}{suffix}.{ext}"))
 }
 
-/// "jpg"/"jpeg" viram JPEG; qualquer outra coisa vira PNG. JPEG não guarda
-/// alfa, então sem cor de fundo o corte sairia sobre preto — nesse caso a
-/// escolha é ignorada e o arquivo sai em PNG.
+/// "jpg"/"jpeg" become JPEG; anything else becomes PNG. JPEG does not keep
+/// alpha, so without a background colour the cut would come out over black — in that case the
+/// choice is ignored and the file comes out as PNG.
 pub fn resolve_format(format: &str, has_background: bool, mask_only: bool) -> &'static str {
     let f = format.trim().to_ascii_lowercase();
     let wants_jpeg = f == "jpg" || f == "jpeg";
@@ -353,39 +353,39 @@ fn save_image(img: &DynamicImage, dest: &Path, ext: &str, quality: u8) -> anyhow
         let mut enc =
             image::codecs::jpeg::JpegEncoder::new_with_quality(&mut w, quality.clamp(1, 100));
         enc.encode_image(&img.to_rgb8())
-            .map_err(|e| anyhow!("não gravei o JPEG {}: {}", dest.display(), e))?;
+            .map_err(|e| anyhow!("could not save the JPEG {}: {}", dest.display(), e))?;
     } else {
         img.save_with_format(dest, image::ImageFormat::Png)
-            .map_err(|e| anyhow!("não gravei o PNG {}: {}", dest.display(), e))?;
+            .map_err(|e| anyhow!("could not save the PNG {}: {}", dest.display(), e))?;
     }
     Ok(std::fs::metadata(dest).map(|m| m.len()).unwrap_or(0))
 }
 
-// ── Execução ───────────────────────────────────────────────────────────
+// ── Execution ───────────────────────────────────────────────────────────
 
-/// Roda a inferência num arquivo já aberto e devolve a máscara no tamanho
-/// original da imagem.
+/// Runs inference on an already-open file and returns the mask at the image's
+/// original size.
 fn mask_for_image(
     session: &mut ort::session::Session,
     img: &DynamicImage,
     p: &BgParams,
 ) -> anyhow::Result<GrayImage> {
     let side = p.size as i64;
-    // O `ort` traz um `ndarray` próprio (0.17) e o crate usa o 0.16, então o
-    // tensor atravessa a fronteira como forma + dados contíguos, que é o que o
-    // `Tensor::from_array` aceita sem depender de versão de crate nenhuma.
+    // `ort` brings its own `ndarray` (0.17) and the crate uses 0.16, so the
+    // tensor crosses the boundary as shape + contiguous data, which is what
+    // `Tensor::from_array` accepts without depending on any crate version.
     let (data, _) = normalize_input(img, p).into_raw_vec_and_offset();
     let tensor = ort::value::Tensor::from_array((vec![1, 3, side, side], data))
-        .map_err(|e| anyhow!("não montei o tensor de entrada: {e}"))?;
+        .map_err(|e| anyhow!("could not build the input tensor: {e}"))?;
     let outputs = session
         .run(ort::inputs![tensor])
-        .map_err(|e| anyhow!("a inferência falhou: {e}"))?;
+        .map_err(|e| anyhow!("inference failed: {e}"))?;
     let (shape, raw) = outputs[0]
         .try_extract_tensor::<f32>()
-        .map_err(|e| anyhow!("não li a saída do modelo: {e}"))?;
+        .map_err(|e| anyhow!("could not read the model output: {e}"))?;
     if shape.len() < 2 {
         return Err(anyhow!(
-            "saída do modelo com formato inesperado: {:?}",
+            "model output with unexpected format: {:?}",
             &shape[..]
         ));
     }
@@ -407,10 +407,10 @@ fn run_blocking(
     progress: &ProgressFn,
 ) -> anyhow::Result<BgResult> {
     let params = *params_for(model_id)
-        .ok_or_else(|| anyhow!("o modelo {model_id} não serve para remover fundo"))?;
+        .ok_or_else(|| anyhow!("model {model_id} cannot remove background"))?;
     let files = collect_inputs(&opts.inputs, &opts.input_dir);
     if files.is_empty() {
-        return Err(anyhow!("escolha ao menos uma imagem"));
+        return Err(anyhow!("choose at least one image"));
     }
     let background = parse_hex_color(&opts.background)?;
     let ext = resolve_format(&opts.format, background.is_some(), opts.mask_only);
@@ -454,7 +454,7 @@ fn run_blocking(
             }),
             Err(e) => {
                 failed += 1;
-                tracing::warn!("[img-bg] {} falhou: {}", path.display(), e);
+                tracing::warn!("[img-bg] {} failed: {}", path.display(), e);
                 items.push(BgItem {
                     input: path.to_string_lossy().to_string(),
                     output: None,
@@ -477,8 +477,8 @@ fn run_blocking(
     })
 }
 
-/// Ponto de entrada da tool. Garante runtime e modelo antes de qualquer
-/// inferência, e só então joga o trabalho pesado para uma thread de bloqueio.
+/// Tool entry point. Guarantees runtime and model before any
+/// inference, and only then throws the heavy work onto a blocking thread.
 pub async fn run(opts: BgOptions, progress: ProgressFn) -> anyhow::Result<BgResult> {
     let model_id = if opts.model.trim().is_empty() {
         default_model().to_string()
@@ -486,16 +486,16 @@ pub async fn run(opts: BgOptions, progress: ProgressFn) -> anyhow::Result<BgResu
         opts.model.trim().to_string()
     };
     if params_for(&model_id).is_none() {
-        return Err(anyhow!("o modelo {model_id} não serve para remover fundo"));
+        return Err(anyhow!("model {model_id} cannot remove background"));
     }
-    // Erro acionável antes de baixar 180 MB à toa.
+    // Actionable error before downloading 180 MB for nothing.
     crate::core::onnxrt::init()?;
     super::onnx::ensure_model(&model_id, &progress).await?;
 
     let p = progress.clone();
     tokio::task::spawn_blocking(move || run_blocking(&opts, &model_id, &p))
         .await
-        .map_err(|e| anyhow!("tarefa de remoção de fundo falhou: {e}"))?
+        .map_err(|e| anyhow!("background removal task failed: {e}"))?
 }
 
 #[cfg(test)]
@@ -510,7 +510,7 @@ mod tests {
     fn cada_modelo_do_catalogo_rembg_tem_pre_processamento() {
         for m in super::super::onnx::family("rembg") {
             let p = params_for(m.id)
-                .unwrap_or_else(|| panic!("modelo {} sem parâmetros de entrada", m.id));
+                .unwrap_or_else(|| panic!("model {} without input parameters", m.id));
             assert!(p.size >= 320);
             assert!(p.std.iter().all(|s| *s > 0.0), "desvio zero em {}", m.id);
         }
@@ -524,9 +524,9 @@ mod tests {
     }
 
     #[test]
-    fn cores_em_hex_de_tres_seis_e_oito_digitos() {
-        assert_eq!(parse_hex_color("").expect("vazio"), None);
-        assert_eq!(parse_hex_color("   ").expect("espaço"), None);
+    fn hex_colors_with_three_six_and_eight_digits() {
+        assert_eq!(parse_hex_color("").expect("empty"), None);
+        assert_eq!(parse_hex_color("   ").expect("whitespace"), None);
         assert_eq!(
             parse_hex_color("#FF8800").expect("6"),
             Some(Rgba([255, 136, 0, 255]))
@@ -551,7 +551,7 @@ mod tests {
             mean: [0.5, 0.5, 0.5],
             std: [1.0, 1.0, 1.0],
         };
-        // Imagem branca: o maior valor é 255, então tudo vira 1.0 antes da média.
+        // White image: the largest value is 255, so everything becomes 1.0 before the mean.
         let img = DynamicImage::ImageRgb8(image::RgbImage::from_pixel(
             8,
             8,
@@ -560,7 +560,7 @@ mod tests {
         let t = normalize_input(&img, &p);
         assert_eq!(t.shape(), &[1, 3, 4, 4]);
         for v in t.iter() {
-            assert!((v - 0.5).abs() < 1e-5, "esperava 0.5, veio {v}");
+            assert!((v - 0.5).abs() < 1e-5, "expected 0.5, got {v}");
         }
     }
 
@@ -583,16 +583,16 @@ mod tests {
     #[test]
     fn a_mascara_normaliza_por_min_e_max() {
         let raw = vec![-1.0f32, 0.0, 1.0, 3.0];
-        let m = mask_from_raw(&raw, 2, 2).expect("máscara");
+        let m = mask_from_raw(&raw, 2, 2).expect("mask");
         assert_eq!(m.get_pixel(0, 0).0[0], 0);
         assert_eq!(m.get_pixel(1, 1).0[0], 255);
-        // 0.0 está a 1/4 do caminho entre -1 e 3.
+        // 0.0 is 1/4 of the way between -1 and 3.
         assert_eq!(m.get_pixel(1, 0).0[0], 64);
     }
 
     #[test]
     fn saida_constante_vira_mascara_zerada_em_vez_de_dividir_por_zero() {
-        let m = mask_from_raw(&[0.7f32; 4], 2, 2).expect("máscara");
+        let m = mask_from_raw(&[0.7f32; 4], 2, 2).expect("mask");
         assert!(m.pixels().all(|p| p.0[0] == 0));
     }
 
@@ -603,9 +603,9 @@ mod tests {
 
     #[test]
     fn a_mascara_ignora_valores_a_mais_do_batch() {
-        // (1, 2, 2, 2): só o primeiro canal interessa.
+        // (1, 2, 2, 2): only the first channel matters.
         let raw = vec![0.0f32, 1.0, 0.0, 1.0, 9.0, 9.0, 9.0, 9.0];
-        let m = mask_from_raw(&raw, 2, 2).expect("máscara");
+        let m = mask_from_raw(&raw, 2, 2).expect("mask");
         assert_eq!(m.get_pixel(0, 0).0[0], 0);
         assert_eq!(m.get_pixel(1, 0).0[0], 255);
     }
@@ -637,7 +637,7 @@ mod tests {
         assert_eq!(
             out.get_pixel(1, 0).0[3],
             0,
-            "fundo tinha que ficar invisível"
+            "background had to become invisible"
         );
     }
 
@@ -661,7 +661,7 @@ mod tests {
         assert_eq!(meio[3], 255);
         assert!(
             (100..=160).contains(&meio[0]),
-            "borda tinha que misturar, veio {meio:?}"
+            "the edge should have blended, got {meio:?}"
         );
     }
 
@@ -684,22 +684,22 @@ mod tests {
     }
 
     #[test]
-    fn a_lista_de_entrada_junta_pasta_e_arquivos_sem_repetir() {
+    fn input_list_joins_folder_and_files_without_repeats() {
         let dir = std::env::temp_dir().join(format!("gumballz-get-imgbg-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("pasta de teste");
+        std::fs::create_dir_all(&dir).expect("test folder");
         let a = dir.join("a.png");
         let b = dir.join("b.jpg");
         let txt = dir.join("leia.txt");
         image::RgbaImage::from_pixel(2, 2, Rgba([1, 2, 3, 255]))
             .save(&a)
-            .expect("png de teste");
+            .expect("test png");
         image::RgbImage::from_pixel(2, 2, image::Rgb([1, 2, 3]))
             .save(&b)
-            .expect("jpg de teste");
-        std::fs::write(&txt, "nada").expect("txt de teste");
+            .expect("test jpg");
+        std::fs::write(&txt, "nada").expect("test txt");
 
         let got = collect_inputs(&[a.to_string_lossy().to_string()], &dir.to_string_lossy());
-        assert_eq!(got, vec![a.clone(), b.clone()], "sem repetir e sem o .txt");
+        assert_eq!(got, vec![a.clone(), b.clone()], "without repeats and without the .txt");
 
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -710,14 +710,14 @@ mod tests {
         assert!(collect_inputs(&["/nao/existe.png".into()], "/nao/existe/").is_empty());
     }
 
-    /// Precisa de rede e do runtime instalado: baixa o u2netp, roda numa imagem
-    /// sintética (quadrado claro no meio de um fundo escuro) e confere que
-    /// saiu um PNG RGBA do tamanho certo.
+    /// Needs network and the installed runtime: downloads u2netp, runs on a
+    /// synthetic image (light square in the middle of a dark background) and checks that
+    /// a right-sized RGBA PNG came out.
     #[test]
-    #[ignore = "rede + runtime: baixa u2netp e remove o fundo de uma imagem sintetica"]
-    fn remove_o_fundo_de_verdade_com_o_u2netp() {
+    #[ignore = "network + runtime: downloads u2netp and removes the background of a synthetic image"]
+    fn removes_the_background_for_real_with_u2netp() {
         let dir = std::env::temp_dir().join("gumballz-get-imgbg-live");
-        std::fs::create_dir_all(&dir).expect("pasta");
+        std::fs::create_dir_all(&dir).expect("folder");
         let src = dir.join("alvo.png");
         let mut img = image::RgbImage::from_pixel(256, 256, image::Rgb([12, 14, 18]));
         for y in 80..176 {
@@ -725,7 +725,7 @@ mod tests {
                 img.put_pixel(x, y, image::Rgb([240, 230, 210]));
             }
         }
-        img.save(&src).expect("imagem de teste");
+        img.save(&src).expect("test image");
 
         let rt = tokio::runtime::Runtime::new().expect("runtime tokio");
         let opts = BgOptions {
@@ -743,21 +743,21 @@ mod tests {
         };
         let res = rt
             .block_on(run(opts, super::super::noop_progress()))
-            .expect("remoção de fundo");
+            .expect("background removal");
         assert_eq!(res.failed, 0, "itens: {:?}", res.items);
-        let out = res.items[0].output.clone().expect("saída");
-        let saved = image::open(&out).expect("abrir saída").to_rgba8();
+        let out = res.items[0].output.clone().expect("output");
+        let saved = image::open(&out).expect("open output").to_rgba8();
         assert_eq!(saved.dimensions(), (256, 256));
-        // O quadrado claro do meio é o objeto; o canto é fundo. Se a
-        // normalização estivesse com os eixos ou os canais trocados, a máscara
-        // sairia invertida ou embaralhada e uma destas duas falharia.
+        // The light square in the middle is the object; the corner is background. If
+        // normalization had the axes or channels swapped, the mask
+        // would come out inverted or scrambled and one of these two would fail.
         assert!(
             saved.get_pixel(128, 128).0[3] > 200,
-            "o objeto do meio devia ter ficado opaco"
+            "the middle object should have stayed opaque"
         );
         assert!(
             saved.get_pixel(4, 4).0[3] < 64,
-            "o canto era fundo e devia ter ficado transparente"
+            "the corner was background and should have stayed transparent"
         );
     }
 }

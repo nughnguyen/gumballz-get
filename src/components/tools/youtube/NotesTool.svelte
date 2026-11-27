@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Transcrição virando artigo em Markdown: parágrafos costurados, capítulos e timestamps. */
+  /** Transcript turned into a Markdown article: stitched paragraphs, chapters and timestamps. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

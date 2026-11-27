@@ -1,6 +1,6 @@
-//! Visualizador do `messages.csv`: agrupa por conversa, ordena por data,
-//! descobre quem e "voce" e gera uma pagina HTML local navegavel, um Markdown
-//! por conversa e o JSON cru. Sem rede: e o proprio export no disco.
+//! Viewer for `messages.csv`: groups by conversation, sorts by date,
+//! figures out who "you" are and generates a navigable local HTML page, a Markdown
+//! per conversation and the raw JSON. No network: it is the export itself on disk.
 
 use std::collections::{HashMap, HashSet};
 
@@ -17,11 +17,11 @@ const ID: &str = "li-messages";
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Options {
     pub path: String,
-    /// Nome de quem exportou. Vazio: a gente deduz.
+    /// Name of who exported. Empty: we infer it.
     pub me: Option<String>,
-    /// Busca livre em participante, assunto e texto.
+    /// Free search over participant, subject and text.
     pub query: Option<String>,
-    /// Quantas conversas voltam com as mensagens para a UI.
+    /// How many conversations come back with their messages for the UI.
     pub limit: Option<usize>,
     pub out_dir: Option<String>,
     pub export_html: Option<bool>,
@@ -36,9 +36,9 @@ pub struct Message {
     pub date: String,
     pub subject: String,
     pub content: String,
-    /// Verdadeiro quando quem mandou e voce.
+    /// True when the sender is you.
     pub mine: bool,
-    /// Mensagem sem texto (costuma ser anexo ou convite).
+    /// Message without text (usually an attachment or an invite).
     pub empty: bool,
 }
 
@@ -72,7 +72,7 @@ pub struct MessagesResult {
     pub exports: Vec<String>,
 }
 
-/// Data em `YYYY-MM-DD HH:MM`, quando der. Sem data, devolve o cru.
+/// Date in `YYYY-MM-DD HH:MM`, when possible. Without a date, returns the raw value.
 fn stamp(raw: &str) -> String {
     match parse_date(raw) {
         Some(d) => {
@@ -92,7 +92,7 @@ fn stamp(raw: &str) -> String {
     }
 }
 
-/// Quem aparece como remetente em mais conversas distintas e "voce".
+/// Whoever appears as sender in the most distinct conversations is "you".
 pub fn guess_me(rows: &[(String, String, String)]) -> String {
     let mut convs: HashMap<&str, HashSet<&str>> = HashMap::new();
     let mut totals: HashMap<&str, usize> = HashMap::new();
@@ -487,7 +487,7 @@ mod tests {
         assert!(page.contains("Ana Silva"));
         assert!(page.contains("class=\"wrap\""));
         let md: Vec<_> = std::fs::read_dir(out.join("conversas"))
-            .expect("pasta")
+            .expect("folder")
             .filter_map(std::result::Result::ok)
             .collect();
         assert_eq!(md.len(), 2);

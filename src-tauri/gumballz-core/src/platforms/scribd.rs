@@ -36,11 +36,11 @@ impl PlatformDownloader for ScribdDownloader {
 
     async fn get_media_info(&self, url: &str) -> anyhow::Result<MediaInfo> {
         let info =
-            scribd::parse_scribd_url(url).ok_or_else(|| anyhow!("Không phải link Scribd"))?;
+            scribd::parse_scribd_url(url).ok_or_else(|| anyhow!("Not a Scribd link"))?;
         let client = crate::core::tools::client()?;
         let html = scribd::fetch_embed_html(&client, &info.embed_url).await?;
         let doc = scribd::extract_document_json(&html)
-            .ok_or_else(|| anyhow!("Không đọc được thông tin tài liệu Scribd"))?;
+            .ok_or_else(|| anyhow!("Could not read Scribd document info"))?;
         Ok(MediaInfo {
             title: doc.title,
             author: "Scribd".to_string(),
@@ -81,7 +81,7 @@ impl PlatformDownloader for ScribdDownloader {
             .page_url
             .as_deref()
             .or_else(|| info.available_qualities.first().map(|q| q.url.as_str()))
-            .ok_or_else(|| anyhow!("Không có link Scribd"))?;
+            .ok_or_else(|| anyhow!("No Scribd link"))?;
 
         let tx = progress.clone();
         let tool_progress: crate::core::tools::ProgressFn =
@@ -125,7 +125,7 @@ impl PlatformDownloader for ScribdDownloader {
         let _ = progress
             .send(ProgressUpdate::phase(
                 &format!(
-                    "Đã tải {}/{} trang",
+                    "Downloaded {}/{} pages",
                     outcome.pages_got, outcome.pages_total
                 ),
                 100.0,

@@ -1,5 +1,5 @@
-/// Categorias que não adianta tentar de novo: a fonte está quebrada ou o
-/// pós-processamento falhou por falta de dados, não por azar de rede.
+/// Categories not worth retrying: the source is broken or
+/// post-processing failed for lack of data, not bad network luck.
 pub fn is_terminal_category(category: &str) -> bool {
     matches!(
         category,
@@ -10,9 +10,9 @@ pub fn is_terminal_category(category: &str) -> bool {
 pub fn classify_download_error(error: &str) -> (&str, &str) {
     let lower = error.to_lowercase();
 
-    // Antes de tudo que casa com "yt-dlp"/"ffmpeg": a mensagem do Reddit era
-    // "yt-dlp: Preprocessing: Conversion failed!" e caía em `ytdlp_needed`,
-    // que mandava instalar o yt-dlp que já estava instalado.
+    // Before anything matching "yt-dlp"/"ffmpeg": the Reddit message was
+    // "yt-dlp: Preprocessing: Conversion failed!" and fell into `ytdlp_needed`,
+    // which told the user to install the yt-dlp that was already installed.
     if lower.contains("fragment") && (lower.contains("not found") || lower.contains("404"))
         || lower.contains("downloaded file is empty")
         || lower.contains("conflicting range")

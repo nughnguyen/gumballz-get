@@ -18,9 +18,9 @@
 
 <script lang="ts">
   /**
-   * Backup de Showcase / Álbum / Canal do Vimeo: enumera a coleção, deixa
-   * escolher o que entra e baixa item a item, com resumo por item e retomada
-   * (o que já está na pasta, íntegro, é pulado).
+   * Backup of a Vimeo Showcase / Album / Channel: enumerates the collection, lets
+   * you pick what goes in and downloads item by item, with a per-item summary and resume
+   * (what is already in the folder, intact, is skipped).
    */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";

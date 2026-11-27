@@ -1,7 +1,7 @@
 /**
- * Tipos e utilidades da categoria Pinterest (estudo 67). Espelham os
- * structs de `gumballz-core/src/core/tools/pinterest/` e dos comandos
- * `tool_pin_*`; tudo que a UI repete (filtros, opções, rótulos) mora aqui.
+ * Types and utilities for the Pinterest category (study 67). They mirror the
+ * structs in `gumballz-core/src/core/tools/pinterest/` and the
+ * `tool_pin_*` commands; everything the UI repeats (filters, options, labels) lives here.
  */
 
 export type Media = { url: string; width: number; height: number };
@@ -94,17 +94,17 @@ export type KeywordsOut = { term: string; suggestions: string[]; guides: string[
 export type LinkCheck = { url: string; status: number | null; final_url: string | null; ok: boolean; error: string | null };
 export type SourceOut = { pin: Pin; link: LinkCheck | null; wayback: string | null; reverse: [string, string][]; resolved_url: string };
 
-/** Melhor imagem para mostrar num card. */
+/** Best image to show on a card. */
 export function preview(p: Pin): string {
   return p.thumb ?? p.image_large?.url ?? p.image?.url ?? p.video?.thumbnail ?? "";
 }
 
-/** Chave i18n do tipo do pin. */
+/** i18n key for the pin type. */
 export function kindKey(p: Pin): string {
   return `tools.pinterest.kind_${p.kind}`;
 }
 
-/** Sinal de IA que vale a pena mostrar (rótulo oficial ou ferramenta citada). */
+/** AI signal worth showing (official label or cited tool). */
 export function looksAi(p: Pin): boolean {
   return p.ai.labeled || p.ai.keyword_level >= 2;
 }
@@ -121,7 +121,7 @@ export function fmtDuration(ms: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
-/** Luminância relativa para escolher texto claro/escuro sobre a cor. */
+/** Relative luminance, for picking light/dark text over the color. */
 export function darkText(hex: string): boolean {
   const v = parseInt(hex.replace("#", ""), 16);
   const r = (v >> 16) & 255, g = (v >> 8) & 255, b = v & 255;
@@ -145,6 +145,6 @@ export function saveCookies(v: string): void {
     if (v.trim()) localStorage.setItem(COOKIES_KEY, v.trim());
     else localStorage.removeItem(COOKIES_KEY);
   } catch {
-    /* storage indisponível */
+    /* storage unavailable */
   }
 }

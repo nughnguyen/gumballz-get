@@ -1,12 +1,12 @@
-//! Álbum do Nintendo Switch: `Nintendo/Album/<ano>/<mês>/<dia>/` cheio de
+//! Nintendo Switch album: `Nintendo/Album/<year>/<month>/<day>/` full of
 //! `20260909211403000-F1C11A22FAEE3B82F21B330E1B786A39.jpg`.
 //!
-//! Os 16 primeiros dígitos são a data local da captura (os dois últimos são um
-//! contador dentro do mesmo segundo) e os 32 hex identificam o jogo — é um
-//! hash do title ID, o mesmo para todo mundo que jogou o mesmo cartucho.
-//! A tabela `switch-games.tsv` vem do projeto nxshot (MIT, pxdl/nxshot), que
-//! coleta esses hashes da comunidade; hash fora da tabela vira pasta com o
-//! próprio hash, para o usuário renomear à mão. Nome de jogo não se inventa.
+//! The first 16 digits are the capture's local date (the last two are a
+//! counter within the same second) and the 32 hex identify the game — it is a
+//! hash of the title ID, the same for everyone who played the same cartridge.
+//! The `switch-games.tsv` table comes from the nxshot project (MIT, pxdl/nxshot), which
+//! collects these hashes from the community; a hash outside the table becomes a folder with its
+//! own hash, for the user to rename by hand. A game name is never invented.
 
 use std::path::{Path, PathBuf};
 
@@ -32,25 +32,25 @@ fn games() -> &'static std::collections::HashMap<&'static str, &'static str> {
     &TABLE
 }
 
-/// Nome do jogo para um hash do álbum, se a tabela conhecer.
+/// Game name for an album hash, if the table knows it.
 pub fn game_name(game_id: &str) -> Option<&'static str> {
     games().get(game_id.to_ascii_uppercase().as_str()).copied()
 }
 
-/// O que dá para extrair do nome de um arquivo do álbum.
+/// What can be extracted from an album file's name.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Capture {
     pub taken: NaiveDateTime,
-    /// Contador dentro do mesmo segundo (os dois últimos dígitos).
+    /// Counter within the same second (the last two digits).
     pub seq: u32,
     pub game_id: String,
     pub ext: String,
     pub is_clip: bool,
 }
 
-/// `20260909211403000-<32 hex>.jpg|.mp4`. Qualquer outra coisa é ignorada —
-/// é assim que o import não mexe em `.DS_Store`, thumbnail ou arquivo já
-/// renomeado por uma importação anterior.
+/// `20260909211403000-<32 hex>.jpg|.mp4`. Anything else is ignored —
+/// that is how the import leaves `.DS_Store`, thumbnails or a file already
+/// renamed by an earlier import alone.
 pub fn parse_capture_name(file_name: &str) -> Option<Capture> {
     let (stem, ext) = file_name.rsplit_once('.')?;
     let ext = ext.to_ascii_lowercase();
@@ -81,9 +81,9 @@ pub fn parse_capture_name(file_name: &str) -> Option<Capture> {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct SwitchOptions {
-    /// Pasta de origem: o cartão inteiro, o `Nintendo/Album` ou um dia só.
+    /// Source folder: the whole card, `Nintendo/Album`, or a single day.
     pub source: String,
-    /// Biblioteca de destino.
+    /// Destination library.
     pub dest: String,
     /// "game" | "game-year" | "year-month" | "flat"
     #[serde(default = "default_layout")]
@@ -95,13 +95,13 @@ pub struct SwitchOptions {
     pub dedupe: bool,
     #[serde(default)]
     pub dry_run: bool,
-    /// Lê duração e resolução dos clipes com o ffprobe gerido.
+    /// Reads clip duration and resolution with the managed ffprobe.
     #[serde(default = "default_true")]
     pub probe_clips: bool,
-    /// "" | "webm" | "gif" — conversão extra dos clipes, o original fica.
+    /// "" | "webm" | "gif" — extra clip conversion, the original stays.
     #[serde(default)]
     pub convert_clips: String,
-    /// Só imagens, só clipes, ou tudo: "all" | "images" | "clips".
+    /// Only images, only clips, or everything: "all" | "images" | "clips".
     #[serde(default = "default_kinds")]
     pub kinds: String,
 }
@@ -128,12 +128,12 @@ pub struct SwitchResult {
     pub skipped: u64,
     pub failed: u64,
     pub bytes_imported: u64,
-    /// Hashes que a tabela não conhece — a pasta ficou com o hash no nome.
+    /// Hashes the table does not know — the folder kept the hash in its name.
     pub unknown_ids: Vec<String>,
     pub dry_run: bool,
 }
 
-/// Pasta de destino de uma captura, conforme o arranjo escolhido.
+/// Destination folder for a capture, per the chosen layout.
 pub fn dest_dir(root: &Path, layout: &str, game: &str, taken: &NaiveDateTime) -> PathBuf {
     let folder = sanitize_name(game);
     match layout {
@@ -146,8 +146,8 @@ pub fn dest_dir(root: &Path, layout: &str, game: &str, taken: &NaiveDateTime) ->
     }
 }
 
-/// `Hades 2026-09-09 21-14-03` — sem extensão, sem o contador, que só entra
-/// quando dois prints caem no mesmo segundo (o `unique_path` resolve).
+/// `Hades 2026-09-09 21-14-03` — no extension, no counter, which only comes in
+/// when two screenshots land in the same second (the `unique_path` resolves it).
 pub fn dest_stem(game: &str, taken: &NaiveDateTime) -> String {
     sanitize_name(&format!("{} {}", game, taken.format("%Y-%m-%d %H-%M-%S")))
 }
@@ -179,8 +179,8 @@ fn collect(source: &Path, kinds: &str) -> Vec<(PathBuf, Capture)> {
     out
 }
 
-/// Duração e resolução de um clipe, pelo ffprobe gerido. Sem ffprobe, o clipe
-/// entra do mesmo jeito — só não mostra os números.
+/// Duration and resolution of a clip, via the managed ffprobe. Without ffprobe, the clip
+/// still goes in — it just does not show the numbers.
 async fn probe(ffprobe: &Path, file: &Path) -> Option<(f64, u32, u32)> {
     let out = crate::core::process::command(ffprobe)
         .args([
@@ -223,7 +223,7 @@ async fn probe(ffprobe: &Path, file: &Path) -> Option<(f64, u32, u32)> {
     Some((duration, width, height))
 }
 
-/// WebM VP9 do clipe de 30 s: cabe em qualquer chat sem virar GIF de 40 MB.
+/// 30 s clip as WebM VP9: fits in any chat without becoming a 40 MB GIF.
 async fn to_webm(ffmpeg: &Path, input: &Path) -> anyhow::Result<PathBuf> {
     let output = input.with_extension("webm");
     let out = crate::core::process::command(ffmpeg)
@@ -246,7 +246,7 @@ async fn to_webm(ffmpeg: &Path, input: &Path) -> anyhow::Result<PathBuf> {
         .arg(&output)
         .output()
         .await
-        .map_err(|e| anyhow::anyhow!("ffmpeg nao iniciou: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("ffmpeg did not start: {}", e))?;
     if !out.status.success() {
         anyhow::bail!("{}", String::from_utf8_lossy(&out.stderr).trim());
     }
@@ -256,11 +256,11 @@ async fn to_webm(ffmpeg: &Path, input: &Path) -> anyhow::Result<PathBuf> {
 pub async fn run(opts: SwitchOptions, progress: ProgressFn) -> anyhow::Result<SwitchResult> {
     let source = PathBuf::from(opts.source.trim());
     if !source.is_dir() {
-        anyhow::bail!("pasta de origem não encontrada: {}", source.display());
+        anyhow::bail!("source folder not found: {}", source.display());
     }
     let dest_root = PathBuf::from(opts.dest.trim());
     if opts.dest.trim().is_empty() {
-        anyhow::bail!("escolha a pasta da biblioteca de destino");
+        anyhow::bail!("pick the destination library folder");
     }
     let move_it = opts.mode == "move";
 
@@ -449,7 +449,7 @@ pub async fn run(opts: SwitchOptions, progress: ProgressFn) -> anyhow::Result<Sw
 
     if !opts.dry_run {
         if let Err(e) = index.save() {
-            tracing::warn!("[{}] índice de duplicados: {}", ID, e);
+            tracing::warn!("[{}] duplicate index: {}", ID, e);
         }
     }
     let games = summarize(&items);
@@ -481,7 +481,7 @@ mod tests {
     #[test]
     fn parses_a_real_screenshot_name() {
         let c = parse_capture_name("2017030619573600-F1C11A22FAEE3B82F21B330E1B786A39.jpg")
-            .expect("nome válido");
+            .expect("valid name");
         assert_eq!(
             c.taken.format("%Y-%m-%d %H:%M:%S").to_string(),
             "2017-03-06 19:57:36"
@@ -495,7 +495,7 @@ mod tests {
     #[test]
     fn parses_a_clip_and_the_counter() {
         let c = parse_capture_name("2026090921140312-8AEDFF741E2D23FBED39474178692DAF.mp4")
-            .expect("nome válido");
+            .expect("valid name");
         assert!(c.is_clip);
         assert_eq!(c.seq, 12);
         assert_eq!(c.taken.format("%H-%M-%S").to_string(), "21-14-03");
@@ -503,7 +503,7 @@ mod tests {
 
     #[test]
     fn refuses_names_that_are_not_from_the_album() {
-        // Extensão que o álbum não usa.
+        // An extension the album does not use.
         assert!(
             parse_capture_name("2017030619573600-F1C11A22FAEE3B82F21B330E1B786A39.png").is_none()
         );
@@ -511,7 +511,7 @@ mod tests {
         assert!(
             parse_capture_name("2017030619573600-F1C11A22FAEE3B82F21B330E1B786A3.jpg").is_none()
         );
-        // Hash com letra fora do hexadecimal.
+        // Hash with a letter outside hexadecimal.
         assert!(
             parse_capture_name("2017030619573600-Z1C11A22FAEE3B82F21B330E1B786A39.jpg").is_none()
         );
@@ -519,15 +519,15 @@ mod tests {
         assert!(
             parse_capture_name("201703061957360-F1C11A22FAEE3B82F21B330E1B786A39.jpg").is_none()
         );
-        // Data impossível (mês 13).
+        // Impossible date (month 13).
         assert!(
             parse_capture_name("2017130619573600-F1C11A22FAEE3B82F21B330E1B786A39.jpg").is_none()
         );
-        // Hora impossível.
+        // Impossible time.
         assert!(
             parse_capture_name("2017030699573600-F1C11A22FAEE3B82F21B330E1B786A39.jpg").is_none()
         );
-        // Já renomeado por uma importação anterior.
+        // Already renamed by an earlier import.
         assert!(parse_capture_name("Hades 2026-09-09 21-14-03.jpg").is_none());
         assert!(parse_capture_name("sem-extensao").is_none());
     }
@@ -538,7 +538,7 @@ mod tests {
             game_name("F1C11A22FAEE3B82F21B330E1B786A39"),
             Some("The Legend of Zelda - Breath of the Wild")
         );
-        // Minúsculas também casam.
+        // Lowercase matches too.
         assert_eq!(
             game_name("f1c11a22faee3b82f21b330e1b786a39"),
             Some("The Legend of Zelda - Breath of the Wild")
@@ -559,7 +559,7 @@ mod tests {
     fn destination_follows_the_layout() {
         let root = Path::new("/lib");
         let c = parse_capture_name("2026090921140300-8AEDFF741E2D23FBED39474178692DAF.jpg")
-            .expect("nome válido");
+            .expect("valid name");
         assert_eq!(
             dest_dir(root, "game", "Super Mario Odyssey", &c.taken),
             root.join("Super Mario Odyssey")
@@ -582,14 +582,14 @@ mod tests {
     #[test]
     fn destination_name_is_safe_for_the_filesystem() {
         let c = parse_capture_name("2026090921140300-8AEDFF741E2D23FBED39474178692DAF.jpg")
-            .expect("nome válido");
+            .expect("valid name");
         let stem = dest_stem("Jogo: o/retorno", &c.taken);
         assert!(!stem.contains('/'), "{}", stem);
         assert!(stem.starts_with("Jogo"), "{}", stem);
     }
 
     fn tree(dir: &Path, names: &[(&str, &[u8])]) {
-        std::fs::create_dir_all(dir).expect("criar árvore");
+        std::fs::create_dir_all(dir).expect("create tree");
         for (name, body) in names {
             std::fs::write(dir.join(name), body).expect("escrever captura");
         }
@@ -637,7 +637,7 @@ mod tests {
         let r = run(opts.clone(), crate::core::tools::noop_progress())
             .await
             .expect("importar");
-        assert_eq!(r.found, 3, "o arquivo fora do padrão não pode entrar");
+        assert_eq!(r.found, 3, "the file outside the pattern cannot get in");
         assert_eq!(r.imported, 3);
         assert_eq!(r.skipped, 0);
         assert_eq!(r.failed, 0);
@@ -650,12 +650,12 @@ mod tests {
             .join("The Legend of Zelda - Breath of the Wild 2026-09-09 21-14-03.jpg")
             .exists());
         assert!(lib.join("00000000000000000000000000000000").is_dir());
-        // A origem continua lá: modo copiar.
+        // The source stays put: copy mode.
         assert!(card
             .join("2026090921140300-F1C11A22FAEE3B82F21B330E1B786A39.jpg")
             .exists());
 
-        // Segunda rodada: tudo já está na biblioteca, nada entra de novo.
+        // Second round: everything is already in the library, nothing goes in again.
         let again = run(opts, crate::core::tools::noop_progress())
             .await
             .expect("reimportar");
@@ -699,7 +699,7 @@ mod tests {
         assert!(card
             .join("2026090921140300-8AEDFF741E2D23FBED39474178692DAF.jpg")
             .exists());
-        assert!(!lib.exists(), "ensaio não pode criar a biblioteca");
+        assert!(!lib.exists(), "a dry run cannot create the library");
 
         let real = SwitchOptions {
             dry_run: false,

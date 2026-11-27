@@ -18,8 +18,8 @@
 
 <script lang="ts">
   /**
-   * Grade de pins (masonry por colunas CSS) com seleção. Mostra os sinais
-   * que o Pinterest esconde: anúncio, IA, tipo, saves.
+   * Pin grid (masonry via CSS columns) with selection. Shows the signals
+   * Pinterest hides: ads, AI, type, saves.
    */
   import { t } from "$lib/i18n";
   import { openUrl } from "$lib/tools/rt";

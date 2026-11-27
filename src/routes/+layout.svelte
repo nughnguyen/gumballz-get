@@ -215,8 +215,8 @@
         keywords: "ferramentas tools utilities apps",
         action: () => goto("/tools"),
       },
-      // Cada ferramenta do catálogo entra na paleta com as mesmas
-      // palavras-chave da busca do hub, então ⌘K acha "instagram" também.
+      // Each catalog tool enters the palette with the same
+      // keywords as the hub search, so ⌘K finds "instagram" too.
       ...TOOLS.map((tool) => ({
         id: `tool-${tool.id}`,
         label: get(t)(`tools.catalog.${tool.id}.name`),
@@ -295,10 +295,10 @@
 
   $effect(() => {
     document.documentElement.setAttribute("data-shell", "mac");
-    // O shell é o mesmo em todas as plataformas, mas os controles de janela
-    // não: o macOS põe fechar/minimizar à esquerda (sobre a sidebar, titlebar
-    // overlay), Windows e Linux à direita. Sem data-platform o app reservava
-    // espaço morto e encostava a busca no botão de fechar.
+    // The shell is the same on every platform, but the window controls
+    // aren't: macOS puts close/minimize on the left (over the sidebar, titlebar
+    // overlay), Windows and Linux on the right. Without data-platform the app reserved
+    // dead space and pushed search against the close button.
     document.documentElement.setAttribute("data-platform", isMac() ? "macos" : "other");
     document.documentElement.setAttribute("dir", isRtlLocale($locale) ? "rtl" : "ltr");
     document.documentElement.setAttribute("lang", $locale || "en");

@@ -120,10 +120,10 @@ pub async fn waveform_peaks(input: String, buckets: Option<usize>) -> Result<Vec
     Ok(ffmpeg_ops::pcm_s16le_peaks(&output.stdout, n))
 }
 
-/// Quanto silencio o Smart Speed removeria, sem escrever arquivo nenhum.
+/// How much silence Smart Speed would remove, without writing any file.
 ///
-/// Preview antes de aplicar: o usuario ve o ganho de duracao e decide, em vez
-/// de esperar uma conversao inteira para descobrir que nao valia a pena.
+/// Preview before applying: the user sees the duration gain and decides, instead
+/// of waiting for a whole conversion to find out it was not worth it.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SilenceEstimate {
     pub total_secs: f64,
@@ -155,10 +155,10 @@ pub async fn video_op_silence_estimate(input: String) -> Result<SilenceEstimate,
         .await
         .map_err(|e| format!("ffmpeg failed: {}", e))?;
 
-    // silencedetect escreve no stderr mesmo em execucao bem sucedida.
+    // silencedetect writes to stderr even on a successful run.
     let stderr = String::from_utf8_lossy(&output.stderr);
-    // Desconta o que o filtro silenceremove preserva: sem isso o preview promete
-    // mais corte do que a conversao entrega.
+    // Subtracts what the silenceremove filter preserves: without this the preview
+    // promises more cutting than the conversion delivers.
     let silence_secs = ffmpeg_ops::estimate_removable_secs(&stderr);
     let saved_percent = if total_secs > 0.0 {
         (silence_secs / total_secs * 100.0).clamp(0.0, 100.0)

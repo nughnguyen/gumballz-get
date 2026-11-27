@@ -2,7 +2,7 @@ use serde::Serialize;
 
 use gumballz_core::core::tools::yt_search::{self, SearchHit, SearchOptions};
 
-/// Teto da tela de busca; a CLI pede mais direto ao core.
+/// Search screen ceiling; the CLI asks the core more directly.
 const UI_MAX_RESULTS: u32 = 20;
 
 #[derive(Clone, Serialize)]

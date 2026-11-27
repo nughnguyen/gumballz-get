@@ -14,11 +14,12 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-//! Servidor MCP embutido (estudos 22 e 23): as tools da seção Tools expostas
-//! como ferramentas MCP em `POST /mcp` no bridge local, com o mesmo bearer
-//! da extensão. Transporte "Streamable HTTP" só com respostas JSON (sem SSE),
-//! que é o que Claude Code, Cursor, Goose e o `mcp-remote` do Claude Desktop
-//! aceitam. Sem crate de MCP: o protocolo aqui é JSON-RPC com quatro métodos.
+//! Built-in MCP server (studies 22 and 23): the Tools section's tools exposed
+//! as MCP tools at `POST /mcp` on the local bridge, with the same bearer token
+//! as the extension. "Streamable HTTP" transport with JSON-only responses (no
+//! SSE), which is what Claude Code, Cursor, Goose and Claude Desktop's
+//! `mcp-remote` accept. No MCP crate: the protocol here is JSON-RPC with four
+//! methods.
 
 use gumballz_core::core::tools::{
     self as tools, ai_keys, disk, dupes, edge_tts, file_search, humanize, image_resize, ocr, pdf,
@@ -106,7 +107,7 @@ fn num(v: &Value, k: &str) -> Option<u64> {
     v.get(k).and_then(|x| x.as_u64())
 }
 
-/// Argumento de texto obrigatorio, com erro legivel quando falta.
+/// Mandatory text argument, with a readable error when missing.
 fn need_str(v: &Value, k: &str) -> Result<String, String> {
     let value = s(v, k);
     if value.trim().is_empty() {
@@ -115,7 +116,7 @@ fn need_str(v: &Value, k: &str) -> Result<String, String> {
     Ok(value)
 }
 
-/// Id de download: aceita numero ou string numerica.
+/// Download id: accepts a number or a numeric string.
 fn need_id(v: &Value, k: &str) -> Result<u64, String> {
     v.get(k)
         .and_then(|x| {
@@ -131,10 +132,10 @@ fn err<E: std::fmt::Display>(e: E) -> String {
     e.to_string()
 }
 
-// ── Downloads: o engine que ja existe, exposto como tools ──────────────
+// ── Downloads: the engine that already exists, exposed as tools ──────────────
 //
-// Nada de capacidade nova aqui: cada arm abaixo chama exatamente o que os
-// comandos Tauri de `commands/downloads.rs` chamam.
+// No new capability here: each arm below calls exactly what the Tauri commands
+// in `commands/downloads.rs` call.
 
 fn status_key(status: &crate::core::queue::QueueStatus) -> &'static str {
     use crate::core::queue::QueueStatus as S;
@@ -166,7 +167,7 @@ async fn queue_item(app: &AppHandle, id: u64) -> Result<crate::core::queue::Queu
         .ok_or_else(|| format!("no download with id {}", id))
 }
 
-/// Fecha a sessao do torrent quando o item cancelado era um magnet.
+/// Closes the torrent session when the cancelled item was a magnet.
 async fn drop_torrent(app: &AppHandle, torrent_id: Option<usize>, pause_only: bool) {
     use tauri::Manager;
     let Some(tid) = torrent_id else { return };
@@ -185,8 +186,8 @@ async fn drop_torrent(app: &AppHandle, torrent_id: Option<usize>, pause_only: bo
     }
 }
 
-/// Cancelar / pausar / retomar: a mesma sequencia dos comandos Tauri
-/// (mexe na fila, emite o estado novo e tenta comecar o proximo).
+/// Cancel / pause / resume: the same sequence as the Tauri commands (touches
+/// the queue, emits the new state and tries to start the next one).
 async fn queue_control(app: &AppHandle, id: u64, action: &str) -> Result<Value, String> {
     use tauri::Manager;
     let state = app.state::<crate::AppState>();
@@ -561,7 +562,7 @@ fn rpc_ok(id: Value, result: Value) -> Value {
     json!({ "jsonrpc": "2.0", "id": id, "result": result })
 }
 
-/// Trata uma mensagem. `None` = notificação (sem resposta).
+/// Handles a message. `None` = notification (no response).
 pub async fn handle(app: &AppHandle, msg: &Value) -> Option<Value> {
     let method = msg.get("method").and_then(|m| m.as_str()).unwrap_or("");
     let id = msg.get("id").cloned();
@@ -620,7 +621,7 @@ pub async fn handle(app: &AppHandle, msg: &Value) -> Option<Value> {
     })
 }
 
-/// Corpo inteiro (mensagem única ou lote) → resposta pronta para o HTTP.
+/// Whole body (single message or batch) → response ready for the HTTP.
 pub async fn handle_body(app: &AppHandle, body: &Value) -> Option<Value> {
     match body {
         Value::Array(items) => {
@@ -640,7 +641,7 @@ pub async fn handle_body(app: &AppHandle, body: &Value) -> Option<Value> {
     }
 }
 
-/// Trechos de configuração para os clientes, com a URL e o token deste app.
+/// Config snippets for the clients, with this app's URL and token.
 pub fn client_snippets(url: &str, token: &str) -> Vec<(String, String)> {
     let auth = format!("Authorization: Bearer {}", token);
     vec![
@@ -679,22 +680,22 @@ mod tests {
         for t in &list {
             assert_eq!(t.input_schema["type"], "object", "{}", t.name);
             assert!(!t.description.is_empty());
-            // Todo campo obrigatorio precisa existir em `properties`.
+            // Every mandatory field must exist in `properties`.
             let props = t.input_schema["properties"]
                 .as_object()
-                .unwrap_or_else(|| panic!("{} sem properties", t.name));
+                .unwrap_or_else(|| panic!("{} without properties", t.name));
             let required = t.input_schema["required"]
                 .as_array()
-                .unwrap_or_else(|| panic!("{} sem required", t.name));
+                .unwrap_or_else(|| panic!("{} without required", t.name));
             for r in required {
                 let key = r.as_str().unwrap_or_default();
                 assert!(props.contains_key(key), "{}: required {:?}", t.name, key);
             }
         }
         let names: std::collections::HashSet<_> = list.iter().map(|t| t.name).collect();
-        assert_eq!(names.len(), list.len(), "nomes repetidos");
+        assert_eq!(names.len(), list.len(), "duplicate names");
 
-        // Controle da fila de downloads (mcp-downloads-control).
+        // Download queue control (mcp-downloads-control).
         for name in [
             "download_enqueue",
             "downloads_queue",
@@ -708,7 +709,7 @@ mod tests {
         let by_name = |n: &str| {
             list.iter()
                 .find(|t| t.name == n)
-                .unwrap_or_else(|| panic!("sem {}", n))
+                .unwrap_or_else(|| panic!("without {}", n))
         };
         assert_eq!(
             by_name("download_enqueue").input_schema["required"],
@@ -718,7 +719,7 @@ mod tests {
             by_name("download_enqueue").input_schema["properties"]["mode"]["enum"],
             json!(["video", "audio"])
         );
-        // Listar a fila nao exige argumento nenhum.
+        // Listing the queue requires no argument.
         assert_eq!(
             by_name("downloads_queue").input_schema["required"],
             json!([])
@@ -742,7 +743,7 @@ mod tests {
                 n
             );
         }
-        // O filtro de status da lista tem que casar com o que `status_key` devolve.
+        // The list's status filter must match what `status_key` returns.
         let allowed = by_name("downloads_queue").input_schema["properties"]["status"]["enum"]
             .as_array()
             .cloned()

@@ -1,11 +1,12 @@
-//! Regras do usuario: "link deste canal -> esta pasta, nesta qualidade".
+//! User rules: "link from this channel -> this folder, at this quality".
 //!
-//! B40. O motor de decisao (`core::rules`) existia testado e sem chamador. Aqui
-//! ele ganha persistencia, comandos e o ponto onde e consultado: o enfileiramento.
+//! B40. The decision engine (`core::rules`) existed, tested and without a
+//! caller. Here it gains persistence, commands and the point where it is
+//! consulted: enqueueing.
 //!
-//! Arquivo proprio em vez de campo no `settings.json`, pelo mesmo motivo dos
-//! overrides de binario (#222): nao obriga migracao para todos por causa de
-//! poucos, e uma regra malformada nao pode impedir as configuracoes de carregar.
+//! Its own file instead of a field in `settings.json`, for the same reason as
+//! the binary overrides (#222): it does not force a migration on everyone
+//! because of a few, and a malformed rule must not stop the settings from loading.
 
 use std::path::PathBuf;
 
@@ -17,8 +18,8 @@ fn file_path() -> Option<PathBuf> {
     crate::core::paths::app_data_dir().map(|d| d.join(RULES_FILE))
 }
 
-/// Le as regras do disco. Arquivo ilegivel vale como "sem regras": perder as
-/// regras e um incomodo, nao conseguir baixar e um problema.
+/// Reads the rules from disk. An unreadable file counts as "no rules": losing
+/// the rules is an annoyance, not being able to download is a problem.
 pub fn load_rules() -> Vec<Rule> {
     let Some(path) = file_path() else {
         return Vec::new();
@@ -29,14 +30,14 @@ pub fn load_rules() -> Vec<Rule> {
     match serde_json::from_str::<Vec<Rule>>(&raw) {
         Ok(v) => v,
         Err(e) => {
-            tracing::warn!("[rules] {} ilegivel, ignorando: {}", path.display(), e);
+            tracing::warn!("[rules] {} unreadable, ignoring: {}", path.display(), e);
             Vec::new()
         }
     }
 }
 
 fn save_to_disk(rules: &[Rule]) -> Result<(), String> {
-    let path = file_path().ok_or_else(|| "sem diretorio de dados".to_string())?;
+    let path = file_path().ok_or_else(|| "no data directory".to_string())?;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
@@ -51,29 +52,29 @@ pub fn list_rules() -> Vec<Rule> {
     load_rules()
 }
 
-/// Grava a lista inteira. A ordem importa: a primeira regra que casar vence, e
-/// e por isso que a UI deixa reordenar em vez de so ligar e desligar.
+/// Writes the whole list. Order matters: the first rule that matches wins, and
+/// that is why the UI lets you reorder instead of only switching on and off.
 #[tauri::command]
 pub fn save_rules(rules: Vec<Rule>) -> Result<(), String> {
     for r in &rules {
         if r.name.trim().is_empty() {
-            return Err("Uma regra precisa de nome para voce reconhecer depois".to_string());
+            return Err("A rule needs a name so you can recognise it later".to_string());
         }
     }
     save_to_disk(&rules)
 }
 
-/// Qual regra casaria com esta URL, sem baixar nada.
+/// Which rule would match this URL, without downloading anything.
 ///
-/// Existe para a UI poder responder "esta regra pega o que voce espera?" antes
-/// de o usuario descobrir no download errado.
+/// Exists so the UI can answer "does this rule catch what you expect?" before
+/// the user finds out on the wrong download.
 #[tauri::command]
 pub fn preview_rule_match(url: String, platform: Option<String>) -> Option<Rule> {
     let rules = load_rules();
     first_match(&rules, &url, platform.as_deref()).cloned()
 }
 
-/// O que a regra decidiu, para o enfileiramento aplicar.
+/// What the rule decided, for enqueueing to apply.
 #[derive(Debug, Clone, Default, serde::Serialize)]
 pub struct RuleOutcome {
     pub rule_name: Option<String>,
@@ -84,10 +85,10 @@ pub struct RuleOutcome {
     pub tags: Vec<String>,
 }
 
-/// Resolve a regra para uma URL.
+/// Resolves the rule for a URL.
 ///
-/// Retorna vazio quando nada casa — o caminho de quem nunca criou regra nenhuma,
-/// que e a maioria, e que nao pode pagar nada por isso.
+/// Returns empty when nothing matches — the path of someone who never created
+/// any rule, which is the majority, and who must pay nothing for it.
 pub fn resolve_for(url: &str, platform: Option<&str>) -> RuleOutcome {
     let rules = load_rules();
     match first_match(&rules, url, platform) {
@@ -124,8 +125,8 @@ mod tests {
 
     #[test]
     fn sem_regra_nada_e_decidido() {
-        // O caminho da maioria dos usuarios. Precisa custar zero e nao inventar
-        // pasta nenhuma.
+        // The path most users take. It has to cost zero and must not invent any
+        // folder.
         let out = RuleOutcome::default();
         assert!(out.rule_name.is_none());
         assert!(out.output_dir.is_none());
@@ -133,12 +134,12 @@ mod tests {
 
     #[test]
     fn a_primeira_regra_que_casa_vence() {
-        // A ordem e a prioridade — e por isso que a UI precisa deixar reordenar.
+        // Order is priority — and that is why the UI needs to let you reorder.
         let rules = vec![
             regra("primeira", "youtube.com", "/a"),
             regra("segunda", "youtube.com", "/b"),
         ];
-        let m = first_match(&rules, "https://youtube.com/watch?v=x", None).expect("casa");
+        let m = first_match(&rules, "https://youtube.com/watch?v=x", None).expect("matches");
         assert_eq!(m.name, "primeira");
         assert_eq!(m.then.output_dir.as_deref(), Some("/a"));
     }
@@ -148,14 +149,14 @@ mod tests {
         let mut desligada = regra("desligada", "youtube.com", "/a");
         desligada.enabled = false;
         let rules = vec![desligada, regra("ligada", "youtube.com", "/b")];
-        let m = first_match(&rules, "https://youtube.com/watch?v=x", None).expect("casa");
-        assert_eq!(m.name, "ligada", "a desligada nao pode vencer");
+        let m = first_match(&rules, "https://youtube.com/watch?v=x", None).expect("matches");
+        assert_eq!(m.name, "ligada", "the disabled one must not win");
     }
 
     #[test]
     fn regra_sem_nome_e_recusada_ao_salvar() {
-        // Sem nome, o usuario nao consegue reconhecer a regra depois, e a lista
-        // vira um monte de linhas iguais.
+        // Without a name, the user cannot recognise the rule later, and the list
+        // becomes a pile of identical lines.
         let mut r = regra("  ", "youtube.com", "/a");
         r.name = "   ".to_string();
         let erro = save_rules(vec![r]).unwrap_err();

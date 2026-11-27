@@ -1,10 +1,10 @@
-//! `art-favorites-index`: um índice só para os favoritos do DeviantArt, do
-//! ArtStation e do Flickr.
+//! `art-favorites-index`: an index just for DeviantArt, ArtStation and
+//! Flickr favorites.
 //!
-//! Os três têm formatos de metadado diferentes; aqui viram um esquema comum
-//! com coluna de plataforma. O flag de duplicado reusa o dHash da categoria
-//! Pinterest (`pinterest::analysis`), o mesmo que o `img-dupes` usa, então
-//! "parecido" quer dizer a mesma coisa nas duas telas.
+//! The three have different metadata formats; here they become one common schema
+//! with a platform column. The duplicate flag reuses the Pinterest category's dHash
+//! (`pinterest::analysis`), the same one `img-dupes` uses, so
+//! "similar" means the same thing on both screens.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -27,7 +27,7 @@ const IMAGE_EXTS: &[&str] = &[
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Options {
-    /// Usuário ou URL dos favoritos do DeviantArt (vazio = pular).
+    /// DeviantArt favorites user or URL (empty = skip).
     #[serde(default)]
     pub deviantart: Option<String>,
     #[serde(default)]
@@ -35,13 +35,13 @@ pub struct Options {
     #[serde(default)]
     pub flickr: Option<String>,
     pub out_dir: String,
-    /// Pasta local que já tem arte baixada, para marcar duplicado.
+    /// Local folder that already has downloaded art, to mark duplicates.
     #[serde(default)]
     pub local_dir: Option<String>,
     #[serde(default)]
     pub limit: Option<u64>,
-    /// Baixa a prévia de cada favorito para comparar por dHash. Sem isso o
-    /// duplicado só é detectado por nome de arquivo.
+    /// Downloads the preview of each favorite to compare by dHash. Without this the
+    /// duplicate is only detected by file name.
     #[serde(default)]
     pub check_dupes: bool,
     #[serde(default = "five")]
@@ -52,7 +52,7 @@ pub struct Options {
     pub write_csv: bool,
     #[serde(default = "yes")]
     pub write_json: bool,
-    /// Sessões da extensão (os favoritos costumam exigir login).
+    /// Extension sessions (favorites usually require login).
     #[serde(default)]
     pub session_netscape: Option<String>,
     #[serde(default)]
@@ -119,15 +119,15 @@ pub fn source_url(platform: &str, input: &str) -> String {
     }
 }
 
-/// Domínios de cada plataforma, para filtrar a sessão.
+/// Domains of each platform, to filter the session.
 pub fn domains() -> Vec<&'static str> {
     vec!["deviantart.com", "artstation.com", "flickr.com"]
 }
 
 // ───────────────────────── unificação ─────────────────────────
 
-/// Os três formatos viram a mesma linha. `hint` cobre o caso raro de o dump
-/// não trazer `category`.
+/// The three formats become the same row. `hint` covers the rare case of the dump
+/// not bringing `category`.
 pub fn unify(hint: &str, e: &Entry) -> Option<FavRow> {
     if !e.is_url() {
         return None;
@@ -218,7 +218,7 @@ pub fn unify(hint: &str, e: &Entry) -> Option<FavRow> {
     Some(row)
 }
 
-/// Só as mensagens de arquivo do dump viram linha; diretório e fila caem fora.
+/// Only the dump's file messages become rows; directory and queue fall out.
 pub fn rows_from_dump(hint: &str, entries: &[Entry]) -> Vec<FavRow> {
     entries.iter().filter_map(|e| unify(hint, e)).collect()
 }
@@ -284,8 +284,8 @@ fn is_image(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
-/// Varre a pasta do usuário: nome de arquivo para o casamento barato e dHash
-/// para o casamento por imagem.
+/// Scans the user's folder: file name for the cheap match and dHash
+/// for the image match.
 pub fn scan_local(dir: &Path, with_hash: bool, progress: &super::super::ProgressFn) -> LocalArt {
     let mut out = LocalArt::default();
     let mut files: Vec<PathBuf> = Vec::new();
@@ -326,8 +326,8 @@ pub fn scan_local(dir: &Path, with_hash: bool, progress: &super::super::Progress
     out
 }
 
-/// Arquivo local mais parecido, dentro do limiar. Empate vai para o mais
-/// próximo; nada dentro do limiar devolve `None`.
+/// Closest local file, within the threshold. A tie goes to the
+/// nearest; nothing within the threshold returns `None`.
 pub fn best_match(hash: u64, locals: &[u64], threshold: u32) -> Option<(usize, u32)> {
     let mut best: Option<(usize, u32)> = None;
     for (i, h) in locals.iter().enumerate() {
@@ -343,7 +343,7 @@ pub fn best_match(hash: u64, locals: &[u64], threshold: u32) -> Option<(usize, u
     best
 }
 
-/// Casamento barato: mesmo nome de arquivo da URL de mídia.
+/// Cheap match: same file name as the media URL.
 pub fn match_by_name(rows: &mut [FavRow], local: &LocalArt) -> u64 {
     let mut hits = 0;
     for row in rows.iter_mut() {
@@ -390,7 +390,7 @@ pub async fn run(opts: &Options, progress: &super::super::ProgressFn) -> Result<
         })
         .collect();
     if sources.is_empty() {
-        anyhow::bail!("informe pelo menos um perfil de favoritos");
+        anyhow::bail!("tell us at least one favorites profile");
     }
 
     let cookies = match opts.session_netscape.as_deref() {
@@ -418,7 +418,7 @@ pub async fn run(opts: &Options, progress: &super::super::ProgressFn) -> Result<
         rows.extend(found);
     }
     if rows.is_empty() {
-        anyhow::bail!("nenhum favorito foi lido: esses perfis costumam exigir a sessão do site");
+        anyhow::bail!("no favorites were read: these profiles usually require the site session");
     }
 
     let mut dupes = 0u64;
@@ -531,14 +531,14 @@ mod tests {
     ]"#;
 
     fn rows() -> Vec<FavRow> {
-        let entries = gdl::parse_dump(DUMP).expect("dump válido");
+        let entries = gdl::parse_dump(DUMP).expect("valid dump");
         rows_from_dump("", &entries)
     }
 
     #[test]
     fn os_tres_formatos_viram_o_mesmo_esquema() {
         let rows = rows();
-        assert_eq!(rows.len(), 3, "a mensagem de diretório não vira linha");
+        assert_eq!(rows.len(), 3, "the directory message does not become a row");
 
         assert_eq!(rows[0].platform, "deviantart");
         assert_eq!(rows[0].id, "AAA-111");
@@ -564,7 +564,7 @@ mod tests {
         assert_eq!(
             rows[2].tags,
             vec!["sunset", "praia"],
-            "o Flickr manda as tags como uma string só"
+            "Flickr sends the tags as a single string"
         );
         assert_eq!(
             rows[2].page_url,
@@ -591,7 +591,7 @@ mod tests {
         assert_eq!(
             best_match(0b0000_1111, &locais, 0),
             None,
-            "limiar zero só casa idêntico"
+            "zero threshold only matches identical"
         );
         assert_eq!(best_match(0xFFFF_FFFF_FFFF_FFFF, &locais, 0), Some((2, 0)));
         assert_eq!(best_match(0b0000_0001, &[], 5), None);
@@ -663,7 +663,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "rede: exige gallery-dl instalado e sessão do DeviantArt/ArtStation/Flickr"]
+    #[ignore = "network: requires gallery-dl installed and a DeviantArt/ArtStation/Flickr session"]
     fn favoritos_reais_de_um_perfil_publico() {
         let opts = Options {
             deviantart: None,

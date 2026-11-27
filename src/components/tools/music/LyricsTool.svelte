@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Letra sincronizada (.lrc) pelo LRCLIB, um arquivo ou uma pasta inteira. */
+  /** Synced lyrics (.lrc) via LRCLIB, one file or a whole folder. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

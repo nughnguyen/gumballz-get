@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Renomear em massa com prévia (estudo 29, PowerRename). */
+  /** Bulk rename with preview (study 29, PowerRename). */
   import { invoke } from "@tauri-apps/api/core";
   import { t } from "$lib/i18n";
   import { showToast } from "$lib/stores/toast-store.svelte";

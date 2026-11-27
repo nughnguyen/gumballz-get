@@ -1,15 +1,15 @@
-//! Pinterest (estudo 67): a API web não documentada (`/resource/*Resource/get/`)
-//! que o próprio site usa, lida sem login para conteúdo público e com os
-//! cookies do usuário para boards secretos. Nada de senha, nada de Selenium.
+//! Pinterest (study 67): the undocumented web API (`/resource/*Resource/get/`)
+//! the site itself uses, read without login for public content and with the
+//! user's cookies for secret boards. No password, no Selenium.
 //!
-//! - `api.rs`: cliente, parsing de URL, paginação por `bookmarks`, o `Pin`
-//!   normalizado (imagem original, vídeo, carrossel, story, estatísticas,
-//!   sinais de IA e de anúncio).
-//! - `media.rs`: download do original com cadeia de fallback, vídeo HLS → MP4,
-//!   WebP → PNG, arquivo de já-baixados para sincronizar.
-//! - `analysis.rs`: dHash (duplicados quase iguais), paleta por k-means,
-//!   heurística de IA (listas do Pinterest Power Menu, MIT).
-//! - `export.rs`: CSV, JSON, galeria HTML offline e PDF.
+//! - `api.rs`: client, URL parsing, pagination by `bookmarks`, the normalized `Pin`
+//!   (original image, video, carousel, story, stats,
+//!   AI and ad signals).
+//! - `media.rs`: download of the original with a fallback chain, HLS video → MP4,
+//!   WebP → PNG, already-downloaded file for syncing.
+//! - `analysis.rs`: dHash (near-identical duplicates), k-means palette,
+//!   AI heuristic (Pinterest Power Menu lists, MIT).
+//! - `export.rs`: CSV, JSON, offline HTML gallery and PDF.
 
 pub mod analysis;
 pub mod api;

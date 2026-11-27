@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Card compacto de um post do X, usado por thread, busca, perfil e favoritos. */
+  /** Compact card for an X post, used by thread, search, profile and bookmarks. */
   import { t } from "$lib/i18n";
   import { openUrl } from "$lib/tools/rt";
   import { fmtDate, fmtN, type XPost } from "$lib/tools/x";

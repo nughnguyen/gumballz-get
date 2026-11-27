@@ -1,8 +1,8 @@
-//! Desinstalador (estudo 10, Kudu): lista os apps instalados, desinstala e
-//! procura as sobras (Application Support, caches, preferências, configs).
-//! macOS: `.app` em /Applications e ~/Applications; Windows: chaves Uninstall
-//! do registro (executa o UninstallString); Linux: dpkg/rpm (via pkexec),
-//! Flatpak, Snap e AppImages em ~/Applications.
+//! Uninstaller (study 10, Kudu): lists installed apps, uninstalls, and
+//! looks for leftovers (Application Support, caches, preferences, configs).
+//! macOS: `.app` in /Applications and ~/Applications; Windows: Uninstall
+//! registry keys (runs the UninstallString); Linux: dpkg/rpm (via pkexec),
+//! Flatpak, Snap and AppImages in ~/Applications.
 
 use std::path::{Path, PathBuf};
 
@@ -20,7 +20,7 @@ pub struct App {
     pub path: String,
     pub bytes: u64,
     pub needs_admin: bool,
-    /// Identificador secundário: bundle id (macOS), pacote (Linux), UninstallString (Windows).
+    /// Secondary identifier: bundle id (macOS), package (Linux), UninstallString (Windows).
     pub key: String,
 }
 
@@ -461,9 +461,9 @@ async fn linux_list(progress: &super::ProgressFn) -> Vec<App> {
         "progress",
         3,
         Some(4),
-        Some("pacotes".into()),
+        Some("packages".into()),
     );
-    // Pacotes com .desktop (apps de verdade, não bibliotecas)
+    // Packages with .desktop (real apps, not libraries)
     let mut desktop_pkgs = std::collections::HashSet::new();
     if let Ok(list) = run(
         "dpkg-query",
@@ -529,7 +529,7 @@ async fn linux_list(progress: &super::ProgressFn) -> Vec<App> {
         .await
         {
             for f in files.lines() {
-                // nome-versao-release.arch → nome
+                // name-version-release.arch → name
                 if let Some(idx) = f.rfind('-').and_then(|i| f[..i].rfind('-')) {
                     desktop_pkgs.insert(f[..idx].to_string());
                 }
@@ -671,7 +671,7 @@ fn split_windows_command(cmd: &str) -> Option<(String, Vec<String>)> {
     }
 }
 
-/// Desinstala o app e, se pedido, manda as sobras para a lixeira.
+/// Uninstalls the app and, if requested, sends the leftovers to the trash.
 pub async fn uninstall(app: &App, leftover_paths: &[String]) -> UninstallResult {
     let mut r = UninstallResult::default();
     let res: anyhow::Result<String> = if cfg!(target_os = "macos") {
@@ -679,7 +679,7 @@ pub async fn uninstall(app: &App, leftover_paths: &[String]) -> UninstallResult 
             Err(anyhow!("Invalid app path for uninstall"))
         } else {
             match trash::delete(&app.path) {
-                Ok(_) => Ok("movido para a Lixeira".into()),
+                Ok(_) => Ok("moved to Trash".into()),
                 Err(e) => {
                     let script = format!(
                         "tell application \"Finder\" to delete POSIX file \"{}\"",
@@ -687,7 +687,7 @@ pub async fn uninstall(app: &App, leftover_paths: &[String]) -> UninstallResult 
                     );
                     run("osascript", &["-e", &script])
                         .await
-                        .map(|_| "movido para a Lixeira".into())
+                        .map(|_| "moved to Trash".into())
                         .map_err(|_| anyhow!("{}", e))
                 }
             }
@@ -707,17 +707,17 @@ pub async fn uninstall(app: &App, leftover_paths: &[String]) -> UninstallResult 
                     .map(|g| format!("{{{}}}", g))
                     .unwrap_or_default();
                 if guid.is_empty() || !is_valid_guid(&guid) {
-                    Err(anyhow!("UninstallString sem GUID valido: {}", cmd))
+                    Err(anyhow!("UninstallString without a valid GUID: {}", cmd))
                 } else {
                     run("msiexec", &["/x", &guid, "/passive", "/norestart"])
                         .await
-                        .map(|_| "desinstalado".into())
+                        .map(|_| "uninstalled".into())
                 }
             } else if let Some((exe, args)) = split_windows_command(cmd) {
                 let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
                 run(&exe, &arg_refs)
                     .await
-                    .map(|_| "desinstalador executado".into())
+                    .map(|_| "uninstaller run".into())
             } else {
                 Err(anyhow!("Invalid uninstaller command line"))
             }
@@ -742,18 +742,18 @@ pub async fn uninstall(app: &App, leftover_paths: &[String]) -> UninstallResult 
                     ],
                 )
                 .await
-                .map(|_| "desinstalado".into()),
+                .map(|_| "uninstalled".into()),
                 "snap" => run("pkexec", &["snap", "remove", &app.key])
                     .await
-                    .map(|_| "desinstalado".into()),
+                    .map(|_| "uninstalled".into()),
                 "deb" => run("pkexec", &["apt-get", "remove", "-y", &app.key])
                     .await
-                    .map(|_| "desinstalado".into()),
+                    .map(|_| "uninstalled".into()),
                 "rpm" => run("pkexec", &["dnf", "remove", "-y", &app.key])
                     .await
-                    .map(|_| "desinstalado".into()),
+                    .map(|_| "uninstalled".into()),
                 _ => trash::delete(&app.path)
-                    .map(|_| "movido para a lixeira".to_string())
+                    .map(|_| "moved to trash".to_string())
                     .map_err(|e| anyhow!("{}", e)),
             }
         }
@@ -815,7 +815,7 @@ mod live {
                 || a.name.to_lowercase().contains("code")
         }) {
             for l in super::leftovers(a) {
-                println!("  sobra: {} ({})", l.path, l.bytes);
+                println!("  leftover: {} ({})", l.path, l.bytes);
             }
         }
     }

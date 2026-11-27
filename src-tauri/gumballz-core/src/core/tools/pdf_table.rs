@@ -1,11 +1,11 @@
-//! Tabela de PDF → CSV e XLSX. O PDF não guarda tabela: guarda texto com
-//! coordenada. Então o caminho é o do Camelot (MIT) no modo "stream", refeito
-//! em Rust: caractere → linha → célula (o `pdf_markdown::lines_from_chars` já
-//! entrega isso) → coluna por corredor de espaço em branco → grade.
+//! PDF table → CSV and XLSX. A PDF does not store a table: it stores text with
+//! coordinates. So the path is Camelot's (MIT) "stream" mode, redone
+//! in Rust: character → line → cell (`pdf_markdown::lines_from_chars` already
+//! delivers that) → column by whitespace corridor → grid.
 //!
-//! Não há detecção de linha desenhada (o modo "lattice" do Camelot): o PDFium
-//! que o app gerencia não expõe os segmentos de caminho. Na prática o modo por
-//! posição pega tabela com e sem borda, porque olha o texto, não o traço.
+//! There is no drawn-line detection (Camelot's "lattice" mode): the PDFium
+//! the app manages does not expose path segments. In practice the position mode
+//! catches tables with and without borders, because it looks at the text, not the stroke.
 
 use std::path::{Path, PathBuf};
 
@@ -22,7 +22,7 @@ pub struct Options {
     pub input: String,
     #[serde(default)]
     pub password: String,
-    /// "1-3, 7". Vazio = todas.
+    /// "1-3, 7". Empty = all.
     #[serde(default)]
     pub pages: String,
     #[serde(default)]
@@ -30,30 +30,30 @@ pub struct Options {
     /// "csv" | "xlsx" | "both"
     #[serde(default)]
     pub format: String,
-    /// Vão mínimo, em pontos, para separar duas colunas.
+    /// Minimum gap, in points, to split two columns.
     #[serde(default)]
     pub min_gap: f32,
     #[serde(default)]
     pub min_rows: usize,
     #[serde(default)]
     pub min_cols: usize,
-    /// Emenda tabelas de páginas seguidas que têm o mesmo número de colunas.
+    /// Stitches tables from consecutive pages that have the same number of columns.
     #[serde(default)]
     pub merge_pages: bool,
-    /// Só analisa e devolve a prévia, sem gravar arquivo.
+    /// Only analyzes and returns the preview, without writing a file.
     #[serde(default)]
     pub preview_only: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Table {
-    /// Página onde a tabela começa.
+    /// Page where the table starts.
     pub page: usize,
-    /// Páginas emendadas, quando `merge_pages` juntou.
+    /// Stitched pages, when `merge_pages` joined them.
     pub pages: Vec<usize>,
     pub rows: usize,
     pub cols: usize,
-    /// Todas as células, linha a linha.
+    /// All the cells, row by row.
     pub cells: Vec<Vec<String>>,
     pub csv: Option<String>,
 }
@@ -67,17 +67,17 @@ pub struct TableResult {
     pub xlsx: Option<String>,
 }
 
-// ── Grade ──────────────────────────────────────────────────────────────
+// ── Grid ──────────────────────────────────────────────────────────────
 
-/// Faixa horizontal ocupada por uma célula.
+/// Horizontal range occupied by a cell.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Span {
     pub x0: f32,
     pub x1: f32,
 }
 
-/// Corredores verticais de espaço em branco viram as bordas das colunas.
-/// Devolve as faixas de coluna, da esquerda para a direita.
+/// Vertical whitespace corridors become the column borders.
+/// Returns the column ranges, from left to right.
 pub fn columns_of(spans: &[Span], min_gap: f32) -> Vec<(f32, f32)> {
     if spans.is_empty() {
         return Vec::new();
@@ -99,8 +99,8 @@ pub fn columns_of(spans: &[Span], min_gap: f32) -> Vec<(f32, f32)> {
     cols
 }
 
-/// Em qual coluna o pedaço de texto cai. Usa o centro; se ficar fora de
-/// todas, escolhe a mais perto.
+/// Which column the piece of text lands in. Uses the center; if it falls outside
+/// all of them, picks the nearest.
 pub fn column_of(cols: &[(f32, f32)], x0: f32, x1: f32) -> usize {
     let c = (x0 + x1) / 2.0;
     for (i, (a, b)) in cols.iter().enumerate() {
@@ -120,8 +120,8 @@ pub fn column_of(cols: &[(f32, f32)], x0: f32, x1: f32) -> usize {
     best
 }
 
-/// Blocos de linhas que parecem tabela: linhas seguidas, cada uma com pelo
-/// menos duas células, sem salto vertical grande no meio.
+/// Blocks of lines that look like a table: consecutive lines, each with at
+/// least two cells, with no big vertical jump in the middle.
 pub fn blocks_of(lines: &[Line], min_rows: usize) -> Vec<Vec<Line>> {
     let mut out: Vec<Vec<Line>> = Vec::new();
     let mut cur: Vec<Line> = Vec::new();
@@ -149,8 +149,8 @@ pub fn blocks_of(lines: &[Line], min_rows: usize) -> Vec<Vec<Line>> {
     out
 }
 
-/// Um bloco de linhas vira grade: colunas pelo corredor de branco, células
-/// pelo centro de cada pedaço de texto.
+/// A block of lines becomes a grid: columns by the whitespace corridor, cells
+/// by the center of each piece of text.
 pub fn grid_of(block: &[Line], min_gap: f32, min_cols: usize) -> Option<Vec<Vec<String>>> {
     let spans: Vec<Span> = block
         .iter()
@@ -174,7 +174,7 @@ pub fn grid_of(block: &[Line], min_gap: f32, min_cols: usize) -> Option<Vec<Vec<
         }
         rows.push(row);
     }
-    // Coluna que ficou vazia em todas as linhas não é coluna.
+    // A column that stayed empty on every line is not a column.
     let keep: Vec<usize> = (0..cols.len())
         .filter(|i| rows.iter().any(|r| !r[*i].trim().is_empty()))
         .collect();
@@ -212,7 +212,7 @@ pub fn to_csv(rows: &[Vec<String>]) -> String {
     out
 }
 
-/// Célula que é número puro entra no XLSX como número, não como texto.
+/// A cell that is a pure number goes into the XLSX as a number, not as text.
 pub fn as_number(s: &str) -> Option<f64> {
     let t = s.trim();
     if t.is_empty() || t.len() > 24 {
@@ -227,7 +227,7 @@ pub fn as_number(s: &str) -> Option<f64> {
     t.parse::<f64>().ok().filter(|v| v.is_finite())
 }
 
-// ── Execução ───────────────────────────────────────────────────────────
+// ── Execution ───────────────────────────────────────────────────────────
 
 fn out_dir(input: &str, output_dir: &str) -> anyhow::Result<PathBuf> {
     let dir = if output_dir.trim().is_empty() {
@@ -246,13 +246,13 @@ fn stem(input: &str) -> String {
     Path::new(input.trim())
         .file_stem()
         .map(|s| super::sanitize_name(&s.to_string_lossy()))
-        .unwrap_or_else(|| "documento".into())
+        .unwrap_or_else(|| "document".into())
 }
 
-/// Acha as tabelas do documento sem gravar nada.
+/// Finds the document's tables without writing anything.
 pub fn scan(opts: &Options, progress: &super::ProgressFn) -> anyhow::Result<Vec<Table>> {
     if opts.input.trim().is_empty() {
-        return Err(anyhow!("escolha o PDF"));
+        return Err(anyhow!("choose the PDF"));
     }
     let password = if opts.password.is_empty() {
         None
@@ -280,7 +280,7 @@ pub fn scan(opts: &Options, progress: &super::ProgressFn) -> anyhow::Result<Vec<
                 "progress",
                 done as u64,
                 Some(total as u64),
-                Some(format!("página {}", done + 1)),
+                Some(format!("page {}", done + 1)),
             );
         },
     )?;
@@ -293,8 +293,8 @@ pub fn scan(opts: &Options, progress: &super::ProgressFn) -> anyhow::Result<Vec<
                 continue;
             };
             let cols = cells.first().map(Vec::len).unwrap_or(0);
-            // Emenda com a tabela anterior quando ela vem da página de trás e
-            // tem o mesmo número de colunas.
+            // Stitches onto the previous table when it comes from the page behind and
+            // has the same number of columns.
             if opts.merge_pages {
                 if let Some(prev) = tables.last_mut() {
                     let prev_page = prev.pages.last().copied().unwrap_or(prev.page);
@@ -391,8 +391,8 @@ fn write_xlsx(tables: &[Table], path: &Path) -> anyhow::Result<()> {
     let mut book = Workbook::new();
     for (i, t) in tables.iter().enumerate() {
         let sheet = book.add_worksheet();
-        let name = format!("Tabela {} (p{})", i + 1, t.page);
-        // O Excel só aceita 31 caracteres e nada de : \ / ? * [ ].
+        let name = format!("Table {} (p{})", i + 1, t.page);
+        // Excel only accepts 31 characters and none of : \ / ? * [ ].
         let name: String = name
             .chars()
             .filter(|c| !matches!(c, ':' | '\\' | '/' | '?' | '*' | '[' | ']'))
@@ -414,7 +414,7 @@ fn write_xlsx(tables: &[Table], path: &Path) -> anyhow::Result<()> {
         }
     }
     book.save(path)
-        .map_err(|e| anyhow!("não gravei o xlsx: {}", e))?;
+        .map_err(|e| anyhow!("could not save the xlsx: {}", e))?;
     Ok(())
 }
 
@@ -437,7 +437,7 @@ mod tests {
         }
     }
 
-    /// Escreve uma palavra a partir de `x`, na linha `y`.
+    /// Writes a word from `x`, on the `y` line.
     fn word(text: &str, x: f32, y: f32, size: f32) -> Vec<TextChar> {
         text.chars()
             .enumerate()
@@ -445,7 +445,7 @@ mod tests {
             .collect()
     }
 
-    /// Três colunas bem separadas, quatro linhas.
+    /// Three well-separated columns, four rows.
     fn tabela() -> Vec<TextChar> {
         let mut cs = Vec::new();
         let rows = [
@@ -484,7 +484,7 @@ mod tests {
         assert_eq!(cols.len(), 3, "{:?}", cols);
         assert_eq!(cols[1], (200.0, 230.0));
         assert_eq!(column_of(&cols, 302.0, 320.0), 2);
-        // Fora de todas: escolhe a mais perto.
+        // Outside all of them: picks the nearest.
         assert_eq!(column_of(&cols, 95.0, 99.0), 0);
     }
 
@@ -506,7 +506,7 @@ mod tests {
         let lines = lines_from_chars(&cs, 1);
         let blocks = blocks_of(&lines, 2);
         assert_eq!(blocks.len(), 1);
-        assert_eq!(blocks[0].len(), 4, "o título ficou de fora");
+        assert_eq!(blocks[0].len(), 4, "the title was left out");
     }
 
     #[test]
@@ -525,7 +525,7 @@ mod tests {
             .iter()
             .filter_map(|b| grid_of(b, 5.0, 2))
             .collect();
-        assert!(grids.is_empty(), "achou tabela onde não tem: {:?}", grids);
+        assert!(grids.is_empty(), "found a table where there is none: {:?}", grids);
     }
 
     #[test]
@@ -562,15 +562,15 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("gumballz-get-xlsx-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("t.xlsx");
-        write_xlsx(&[t], &path).expect("gravar xlsx");
+        write_xlsx(&[t], &path).expect("write xlsx");
         let bytes = std::fs::read(&path).unwrap();
-        // XLSX é um zip: tem que começar com PK.
+        // XLSX is a zip: it has to start with PK.
         assert!(bytes.len() > 1000, "{} bytes", bytes.len());
         assert_eq!(&bytes[..2], b"PK");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// PDF de verdade, montado à mão, com uma tabela de três colunas.
+    /// A real PDF, built by hand, with a three-column table.
     /// `cargo test -p gumballz-core --lib -- --ignored live_table`
     #[test]
     #[ignore]
@@ -618,7 +618,7 @@ mod tests {
             merge_pages: false,
             preview_only: false,
         };
-        let out = run(&opts, &super::super::noop_progress()).expect("extrair");
+        let out = run(&opts, &super::super::noop_progress()).expect("extract");
         eprintln!("{:?}", out.outputs);
         assert_eq!(out.tables.len(), 1, "{:?}", out.tables);
         let t = &out.tables[0];

@@ -55,21 +55,21 @@ async fn probe_file(url: &str) -> Option<crate::core::http_fetcher::RemoteProbe>
         .ok()
 }
 
-/// Extensões de página: nunca vale sondar, é HTML.
+/// Page extensions: never worth probing, it is HTML.
 const PAGE_EXTENSIONS: &[&str] = &[
     "html", "htm", "php", "asp", "aspx", "jsp", "jspx", "xhtml", "shtml", "cgi", "do", "action",
     "xml", "json", "js", "css", "rss", "atom",
 ];
 
-/// Tamanho a partir do qual um `Content-Type` que não é página vira arquivo
-/// direto mesmo com extensão desconhecida.
+/// Size from which a non-page `Content-Type` becomes a direct
+/// file even with an unknown extension.
 const DIRECT_FILE_MIN_BYTES: u64 = 1024 * 1024;
 
-/// A URL tem uma extensão que não decide nada sozinha (`.bin`, `.dat`, `.xyz`)?
+/// Does the URL have an extension that decides nothing by itself (`.bin`, `.dat`, `.xyz`)?
 ///
-/// Só essas valem uma sondagem: extensão de página é HTML, extensão de mídia
-/// já vai para o downloader direto do generic, e sem extensão a chance de ser
-/// página é grande demais para pagar um `HEAD` em toda URL colada.
+/// Only those are worth a probe: a page extension is HTML, a media extension
+/// already goes to generic's direct downloader, and with no extension the chance of it being
+/// a page is too big to pay a `HEAD` on every pasted URL.
 pub fn has_unknown_extension(url_str: &str) -> bool {
     let Ok(parsed) = url::Url::parse(url_str) else {
         return false;
@@ -108,9 +108,9 @@ fn is_page_content_type(ct: &str) -> bool {
         || ct.starts_with("application/xml")
 }
 
-/// Decide, a partir do que o servidor respondeu, se a URL é um arquivo para
-/// baixar como está: qualquer coisa que não seja página e tenha tamanho de
-/// arquivo (ou `Content-Disposition: attachment`).
+/// Decides, from what the server answered, whether the URL is a file to
+/// download as-is: anything that is not a page and has a file size
+/// (or `Content-Disposition: attachment`).
 pub fn probe_says_direct_file(
     content_type: Option<&str>,
     content_length: Option<u64>,
@@ -133,11 +133,11 @@ fn direct_probe_cache(
     CACHE.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
 }
 
-/// Sonda uma URL de extensão desconhecida (B4): `HEAD` (ou `GET` de 1 byte)
-/// com timeout curto; `Content-Type` fora de página e tamanho ≥ 1 MiB ⇒ é
-/// arquivo direto e vai para o `HttpFetcher` segmentado em vez de esperar o
-/// generic extractor do yt-dlp. O resultado fica em cache por 10 minutos
-/// porque o preview e o enfileiramento perguntam a mesma coisa em sequência.
+/// Probes an unknown-extension URL (B4): `HEAD` (or a 1-byte `GET`)
+/// with a short timeout; non-page `Content-Type` and size ≥ 1 MiB ⇒ it is
+/// a direct file and goes to the segmented `HttpFetcher` instead of waiting for
+/// yt-dlp's generic extractor. The result stays cached for 10 minutes
+/// because the preview and the enqueue ask the same thing in sequence.
 pub async fn looks_like_direct_file(url: &str) -> bool {
     if !has_unknown_extension(url) {
         return false;
@@ -296,7 +296,7 @@ mod tests {
         assert!(has_unknown_extension(
             "https://example.com/files/blob.abc123"
         ));
-        // página, mídia e arquivo conhecido já se decidem sozinhos
+        // pages, media and known files already decide on their own
         assert!(!has_unknown_extension("https://example.com/index.html"));
         assert!(!has_unknown_extension("https://example.com/video.mp4"));
         assert!(!has_unknown_extension("https://example.com/archive.zip"));

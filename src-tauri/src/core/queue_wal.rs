@@ -1,34 +1,34 @@
-//! Fila de download como write-ahead log.
+//! The download queue as a write-ahead log.
 //!
-//! O `recovery.json` de hoje reescreve o arquivo inteiro a cada mudança e guarda
-//! só a intenção — url, título, pasta. Um `kill -9` no meio de 200 itens perde a
-//! ordem, o progresso e as opções de cada um, e o que volta é um aviso que o
-//! usuário precisa aceitar, com tudo re-resolvido do zero.
+//! Today's `recovery.json` rewrites the whole file on every change and keeps
+//! only the intent — url, title, folder. A `kill -9` in the middle of 200 items
+//! loses the order, the progress and each item's options, and what comes back is
+//! a warning the user has to accept, with everything re-resolved from scratch.
 //!
-//! Aqui cada transição de estado vira **um registro append-only**. Reconstruir é
-//! reler o log do começo. Sem reescrita, sem janela em que o arquivo está pela
-//! metade, e o custo de gravar não cresce com o tamanho da fila.
+//! Here every state transition becomes **one append-only record**. Rebuilding
+//! is re-reading the log from the start. No rewriting, no window where the file
+//! is half written, and the cost of writing does not grow with the queue size.
 //!
-//! ## Por que append-only e não "escreve tudo, renomeia"
+//! ## Why append-only and not "write everything, rename"
 //!
-//! O `write_to_disk` atual já é atômico via `tmp` + `rename`, e isso protege
-//! contra arquivo truncado — mas não contra perda. Entre duas gravações existe
-//! um intervalo, e uma fila de 200 itens reescrita a cada progresso ou paga
-//! I/O demais ou grava raramente e perde o que aconteceu no meio.
+//! The current `write_to_disk` is already atomic via `tmp` + `rename`, and that
+//! protects against a truncated file — but not against loss. Between two writes
+//! there is a gap, and a 200-item queue rewritten on every progress update either
+//! pays too much I/O or writes rarely and loses what happened in between.
 //!
-//! ## O que sobrevive a um registro corrompido
+//! ## What survives a corrupted record
 //!
-//! A última linha é a que pode estar pela metade quando o processo morre no meio
-//! da gravação. Ela é descartada e **todas as anteriores continuam válidas** —
-//! que é a propriedade que um arquivo único reescrito não tem.
+//! The last line is the one that can be half written when the process dies in
+//! the middle of writing. It is discarded and **all the previous ones stay
+//! valid** — which is the property a single rewritten file does not have.
 
 use serde::{Deserialize, Serialize};
 
-/// Uma transição. O log é uma sequência disto.
+/// One transition. The log is a sequence of these.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum WalRecord {
-    /// Entrou na fila, com tudo que é preciso para refazê-lo sem re-resolver.
+    /// Entered the queue, with everything needed to redo it without re-resolving.
     Enqueued {
         id: u64,
         url: String,
@@ -41,18 +41,18 @@ pub enum WalRecord {
         download_mode: Option<String>,
         #[serde(default)]
         format_id: Option<String>,
-        /// Referer, quando a plataforma exige um para o download funcionar.
-        /// Ausente nos registros gravados antes deste campo existir.
+        /// Referer, when the platform requires one for the download to work.
+        /// Missing on records written before this field existed.
         #[serde(default)]
         referer: Option<String>,
-        /// Posição na fila, para a ordem sobreviver.
+        /// Position in the queue, so the order survives.
         #[serde(default)]
         position: u32,
     },
     Started {
         id: u64,
     },
-    /// Progresso. Gravado com parcimônia — ver `PROGRESS_STEP_PERCENT`.
+    /// Progress. Logged sparingly — see `PROGRESS_STEP_PERCENT`.
     Progress {
         id: u64,
         percent: f64,
@@ -88,7 +88,7 @@ impl WalRecord {
         }
     }
 
-    /// Registro terminal: depois dele o item não volta para a fila.
+    /// Terminal record: after it, the item does not return to the queue.
     pub fn is_terminal(&self) -> bool {
         matches!(
             self,
@@ -100,15 +100,15 @@ impl WalRecord {
     }
 }
 
-/// Só grava progresso a cada 5%.
+/// Only logs progress every 5%.
 ///
-/// Gravar todo evento de progresso transformaria o WAL num gerador de I/O:
-/// 200 itens × centenas de eventos cada. Cinco por cento perde no máximo 5% de
-/// progresso num crash, e o `.part` do yt-dlp cobre o resto — o WAL guarda a
-/// intenção, não os bytes.
+/// Logging every progress event would turn the WAL into an I/O generator:
+/// 200 items × hundreds of events each. Five percent loses at most 5% of
+/// progress in a crash, and yt-dlp's `.part` covers the rest — the WAL keeps
+/// the intent, not the bytes.
 pub const PROGRESS_STEP_PERCENT: f64 = 5.0;
 
-/// Vale gravar este progresso, dado o último gravado?
+/// Is this progress worth logging, given the last one logged?
 pub fn should_log_progress(last_logged: Option<f64>, current: f64) -> bool {
     match last_logged {
         None => current > 0.0,
@@ -132,10 +132,10 @@ pub struct RecoveredItem {
     pub was_running: bool,
 }
 
-/// Reconstrói a fila a partir do log.
+/// Rebuilds the queue from the log.
 ///
-/// Devolve na ordem em que os itens foram enfileirados, não na ordem do log —
-/// a fila do usuário tem uma ordem e ela é parte do que se está recuperando.
+/// Returns them in the order the items were enqueued, not in log order — the
+/// user's queue has an order and it is part of what is being recovered.
 pub fn replay(records: &[WalRecord]) -> Vec<RecoveredItem> {
     use std::collections::HashMap;
     let mut live: HashMap<u64, RecoveredItem> = HashMap::new();
@@ -194,19 +194,19 @@ pub fn replay(records: &[WalRecord]) -> Vec<RecoveredItem> {
     out
 }
 
-/// Serializa um registro como uma linha JSON.
+/// Serializes one record as one JSON line.
 ///
-/// Uma linha por registro é o que permite descartar só a última quando ela está
-/// pela metade. JSON num bloco só não teria essa propriedade.
+/// One line per record is what allows discarding only the last one when it is
+/// half written. JSON in a single block would not have that property.
 pub fn encode(record: &WalRecord) -> Option<String> {
     serde_json::to_string(record).ok()
 }
 
-/// Lê o log, descartando registros ilegíveis.
+/// Reads the log, discarding unreadable records.
 ///
-/// Devolve `(registros, descartados)`. O contador não é decorativo: descarte
-/// silencioso em caminho de recuperação é como se perde a fila sem ninguém
-/// notar, e o chamador precisa poder logar quanto perdeu.
+/// Returns `(records, dropped)`. The counter is not decorative: silent dropping
+/// on a recovery path is how the queue gets lost without anyone noticing, and
+/// the caller needs to be able to log how much was lost.
 pub fn decode_log(contents: &str) -> (Vec<WalRecord>, usize) {
     let mut records = Vec::new();
     let mut dropped = 0usize;
@@ -224,10 +224,10 @@ pub fn decode_log(contents: &str) -> (Vec<WalRecord>, usize) {
     (records, dropped)
 }
 
-/// O log pode ser compactado?
+/// Can the log be compacted?
 ///
-/// Só registros de itens terminados podem sair. Compactar com item vivo no meio
-/// perderia o `Enqueued` dele — que é exatamente o que não se pode perder.
+/// Only records of finished items may go. Compacting with a live item in the
+/// middle would lose its `Enqueued` — which is exactly what must not be lost.
 pub fn compactable(records: &[WalRecord]) -> bool {
     let live = replay(records);
     records.len() > COMPACT_THRESHOLD && live.len() * 4 < records.len()
@@ -235,7 +235,7 @@ pub fn compactable(records: &[WalRecord]) -> bool {
 
 pub const COMPACT_THRESHOLD: usize = 500;
 
-/// Log equivalente contendo só o que ainda importa.
+/// Equivalent log containing only what still matters.
 pub fn compact(records: &[WalRecord]) -> Vec<WalRecord> {
     replay(records)
         .into_iter()
@@ -288,8 +288,8 @@ mod tests {
 
     #[test]
     fn replay_devolve_a_fila_na_ordem_em_que_foi_enfileirada() {
-        // A ordem e parte do que se esta recuperando: o usuario montou a fila
-        // numa sequencia e espera ela de volta.
+        // Order is part of what is being recovered: the user built the queue in
+        // a sequence and expects it back.
         let log = vec![enq(3, 2), enq(1, 0), enq(2, 1)];
         let itens = replay(&log);
         assert_eq!(
@@ -313,14 +313,14 @@ mod tests {
             WalRecord::Removed { id: 1 },
         ] {
             let log = vec![enq(1, 0), WalRecord::Started { id: 1 }, terminal.clone()];
-            assert!(replay(&log).is_empty(), "voltou apos {terminal:?}");
+            assert!(replay(&log).is_empty(), "came back after {terminal:?}");
         }
     }
 
     #[test]
     fn o_que_estava_baixando_volta_marcado_com_o_progresso() {
-        // Sem isto, retomar significa comecar do zero — o problema que o item
-        // veio resolver.
+        // Without this, resuming means starting from zero — the problem the
+        // item came to solve.
         let log = vec![
             enq(1, 0),
             WalRecord::Started { id: 1 },
@@ -338,8 +338,9 @@ mod tests {
 
     #[test]
     fn a_ultima_linha_pela_metade_nao_derruba_as_anteriores() {
-        // A propriedade central do WAL, e a que um arquivo unico reescrito nao
-        // tem: o processo morreu no meio da gravacao e tudo antes sobrevive.
+        // The central property of the WAL, and the one a single rewritten file
+        // does not have: the process died in the middle of writing and everything
+        // before survives.
         let mut texto = String::new();
         texto.push_str(&encode(&enq(1, 0)).unwrap());
         texto.push('\n');
@@ -355,8 +356,8 @@ mod tests {
 
     #[test]
     fn descarte_e_contado_e_nao_silencioso() {
-        // Perder registro sem ninguem notar e como se perde a fila inteira sem
-        // explicacao. O chamador precisa poder logar quanto perdeu.
+        // Losing records without anyone noticing is how the whole queue gets lost
+        // with no explanation. The caller needs to be able to log how much was lost.
         let (_, dropped) = decode_log("lixo\n{}\n\n{\"op\":\"started\",\"id\":1}\n");
         assert_eq!(dropped, 2);
     }
@@ -371,22 +372,22 @@ mod tests {
 
     #[test]
     fn progresso_so_grava_a_cada_cinco_por_cento() {
-        // Gravar todo evento transformaria o WAL num gerador de I/O: 200 itens
-        // vezes centenas de eventos cada.
+        // Logging every event would turn the WAL into an I/O generator: 200 items
+        // times hundreds of events each.
         assert!(should_log_progress(None, 1.0));
         assert!(!should_log_progress(None, 0.0));
         assert!(!should_log_progress(Some(10.0), 12.0));
         assert!(should_log_progress(Some(10.0), 15.0));
         assert!(
             should_log_progress(Some(50.0), 20.0),
-            "regressao tambem grava"
+            "a regression also logs"
         );
     }
 
     #[test]
     fn compactar_preserva_a_fila_viva() {
-        // Compactar nao pode perder o Enqueued de um item vivo — e exatamente
-        // o que nao se pode perder.
+        // Compacting must not lose the Enqueued of a live item — it is exactly
+        // what must not be lost.
         let mut log = vec![enq(1, 0), enq(2, 1), WalRecord::Started { id: 1 }];
         for p in [5.0, 10.0, 15.0, 20.0] {
             log.push(WalRecord::Progress {
@@ -402,19 +403,19 @@ mod tests {
 
         let antes = replay(&log);
         let depois = replay(&compact(&log));
-        assert_eq!(antes, depois, "compactar mudou a fila recuperada");
+        assert_eq!(antes, depois, "compaction changed the recovered queue");
         assert!(compact(&log).len() < log.len());
     }
 
     #[test]
     fn nao_compacta_log_pequeno_nem_log_cheio_de_item_vivo() {
         let pequeno: Vec<WalRecord> = (0..10).map(|i| enq(i, i as u32)).collect();
-        assert!(!compactable(&pequeno), "log pequeno nao vale compactar");
+        assert!(!compactable(&pequeno), "a small log is not worth compacting");
 
         let so_vivos: Vec<WalRecord> = (0..600).map(|i| enq(i, i as u32)).collect();
         assert!(
             !compactable(&so_vivos),
-            "log grande mas todo vivo nao tem o que compactar"
+            "a big log but all live has nothing to compact"
         );
     }
 
@@ -444,8 +445,8 @@ mod tests {
 
     #[test]
     fn registro_gravado_por_versao_anterior_sem_position_carrega() {
-        // Campo novo num log ja gravado nao pode derrubar a recuperacao
-        // inteira — mesma classe do bug que zerou o settings.json.
+        // A new field in an already written log must not bring down the whole
+        // recovery — same class of bug that zeroed settings.json.
         let linha = r#"{"op":"enqueued","id":7,"url":"https://x","title":"t","platform":"youtube","output_dir":"/d"}"#;
         let (r, dropped) = decode_log(linha);
         assert_eq!(dropped, 0);
@@ -458,13 +459,13 @@ mod tests {
 mod kill9_tests {
     use super::*;
 
-    /// Recupera de um WAL produzido por um processo morto com SIGKILL de
-    /// verdade no meio de uma gravacao.
+    /// Recovers from a WAL produced by a process really killed with SIGKILL in
+    /// the middle of a write.
     ///
-    /// O arquivo e gerado por , que escreve 202 registros
-    /// e leva um SIGKILL enquanto o ultimo esta pela metade. O conteudo abaixo e
-    /// o resultado real desse arquivo, reduzido, com a linha final truncada
-    /// exatamente como o kernel a deixou.
+    /// The file is generated by , which writes 202 records and takes a SIGKILL
+    /// while the last one is half written. The content below is the real result
+    /// of that file, reduced, with the final line truncated exactly as the kernel
+    /// left it.
     const WAL_APOS_KILL9: &str = concat!(
         r#"{"op":"enqueued","id":0,"url":"https://example.com/0","title":"v0","platform":"youtube","output_dir":"/downloads","position":0}"#,
         "\n",
@@ -482,12 +483,12 @@ mod kill9_tests {
     #[test]
     fn recupera_a_fila_de_um_arquivo_cortado_por_kill9_real() {
         let (records, dropped) = decode_log(WAL_APOS_KILL9);
-        assert_eq!(dropped, 1, "so a linha cortada e descartada");
+        assert_eq!(dropped, 1, "only the cut line is discarded");
 
         let fila = replay(&records);
-        // O item 7 completou e nao volta; 0 e 5 voltam, na ordem da fila.
+        // Item 7 completed and does not come back; 0 and 5 come back, in queue order.
         assert_eq!(fila.iter().map(|i| i.id).collect::<Vec<_>>(), vec![0, 5]);
-        // O que estava baixando volta marcado, com as opcoes intactas.
+        // What was downloading comes back marked, with its options intact.
         let cinco = fila.iter().find(|i| i.id == 5).unwrap();
         assert!(cinco.was_running);
         assert_eq!(cinco.url, "https://example.com/5");

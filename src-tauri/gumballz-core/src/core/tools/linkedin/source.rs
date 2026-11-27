@@ -1,6 +1,6 @@
-//! Abre o export oficial do LinkedIn (Settings -> Data privacy -> Get a copy
-//! of your data), aceitando tanto o `.zip` quanto a pasta ja extraida. Nada
-//! aqui toca a rede: e leitura de arquivo local e ponto.
+//! Opens the official LinkedIn export (Settings -> Data privacy -> Get a copy
+//! of your data), accepting both the `.zip` and the already-extracted folder. Nothing
+//! here touches the network: it is local file reading, period.
 
 use std::collections::HashMap;
 use std::io::Read;
@@ -10,8 +10,8 @@ use anyhow::{anyhow, Result};
 
 use super::csv::{norm, Table};
 
-/// Origem dos CSVs. Guarda so o mapa de nomes; o conteudo e lido sob demanda
-/// para nao carregar um `messages.csv` de dezenas de MB sem necessidade.
+/// Origin of the CSVs. Keeps only the name map; the content is read on demand
+/// so a `messages.csv` of tens of MB is not loaded for no reason.
 pub enum Source {
     Dir {
         files: HashMap<String, PathBuf>,
@@ -22,7 +22,7 @@ pub enum Source {
     },
 }
 
-/// Nome do arquivo sem pasta e sem extensao, normalizado.
+/// File name without folder and without extension, normalized.
 fn key(entry: &str) -> String {
     let base = entry.rsplit(['/', '\\']).next().unwrap_or(entry);
     let stem = base.rsplit_once('.').map(|(s, _)| s).unwrap_or(base);
@@ -33,8 +33,8 @@ fn is_csv(name: &str) -> bool {
     name.to_ascii_lowercase().ends_with(".csv")
 }
 
-/// Tudo que o export tem dentro, arquivo por arquivo (inclui imagens), para
-/// o inventario e para a checagem de foto de perfil.
+/// Everything the export has inside, file by file (images included), for
+/// the inventory and for the profile-photo check.
 pub struct Opened {
     pub source: Source,
     pub entries: Vec<String>,
@@ -44,7 +44,7 @@ impl Source {
     pub fn open(path: &str) -> Result<Opened> {
         let p = Path::new(path);
         if !p.exists() {
-            return Err(anyhow!("nao achei o caminho do export: {}", path));
+            return Err(anyhow!("could not find the export path: {}", path));
         }
         let mut entries = Vec::new();
         let source = if p.is_dir() {
@@ -98,7 +98,7 @@ impl Source {
         };
         if empty {
             return Err(anyhow!(
-                "nenhum CSV no export; aponte para o zip do LinkedIn ou para a pasta extraida"
+                "no CSV in the export; point to the LinkedIn zip or the extracted folder"
             ));
         }
         entries.sort();
@@ -115,7 +115,7 @@ impl Source {
         v
     }
 
-    /// Le um CSV pelo nome (aceita apelidos). Texto em UTF-8 tolerante.
+    /// Reads a CSV by name (accepts aliases). Tolerant UTF-8 text.
     pub fn read(&self, candidates: &[&str]) -> Option<String> {
         let wanted: Vec<String> = candidates.iter().map(|c| key(c)).collect();
         match self {
@@ -137,12 +137,12 @@ impl Source {
         }
     }
 
-    /// Le e ja parseia. `None` quando o arquivo nao veio no export.
+    /// Reads and parses right away. `None` when the file did not come in the export.
     pub fn table(&self, candidates: &[&str]) -> Option<Table> {
         self.read(candidates).map(|s| Table::parse(&s))
     }
 
-    /// Igual ao `table`, mas devolve tabela vazia em vez de `None`.
+    /// Same as `table`, but returns an empty table instead of `None`.
     pub fn table_or_empty(&self, candidates: &[&str]) -> Table {
         self.table(candidates).unwrap_or_default()
     }
@@ -153,9 +153,9 @@ pub(crate) mod fixture {
     use std::io::Write;
     use std::path::PathBuf;
 
-    /// Export sintetico bagunçado de proposito: BOM, preambulo "Notes:",
-    /// campo com virgula e aspas, quebra de linha dentro da mensagem, coluna
-    /// faltando e arquivo faltando (nao tem `Comments.csv`).
+    /// Deliberately messy synthetic export: BOM, "Notes:" preamble,
+    /// field with comma and quotes, line break inside a message, missing column
+    /// and missing file (there is no `Comments.csv`).
     pub fn files() -> Vec<(&'static str, String)> {
         vec![
             (
@@ -223,7 +223,7 @@ pub(crate) mod fixture {
                 "Education.csv",
                 "School Name,Start Date,End Date,Degree Name\nUniversidade X,2012,2016,Bacharel\n".to_string(),
             ),
-            // Sem cabecalho conhecido de proposito: so uma coluna.
+            // No known header on purpose: just one column.
             ("Skills.csv", "Name\nRust\nSvelte\nTypeScript\n".to_string()),
             (
                 "Endorsement_Received_Info.csv",
@@ -251,7 +251,7 @@ pub(crate) mod fixture {
         ]
     }
 
-    /// Escreve o export sintetico numa pasta temporaria unica.
+    /// Writes the synthetic export into a unique temp folder.
     pub fn dir() -> PathBuf {
         let root = std::env::temp_dir().join(format!(
             "gumballz-get-li-{}-{}",
@@ -269,7 +269,7 @@ pub(crate) mod fixture {
         base
     }
 
-    /// Mesmo export, mas dentro de um zip (com uma pasta interna).
+    /// Same export, but inside a zip (with an inner folder).
     pub fn zip() -> PathBuf {
         let dir = dir();
         let path = dir.with_extension("zip");
@@ -298,7 +298,7 @@ mod tests {
     #[test]
     fn abre_pasta_e_acha_os_csvs() {
         let dir = fixture::dir();
-        let o = Source::open(&dir.to_string_lossy()).expect("abre pasta");
+        let o = Source::open(&dir.to_string_lossy()).expect("open folder");
         assert!(o.source.names().contains(&"connections".to_string()));
         assert!(o.source.names().contains(&"companyfollows".to_string()));
         assert!(!o.source.names().contains(&"comments".to_string()));
@@ -327,7 +327,7 @@ mod tests {
     #[test]
     fn arquivo_faltando_devolve_tabela_vazia() {
         let dir = fixture::dir();
-        let o = Source::open(&dir.to_string_lossy()).expect("abre pasta");
+        let o = Source::open(&dir.to_string_lossy()).expect("open folder");
         assert!(o.source.table(&["Comments.csv"]).is_none());
         assert!(o.source.table_or_empty(&["Comments.csv"]).is_empty());
     }

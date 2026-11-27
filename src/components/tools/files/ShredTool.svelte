@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Apagar sobrescrevendo. Sem lixeira, sem desfazer — por isso o dry-run. */
+  /** Delete by overwriting. No trash, no undo — hence the dry-run. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

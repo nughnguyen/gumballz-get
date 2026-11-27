@@ -1,10 +1,10 @@
-//! Letra sincronizada (`.lrc`) via LRCLIB — API pública, sem chave, que já
-//! devolve o LRC pronto quando alguém sincronizou a faixa. Quando só existe
-//! letra corrida, gravamos o `.txt` e, se o usuário pedir, um `.lrc`
-//! estimado (tempos divididos pela duração, marcado como estimativa).
+//! Synced lyrics (`.lrc`) via LRCLIB — a public API, no key, that already
+//! returns the finished LRC when someone synced the track. When only running
+//! lyrics exist, we write the `.txt` and, if the user asks, an estimated `.lrc`
+//! (times split across the duration, marked as an estimate).
 //!
-//! Artista e título saem do ID3v2 lido na mão quando o MP3 tem tag, e do
-//! nome do arquivo caso contrário. Não há crate de tag aqui de propósito.
+//! Artist and title come from the hand-read ID3v2 when the MP3 has a tag, and from
+//! the file name otherwise. There is no tag crate here on purpose.
 
 use std::path::{Path, PathBuf};
 
@@ -21,22 +21,22 @@ const AUDIO_EXTS: &[&str] = &[
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct LyricsOptions {
-    /// Arquivos de áudio escolhidos a dedo.
+    /// Audio files hand-picked.
     #[serde(default)]
     pub files: Vec<String>,
-    /// Ou uma pasta inteira (lote).
+    /// Or a whole folder (batch).
     #[serde(default)]
     pub dir: Option<String>,
-    /// Onde gravar. Vazio = ao lado do arquivo de áudio.
+    /// Where to write. Empty = beside the audio file.
     #[serde(default)]
     pub out_dir: Option<String>,
-    /// Gerar `.lrc` estimado quando só houver letra corrida.
+    /// Generate an estimated `.lrc` when only running lyrics exist.
     #[serde(default)]
     pub estimate: bool,
-    /// Regravar quando já existe `.lrc` ao lado.
+    /// Rewrite when a `.lrc` already exists beside it.
     #[serde(default)]
     pub overwrite: bool,
-    /// Gravar também a letra corrida em `.txt`.
+    /// Also write the running lyrics to `.txt`.
     #[serde(default = "default_true")]
     pub write_plain: bool,
 }
@@ -68,7 +68,7 @@ pub struct LyricsResult {
     pub tracks: Vec<LyricsTrack>,
 }
 
-// ── ID3v2 na unha ───────────────────────────────────────────────────────
+// ── ID3v2 by hand ───────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Id3Tag {
@@ -131,8 +131,8 @@ fn decode_text(data: &[u8]) -> String {
     s.split('\u{0}').next().unwrap_or("").trim().to_string()
 }
 
-/// Lê os campos que interessam de uma tag ID3v2.2/2.3/2.4 no começo do
-/// arquivo. Devolve `None` quando não há tag ou quando ela não tem nada útil.
+/// Reads the fields that matter from an ID3v2.2/2.3/2.4 tag at the start of the
+/// file. Returns `None` when there is no tag or when it has nothing useful.
 pub fn read_id3(bytes: &[u8]) -> Option<Id3Tag> {
     if bytes.len() < 10 || &bytes[0..3] != b"ID3" {
         return None;
@@ -199,8 +199,8 @@ pub fn read_id3(bytes: &[u8]) -> Option<Id3Tag> {
     }
 }
 
-/// Artista/título de "01 - Artista - Título.mp3". Sem traço, tudo vira
-/// título e a busca vai só pelo nome da faixa.
+/// Artist/title from "01 - Artist - Title.mp3". Without a dash, everything becomes
+/// the title and the search goes by track name only.
 pub fn from_filename(stem: &str) -> (String, String) {
     let s = strip_track_number(stem)
         .replace(" – ", " - ")
@@ -211,7 +211,7 @@ pub fn from_filename(stem: &str) -> (String, String) {
     }
 }
 
-/// Primeiro a tag, depois o nome do arquivo. Só lê o começo do arquivo.
+/// Tag first, then the file name. Only reads the start of the file.
 pub fn guess_meta(path: &Path) -> Id3Tag {
     let stem = path
         .file_stem()
@@ -241,7 +241,7 @@ fn read_head(path: &Path) -> Option<Vec<u8>> {
 
 // ── LRC ─────────────────────────────────────────────────────────────────
 
-/// `[mm:ss.xx]`, o formato que todo tocador entende.
+/// `[mm:ss.xx]`, the format every player understands.
 pub fn fmt_ts(secs: f64) -> String {
     let cs = (secs.max(0.0) * 100.0).round() as u64;
     format!(
@@ -252,8 +252,8 @@ pub fn fmt_ts(secs: f64) -> String {
     )
 }
 
-/// Lê um LRC e devolve (segundos, texto) por linha, já ordenado. Ignora as
-/// tags de cabeçalho (`[ar:]`, `[ti:]`…).
+/// Reads an LRC and returns (seconds, text) per line, already sorted. Ignores the
+/// header tags (`[ar:]`, `[ti:]`…).
 pub fn parse_lrc(text: &str) -> Vec<(f64, String)> {
     let mut out: Vec<(f64, String)> = Vec::new();
     for line in text.lines() {
@@ -282,8 +282,8 @@ pub fn parse_lrc(text: &str) -> Vec<(f64, String)> {
     out
 }
 
-/// LRC estimado: as linhas divididas igualmente pela duração. Vem marcado
-/// no cabeçalho, para ninguém achar que é sincronia de verdade.
+/// Estimated LRC: the lines split evenly across the duration. Marked in
+/// the header, so nobody thinks it is real sync.
 pub fn estimate_lrc(plain: &str, duration_secs: f64, artist: &str, title: &str) -> String {
     let lines: Vec<&str> = plain
         .lines()
@@ -331,8 +331,8 @@ pub struct LrcLibTrack {
     pub synced_lyrics: Option<String>,
 }
 
-/// Nota de um candidato da busca: título e artista pesam, duração parecida
-/// desempata.
+/// Score of a search candidate: title and artist weigh in, similar duration
+/// breaks the tie.
 pub fn rank(candidate: &LrcLibTrack, artist: &str, title: &str, duration: Option<u64>) -> u32 {
     let t = similarity(&norm_title(title), &norm_title(&candidate.track_name));
     let a = if artist.is_empty() {
@@ -352,8 +352,8 @@ pub fn rank(candidate: &LrcLibTrack, artist: &str, title: &str, duration: Option
     s
 }
 
-/// `/api/get` primeiro (é o casamento exato do LRCLIB); `/api/search` como
-/// rede de segurança.
+/// `/api/get` first (it is LRCLIB's exact match); `/api/search` as a
+/// safety net.
 pub async fn fetch_lyrics(
     http: &reqwest::Client,
     artist: &str,
@@ -401,7 +401,7 @@ pub async fn fetch_lyrics(
         .map(|(_, c)| c))
 }
 
-// ── Execução ────────────────────────────────────────────────────────────
+// ── Execution ────────────────────────────────────────────────────────────
 
 fn collect_inputs(opts: &LyricsOptions) -> Vec<PathBuf> {
     let mut out: Vec<PathBuf> = opts.files.iter().map(PathBuf::from).collect();
@@ -429,7 +429,7 @@ fn collect_inputs(opts: &LyricsOptions) -> Vec<PathBuf> {
 pub async fn run(opts: LyricsOptions, p: ProgressFn) -> Result<LyricsResult> {
     let inputs = collect_inputs(&opts);
     if inputs.is_empty() {
-        anyhow::bail!("nenhum arquivo de áudio para procurar letra");
+        anyhow::bail!("no audio file to search for lyrics");
     }
     let http = client()?;
     let total = inputs.len() as u64;
@@ -485,7 +485,7 @@ pub async fn run(opts: LyricsOptions, p: ProgressFn) -> Result<LyricsResult> {
         }
         if meta.title.is_empty() {
             track.status = "error".to_string();
-            track.message = Some("não consegui ler artista e título".to_string());
+            track.message = Some("could not read artist and title".to_string());
             result.tracks.push(track);
             continue;
         }
@@ -545,7 +545,7 @@ pub async fn run(opts: LyricsOptions, p: ProgressFn) -> Result<LyricsResult> {
             }
         }
         result.tracks.push(track);
-        // LRCLIB é gratuito e sem chave; um respiro entre chamadas.
+        // LRCLIB is free and keyless; a breather between calls.
         tokio::time::sleep(std::time::Duration::from_millis(250)).await;
     }
 
@@ -562,7 +562,7 @@ mod tests {
         data.extend_from_slice(value.as_bytes());
         let mut f = id.to_vec();
         let n = data.len();
-        // ID3v2.4: tamanho syncsafe.
+        // ID3v2.4: syncsafe size.
         f.extend_from_slice(&[
             ((n >> 21) & 0x7f) as u8,
             ((n >> 14) & 0x7f) as u8,
@@ -681,10 +681,10 @@ mod tests {
         let found = fetch_lyrics(&http, "Imagine Dragons", "Believer", "", Some(204))
             .await
             .expect("fetch")
-            .expect("achou a faixa");
+            .expect("found the track");
         let synced = found.synced_lyrics.as_deref().unwrap_or("");
         println!(
-            "lrclib: {} - {} | sincronizada: {} | linhas: {}",
+            "lrclib: {} - {} | synced: {} | lines: {}",
             found.artist_name,
             found.track_name,
             !synced.is_empty(),

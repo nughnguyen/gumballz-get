@@ -1,11 +1,11 @@
-//! Consertar vídeo ruim com os filtros nativos do FFmpeg: tremor, cintilação
-//! (aquela luz que pulsa em gravação de tela e de TV), banding de gradiente e
-//! chuvisco de câmera antiga ou de pouca luz.
+//! Fix bad video with FFmpeg's native filters: shake, flicker
+//! (that light pulsing in screen and TV recordings), gradient banding and
+//! noise from old or low-light cameras.
 //!
-//! A estabilização é `vidstab` em duas passagens — a primeira mede o
-//! movimento e grava um arquivo de transformações, a segunda aplica. Uma
-//! passagem só não existe: sem medir o clipe inteiro não dá para saber o que
-//! é tremor e o que é movimento de câmera de propósito.
+//! Stabilisation is `vidstab` in two passes — the first measures the
+//! movement and writes a transforms file, the second applies it. A single
+//! pass does not exist: without measuring the whole clip there is no way to know what
+//! is shake and what is deliberate camera movement.
 
 use std::path::{Path, PathBuf};
 
@@ -15,10 +15,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Deserialize)]
 pub struct RestoreOptions {
     pub inputs: Vec<String>,
-    /// Tira a cintilação de luminância entre quadros.
+    /// Removes luminance flicker between frames.
     #[serde(default)]
     pub deflicker: bool,
-    /// Suaviza degradê que virou faixa.
+    /// Smooths a gradient that became banding.
     #[serde(default)]
     pub deband: bool,
     /// "none" | "hqdn3d" | "nlmeans" | "atadenoise"
@@ -26,13 +26,13 @@ pub struct RestoreOptions {
     pub denoise: String,
     #[serde(default)]
     pub sharpen: bool,
-    /// Estabilização vidstab em duas passagens.
+    /// vidstab stabilization in two passes.
     #[serde(default)]
     pub stabilize: bool,
-    /// 1-10; quanto mais alto, mais tremor o detector aceita.
+    /// 1-10; the higher, the more shake the detector accepts.
     #[serde(default = "default_shakiness")]
     pub shakiness: u32,
-    /// 1-100 quadros de suavização (10 ≈ meio segundo a 24 fps).
+    /// 1-100 smoothing frames (10 ≈ half a second at 24 fps).
     #[serde(default = "default_smoothing")]
     pub smoothing: u32,
     #[serde(default = "default_crf")]
@@ -80,18 +80,18 @@ pub struct RestoreResult {
 
 fn denoise_filter(kind: &str) -> Option<&'static str> {
     match kind {
-        // Padrão bom para chuvisco de câmera sem virar borrão.
+        // Good default for camera noise without turning into blur.
         "hqdn3d" => Some("hqdn3d=luma_spatial=4:chroma_spatial=3:luma_tmp=6:chroma_tmp=4.5"),
-        // Mais caro e mais preciso; bom para grão de filme.
+        // More expensive and more precise; good for film grain.
         "nlmeans" => Some("nlmeans=s=3:p=7:r=15"),
-        // Temporal puro: ótimo para vídeo com ruído estático e câmera parada.
+        // Purely temporal: great for video with static noise and a still camera.
         "atadenoise" => Some("atadenoise"),
         _ => None,
     }
 }
 
-/// Cadeia de restauro (sem a estabilização, que é passagem própria).
-/// Devolve `None` quando nada foi pedido.
+/// Restore chain (without the stabilisation, which is its own pass).
+/// Returns `None` when nothing was asked for.
 pub fn restore_chain(opts: &RestoreOptions) -> Option<String> {
     let mut parts: Vec<String> = Vec::new();
     if opts.deflicker {
@@ -116,7 +116,7 @@ pub fn detect_filter(shakiness: u32) -> String {
     )
 }
 
-/// `optzoom=1` deixa o filtro escolher o zoom mínimo que evita borda preta.
+/// `optzoom=1` lets the filter pick the minimum zoom that avoids a black border.
 pub fn transform_filter(smoothing: u32) -> String {
     format!(
         "vidstabtransform=smoothing={}:optzoom=1:interpol=bicubic,unsharp=5:5:0.8:3:3:0.4",
@@ -171,11 +171,11 @@ async fn restore_one(
             .args(["-vf", &detect, "-an", "-f", "null", "-"])
             .output()
             .await
-            .map_err(|e| anyhow!("ffmpeg nao iniciou: {}", e))?;
+            .map_err(|e| anyhow!("ffmpeg did not start: {}", e))?;
         if !out.status.success() {
             let _ = std::fs::remove_dir_all(&dir);
             return Err(anyhow!(
-                "detecção de tremor: {}",
+                "shake detection: {}",
                 String::from_utf8_lossy(&out.stderr).trim()
             ));
         }
@@ -214,7 +214,7 @@ async fn restore_one(
         .arg(&output)
         .output()
         .await
-        .map_err(|e| anyhow!("ffmpeg nao iniciou: {}", e))?;
+        .map_err(|e| anyhow!("ffmpeg did not start: {}", e))?;
     if let Some(file) = trf.as_ref() {
         if let Some(dir) = file.parent() {
             let _ = std::fs::remove_dir_all(dir);
@@ -336,8 +336,8 @@ mod tests {
         assert!(transform_filter(999).contains("smoothing=100"));
     }
 
-    /// vidstab é filtro de biblioteca externa: se a build do FFmpeg gerido
-    /// não trouxer, o teste falha aqui e não na mão do usuário.
+    /// vidstab is an external-library filter: if the managed FFmpeg build
+    /// does not ship it, the test fails here and not in the user's hands.
     /// `cargo test -p gumballz-core --lib -- --ignored live_stabilize`
     #[tokio::test]
     #[ignore]
@@ -346,7 +346,7 @@ mod tests {
         let dir = std::env::temp_dir().join("gumballz-get-vidstab-live");
         std::fs::create_dir_all(&dir).unwrap();
         let src = dir.join("tremido.mp4");
-        // testsrc2 com um deslocamento senoidal em x/y: tremor sintético.
+        // testsrc2 with a sinusoidal offset in x/y: synthetic shake.
         let gen = crate::core::process::command(&ffmpeg)
             .args([
                 "-y",
@@ -370,7 +370,7 @@ mod tests {
             .output()
             .await
             .unwrap();
-        assert!(gen.status.success(), "não gerei o clipe tremido");
+        assert!(gen.status.success(), "did not generate the shaky clip");
 
         let o = RestoreOptions {
             inputs: vec![src.to_string_lossy().to_string()],
@@ -399,7 +399,7 @@ mod tests {
             "{}",
             probe.duration_seconds
         );
-        // O arquivo de transformações é temporário e não pode sobreviver.
+        // The transforms file is temporary and must not survive.
         assert!(
             !std::fs::read_dir(std::env::temp_dir())
                 .unwrap()
@@ -409,7 +409,7 @@ mod tests {
                     .to_string_lossy()
                     .starts_with("gumballz-get-vidstab-")
                     && e.path().join("transforms.trf").exists()),
-            "sobrou .trf temporário"
+            "temporary .trf left over"
         );
         eprintln!("{} bytes, filtro: {}", item.bytes_after, item.filter);
     }
@@ -417,7 +417,7 @@ mod tests {
     #[test]
     fn transform_always_sharpens_after_the_zoom() {
         let f = transform_filter(10);
-        assert!(f.contains("optzoom=1"), "sem optzoom sobra borda preta");
+        assert!(f.contains("optzoom=1"), "without optzoom a black border remains");
         assert!(f.ends_with("unsharp=5:5:0.8:3:3:0.4"));
     }
 }

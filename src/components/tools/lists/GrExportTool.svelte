@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Goodreads: dispara o "Export Library" oficial, espera e enriquece por prateleira. */
+  /** Goodreads: triggers the official "Export Library", waits, and enriches per shelf. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

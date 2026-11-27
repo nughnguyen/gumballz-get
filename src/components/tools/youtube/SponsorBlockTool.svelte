@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Segmentos do SponsorBlock (estudo 43) e os argumentos do yt-dlp para baixar sem eles. */
+  /** SponsorBlock segments (study 43) and the yt-dlp arguments to download without them. */
   import { invoke } from "@tauri-apps/api/core";
   import { t } from "$lib/i18n";
   import { showToast } from "$lib/stores/toast-store.svelte";

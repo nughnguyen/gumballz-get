@@ -409,10 +409,10 @@ impl HttpFetcher {
                 .collect(),
         ));
 
-        // Token *filho*: um worker que falha cancela só os outros workers
-        // desta tentativa. Cancelar o token do chamador (o item da fila)
-        // transformava um 429 num segmento em "Download cancelado" para o
-        // item inteiro, e a tentativa seguinte já nascia cancelada.
+        // Child token: a failing worker cancels only the other workers
+        // of this attempt. Cancelling the caller's token (the queue item)
+        // turned a 429 in one segment into "Download cancelled" for the
+        // whole item, and the next attempt was born already cancelled.
         let cancel = self
             .cancel
             .clone()
@@ -584,24 +584,24 @@ struct ProbeResult {
     accept_ranges: bool,
 }
 
-/// O que dá para saber de um recurso remoto antes de baixar.
+/// What can be known about a remote resource before downloading.
 #[derive(Debug, Clone)]
 pub struct RemoteProbe {
     pub content_length: Option<u64>,
     pub accept_ranges: bool,
     pub content_type: Option<String>,
-    /// Nome sugerido por `Content-Disposition`, se houver.
+    /// Name suggested by `Content-Disposition`, if any.
     pub filename: Option<String>,
-    /// `"HEAD"` ou `"GET range"`: por onde a resposta veio.
+    /// `"HEAD"` or `"GET range"`: where the response came from.
     pub method: &'static str,
 }
 
-/// `Content-Length` lido do cabeçalho, não do corpo.
+/// `Content-Length` read from the header, not the body.
 ///
-/// `reqwest::Response::content_length()` vem do *size hint* do corpo, e o
-/// hyper trata a resposta de um `HEAD` como corpo vazio: devolve `Some(0)`
-/// mesmo com `Content-Length: 104857600` no cabeçalho. Era isso que mandava
-/// todo arquivo direto para o stream único (B6): o probe nunca via tamanho.
+/// `reqwest::Response::content_length()` comes from the body's *size hint*, and hyper
+/// treats a `HEAD` response as an empty body: it returns `Some(0)`
+/// even with `Content-Length: 104857600` in the header. That was what sent
+/// every direct file to the single stream (B6): the probe never saw a size.
 pub fn header_content_length(headers: &reqwest::header::HeaderMap) -> Option<u64> {
     headers
         .get(reqwest::header::CONTENT_LENGTH)?
@@ -613,7 +613,7 @@ pub fn header_content_length(headers: &reqwest::header::HeaderMap) -> Option<u64
         .filter(|n| *n > 0)
 }
 
-/// Total de `Content-Range: bytes a-b/total`.
+/// Total from `Content-Range: bytes a-b/total`.
 fn content_range_total(headers: &reqwest::header::HeaderMap) -> Option<u64> {
     let v = headers.get(reqwest::header::CONTENT_RANGE)?.to_str().ok()?;
     let (_, total) = v.trim().rsplit_once('/')?;
@@ -650,10 +650,10 @@ fn header_filename(headers: &reqwest::header::HeaderMap) -> Option<String> {
     None
 }
 
-/// Sonda o recurso: `HEAD` primeiro; se o servidor não responde `HEAD` ou não
-/// diz o tamanho, um `GET` com `Range: bytes=0-0`. O `206` com `Content-Range`
-/// prova as duas coisas de uma vez (tamanho e suporte a Range), e o corpo de
-/// 1 byte é descartado.
+/// Probes the resource: `HEAD` first; if the server does not answer `HEAD` or does not
+/// say the size, a `GET` with `Range: bytes=0-0`. The `206` with `Content-Range`
+/// proves both things at once (size and Range support), and the 1-byte body
+/// is discarded.
 pub async fn probe_remote(
     client: &reqwest::Client,
     url: &str,
@@ -670,9 +670,9 @@ pub async fn probe_remote(
             tracing::debug!("[http_fetcher] HEAD returned HTTP {}", r.status());
             None
         }
-        // Sem conexão não adianta tentar o GET de 1 byte: é o mesmo host.
-        // Falhar aqui poupa um segundo timeout inteiro por tentativa quando o
-        // servidor está fora (proof.ovh.net levou 495 s para desistir).
+        // No connection, no point trying the 1-byte GET: it is the same host.
+        // Failing here saves a whole second timeout per attempt when the
+        // server is down (proof.ovh.net took 495 s to give up).
         Ok(Err(e)) if e.is_connect() => {
             return Err(anyhow!("unreachable: {}", e));
         }
@@ -746,8 +746,8 @@ pub async fn probe_remote(
             method: "GET range",
         }
     };
-    // Não ler o corpo: fechar a conexão é mais barato do que drenar um GET
-    // completo quando o servidor ignorou o Range.
+    // Do not read the body: closing the connection is cheaper than draining a full GET
+    // when the server ignored the Range.
     drop(resp);
     Ok(probe)
 }
@@ -1009,10 +1009,10 @@ async fn download_segment(
         end,
         (end - range_start) + 1
     );
-    // O teto pode encolher no meio (um helper roubou a metade de trás). O
-    // alvo é recalculado a cada chunk: o segmento continua até o teto atual e
-    // para ali, em vez de abortar e voltar como "incomplete segment" — que
-    // custava um retry com sleep e mais uma requisição por roubo.
+    // The ceiling can shrink mid-flight (a helper stole the back half). The
+    // target is recalculated every chunk: the segment keeps going up to the current ceiling and
+    // stops there, instead of aborting and coming back as "incomplete segment" — which
+    // cost a retry with sleep plus one more request per theft.
     let mut stop_reason = "eof";
     loop {
         if cancel.is_cancelled() {

@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Exportar favoritos (estudo 67): pastas + todos os bookmarks, sem o limite de 800. */
+  /** Export bookmarks (study 67): folders + all bookmarks, without the 800 limit. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

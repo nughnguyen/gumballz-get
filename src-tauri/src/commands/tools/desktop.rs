@@ -1,6 +1,6 @@
-//! Tools que mexem com a área de trabalho: autoclicker, ditado, gravar tela e
-//! a ponte com o VoiceStudio. Aqui também moram os atalhos globais dessas
-//! tools (`hotkeys.json` em `<app_data>/tools`), disparados por `hotkey.rs`.
+//! Tools that touch the desktop: autoclicker, dictation, screen recording and
+//! the bridge to VoiceStudio. The global shortcuts of these tools also live here
+//! (`hotkeys.json` in `<app_data>/tools`), fired by `hotkey.rs`.
 
 use std::collections::HashMap;
 
@@ -12,7 +12,7 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 
 use super::{err, progress};
 
-// ── Atalhos globais das tools ──────────────────────────────────────────
+// ── Global shortcuts of the tools ──────────────────────────────────────────
 
 fn hotkeys_file() -> Option<std::path::PathBuf> {
     gumballz_core::core::tools::tools_dir().map(|d| d.join("hotkeys.json"))
@@ -26,31 +26,31 @@ pub fn tool_hotkeys() -> HashMap<String, String> {
 }
 
 fn save_hotkeys(map: &HashMap<String, String>) -> Result<(), String> {
-    let p = hotkeys_file().ok_or("sem pasta de dados")?;
+    let p = hotkeys_file().ok_or("no data directory")?;
     std::fs::create_dir_all(p.parent().unwrap()).map_err(err)?;
     std::fs::write(p, serde_json::to_string_pretty(map).map_err(err)?).map_err(err)
 }
 
-/// Registra os atalhos salvos (chamado no arranque e a cada `reregister`).
+/// Registers the saved shortcuts (called at startup and on every `reregister`).
 pub fn register_tool_hotkeys(app: &tauri::AppHandle) {
     for (action, binding) in tool_hotkeys() {
         match binding.parse::<Shortcut>() {
             Ok(s) => {
                 if let Err(e) = app.global_shortcut().register(s) {
                     tracing::warn!(
-                        "[tools] atalho {} ({}) nao registrou: {}",
+                        "[tools] shortcut {} ({}) did not register: {}",
                         binding,
                         action,
                         e
                     );
                 }
             }
-            Err(e) => tracing::warn!("[tools] atalho invalido {}: {}", binding, e),
+            Err(e) => tracing::warn!("[tools] invalid shortcut {}: {}", binding, e),
         }
     }
 }
 
-/// Qual ação de tool este atalho dispara, se alguma.
+/// Which tool action this shortcut fires, if any.
 pub fn action_for(shortcut: &Shortcut) -> Option<String> {
     tool_hotkeys()
         .into_iter()
@@ -104,7 +104,7 @@ pub fn on_hotkey(app: &tauri::AppHandle, action: &str) {
                         .await
                         .map(|s| serde_json::to_value(s).unwrap_or_default())
                 } else {
-                    Err(anyhow::anyhow!("nenhuma gravacao ativa"))
+                    Err(anyhow::anyhow!("no active recording"))
                 };
                 let _ = app.emit(
                     "tool-record",
@@ -122,7 +122,7 @@ pub fn tool_hotkeys_get() -> HashMap<String, String> {
     tool_hotkeys()
 }
 
-/// Define (ou apaga, com `binding` vazio) o atalho de uma ação.
+/// Sets (or deletes, with an empty `binding`) an action's shortcut.
 #[tauri::command]
 pub fn tool_hotkey_set(
     app: tauri::AppHandle,
@@ -141,13 +141,13 @@ pub fn tool_hotkey_set(
     } else {
         let s: Shortcut = binding
             .parse()
-            .map_err(|e| format!("atalho invalido: {}", e))?;
+            .map_err(|e| format!("invalid shortcut: {}", e))?;
         if map.values().any(|b| b == &binding) {
-            return Err("este atalho ja esta em uso por outra tool".into());
+            return Err("this shortcut is already in use by another tool".into());
         }
         app.global_shortcut()
             .register(s)
-            .map_err(|e| format!("nao registrou o atalho: {}", e))?;
+            .map_err(|e| format!("could not register the shortcut: {}", e))?;
         map.insert(action, binding);
     }
     save_hotkeys(&map)?;
@@ -180,7 +180,7 @@ pub fn tool_autoclick_mouse() -> Option<(i32, i32)> {
     autoclick::mouse_position()
 }
 
-// ── Ditado ─────────────────────────────────────────────────────────────
+// ── Dictation ─────────────────────────────────────────────────────────────
 
 #[tauri::command]
 pub async fn tool_dictation_devices() -> Vec<dictation::AudioDevice> {
@@ -253,7 +253,7 @@ async fn dictation_finish(app: &tauri::AppHandle) -> Result<DictationOut, String
             match r {
                 Ok(_) => "type",
                 Err(e) => {
-                    // Sem permissão para digitar: pelo menos deixa no clipboard.
+                    // Without permission to type: at least leave it on the clipboard.
                     app.clipboard().write_text(text.clone()).map_err(err)?;
                     let _ = app.emit(
                         "tool-dictation",
@@ -279,7 +279,7 @@ pub async fn tool_dictation_stop(app: tauri::AppHandle) -> Result<DictationOut, 
     dictation_finish(&app).await
 }
 
-// ── Gravar tela ────────────────────────────────────────────────────────
+// ── Screen recording ────────────────────────────────────────────────────────
 
 #[tauri::command]
 pub async fn tool_record_sources() -> Vec<screen_record::Source> {

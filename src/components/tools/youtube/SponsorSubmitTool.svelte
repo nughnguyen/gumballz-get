@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Enviar trechos ao SponsorBlock. O envio é público: só sai com confirmação explícita. */
+  /** Submit segments to SponsorBlock. Submission is public: it only goes out with explicit confirmation. */
   import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
   import { t } from "$lib/i18n";

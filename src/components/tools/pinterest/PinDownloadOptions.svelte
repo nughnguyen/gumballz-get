@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Opções de download compartilhadas (pasta, imagens/vídeos, WebP, nomes, sync). */
+  /** Shared download options (folder, images/videos, WebP, names, sync). */
   import { t } from "$lib/i18n";
   import { pickDir } from "$lib/tools/rt";
   import type { DownloadOptions } from "$lib/tools/pinterest";

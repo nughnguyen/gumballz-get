@@ -178,7 +178,7 @@ pub async fn list_courses(session: &HotmartSession) -> anyhow::Result<Vec<Course
         .and_then(|d| d.as_array())
         .or_else(|| body.get("purchases").and_then(|p| p.as_array()))
         .or_else(|| body.as_array())
-        .ok_or_else(|| anyhow!("Formato inesperado na resposta de cursos: sem campo 'data', 'purchases' ou array raiz"))?;
+        .ok_or_else(|| anyhow!("Unexpected format in the courses response: no 'data' field, 'purchases' or root array"))?;
 
     let mut courses = Vec::new();
     for p in purchases {
@@ -577,7 +577,7 @@ pub async fn get_lesson(
             }
             Err(e) => {
                 tracing::warn!(
-                    "[hotmart] falha ao buscar complementary-content da aula '{}': {}",
+                    "[hotmart] failed to fetch the lesson's complementary-content '{}': {}",
                     page_hash,
                     e
                 );
@@ -663,7 +663,7 @@ pub async fn get_attachment_url(
     let body_text = resp.text().await.unwrap_or_default();
     if !status.is_success() {
         return Err(anyhow!(
-            "get_attachment_url retornou status {} para {}: {}",
+            "get_attachment_url returned status {} for {}: {}",
             status,
             id,
             &body_text[..500.min(body_text.len())]

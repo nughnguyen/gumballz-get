@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** SlideShare → PDF (estudo 50). */
+  /** SlideShare → PDF (study 50). */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

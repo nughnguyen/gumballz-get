@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Dublagem a partir de uma legenda: Edge TTS por cue + atempo + mux (estudo 06). */
+  /** Dubbing from subtitles: Edge TTS per cue + atempo + mux (study 06). */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

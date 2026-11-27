@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Capítulos automáticos por silêncio + mudança de cena, no formato da descrição do YouTube. */
+  /** Automatic chapters from silence + scene change, in YouTube description format. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

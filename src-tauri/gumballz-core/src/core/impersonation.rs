@@ -1,17 +1,17 @@
-//! Descobre se o yt-dlp empacotado consegue imitar um navegador.
+//! Finds out whether the bundled yt-dlp can impersonate a browser.
 //!
-//! Sites com TLS fingerprinting recusam a conexao de um cliente HTTP comum e a
-//! falha chega ao usuario como erro que ele nao consegue interpretar. O
-//! `curl_cffi` resolve, mas **nao vem em todo build** do yt-dlp.
+//! Sites with TLS fingerprinting refuse connections from a plain HTTP client and the
+//! failure reaches the user as an error they cannot interpret. `curl_cffi`
+//! fixes it, but it **does not ship in every build** of yt-dlp.
 //!
-//! ## Correcao de premissa
+//! ## Premise correction
 //!
-//! O backlog dizia "nao vem em todos os builds — detectar ausencia e oferecer
-//! instalacao guiada". Verificado no binario que o app empacota hoje
-//! (yt-dlp 2026.07.23): ele **tem** `curl_cffi`, com alvos Chrome, Safari,
-//! Edge, Firefox e Tor. Entao a deteccao continua certa, mas o caso comum e
-//! presenca, nao ausencia — e o valor esta em **saber antes de tentar**, para
-//! poder sugerir a flag em vez de deixar a falha vazar crua.
+//! The backlog said "not in every build — detect absence and offer
+//! guided install". Verified against the binary the app bundles today
+//! (yt-dlp 2026.07.23): it **has** `curl_cffi`, with Chrome, Safari,
+//! Edge, Firefox and Tor targets. So detection stays correct, but the common case is
+//! presence, not absence — and the value is in **knowing before trying**, so
+//! the flag can be suggested instead of letting the failure leak out raw.
 
 use serde::Serialize;
 
@@ -22,7 +22,7 @@ pub struct ImpersonateTarget {
 }
 
 impl ImpersonateTarget {
-    /// Valor de `--impersonate`, no formato `CLIENT[:OS]`.
+    /// `--impersonate` value, in `CLIENT[:OS]` format.
     pub fn as_flag_value(&self) -> String {
         match &self.os {
             Some(os) => format!("{}:{}", self.client, os),
@@ -31,9 +31,9 @@ impl ImpersonateTarget {
     }
 }
 
-/// Le a saida de `yt-dlp --list-impersonate-targets`.
+/// Reads the output of `yt-dlp --list-impersonate-targets`.
 ///
-/// Formato real (2026.07):
+/// Real format (2026.07):
 /// ```text
 /// [info] Available impersonate targets
 /// Client          OS           Source
@@ -41,17 +41,17 @@ impl ImpersonateTarget {
 /// Chrome-133      Macos-15     curl_cffi
 /// ```
 ///
-/// Lista vazia significa build sem `curl_cffi`. Isso e diferente de erro ao
-/// executar, e quem chama precisa distinguir os dois — por isso a funcao devolve
-/// a lista e nao um booleano.
+/// An empty list means a build without `curl_cffi`. That is different from an execution error,
+/// and the caller needs to tell the two apart — that is why the function returns
+/// the list, not a boolean.
 pub fn parse_targets(stdout: &str) -> Vec<ImpersonateTarget> {
     stdout
         .lines()
         .map(str::trim)
         .filter(|l| !l.is_empty())
-        .filter(|l| !l.starts_with('[')) // linha de [info]
-        .filter(|l| !l.starts_with('-')) // separador
-        .filter(|l| !l.starts_with("Client")) // cabecalho
+        .filter(|l| !l.starts_with('[')) // [info] line
+        .filter(|l| !l.starts_with('-')) // separator
+        .filter(|l| !l.starts_with("Client")) // header
         .filter_map(|line| {
             let mut cols = line.split_whitespace();
             let client = cols.next()?.to_string();
@@ -61,7 +61,7 @@ pub fn parse_targets(stdout: &str) -> Vec<ImpersonateTarget> {
         .collect()
 }
 
-/// O stderr indica recusa por fingerprint de TLS?
+/// Does stderr indicate a refusal by TLS fingerprint?
 pub fn stderr_indicates_fingerprint_block(stderr_lower: &str) -> bool {
     const SIGNS: &[&str] = &[
         "unable to handshake",
@@ -75,10 +75,10 @@ pub fn stderr_indicates_fingerprint_block(stderr_lower: &str) -> bool {
     SIGNS.iter().any(|s| stderr_lower.contains(s))
 }
 
-/// Melhor alvo para tentar de novo, dado o que o build oferece.
+/// Best target to retry with, given what the build offers.
 ///
-/// Prefere Chrome de desktop: e o que a maioria dos sites com fingerprinting
-/// espera ver, e um alvo mobile ou Tor muda outras coisas alem do fingerprint.
+/// Prefers desktop Chrome: it is what most fingerprinting sites
+/// expect to see, and a mobile or Tor target changes more than the fingerprint.
 pub fn preferred_target(targets: &[ImpersonateTarget]) -> Option<&ImpersonateTarget> {
     let desktop_chrome = targets.iter().find(|t| {
         t.client.starts_with("Chrome")
@@ -95,9 +95,9 @@ pub fn preferred_target(targets: &[ImpersonateTarget]) -> Option<&ImpersonateTar
 mod tests {
     use super::*;
 
-    /// Saida real do yt-dlp 2026.07.23 empacotado pelo app, com a ordem
-    /// embaralhada de proposito: com o Chrome de desktop em primeiro, o teste
-    /// de preferencia passaria mesmo se a funcao so pegasse o primeiro alvo.
+    /// Real output of the yt-dlp 2026.07.23 bundled by the app, with the order
+    /// shuffled on purpose: with desktop Chrome first, the preference test
+    /// would pass even if the function just took the first target.
     const REAL: &str = "\
 [info] Available impersonate targets\n\
 Client          OS           Source\n\
@@ -111,7 +111,7 @@ Safari-18.0     Ios-18.0     curl_cffi\n\
 Tor-14.5        Macos-14     curl_cffi\n";
 
     #[test]
-    fn le_a_saida_real_ignorando_cabecalho_e_separador() {
+    fn reads_the_real_output_ignoring_header_and_separator() {
         let t = parse_targets(REAL);
         assert_eq!(t.len(), 7, "{t:?}");
         let chrome133 = t
@@ -124,57 +124,57 @@ Tor-14.5        Macos-14     curl_cffi\n";
     }
 
     #[test]
-    fn build_sem_curl_cffi_da_lista_vazia() {
-        // Lista vazia e o sinal de ausencia, e e diferente de erro ao executar
-        // o binario — por isso a funcao devolve lista e nao booleano.
-        let sem = "[info] Available impersonate targets\nClient          OS           Source\n--------------------------------------\n";
-        assert!(parse_targets(sem).is_empty());
+    fn build_without_curl_cffi_gives_an_empty_list() {
+        // An empty list is the signal of absence, and it is different from an error running
+        // the binary — that is why the function returns a list, not a boolean.
+        let none = "[info] Available impersonate targets\nClient          OS           Source\n--------------------------------------\n";
+        assert!(parse_targets(none).is_empty());
         assert!(parse_targets("").is_empty());
     }
 
     #[test]
-    fn prefere_chrome_de_desktop() {
-        // Alvo mobile ou Tor muda mais que o fingerprint, e a maioria dos
-        // sites que bloqueiam espera ver um Chrome de desktop.
+    fn prefers_desktop_chrome() {
+        // A mobile or Tor target changes more than the fingerprint, and most
+        // blocking sites expect to see a desktop Chrome.
         let t = parse_targets(REAL);
-        let escolhido = preferred_target(&t).unwrap();
+        let chosen = preferred_target(&t).unwrap();
         assert_ne!(
-            escolhido.client, t[0].client,
-            "pegar o primeiro alvo nao pode passar neste teste"
+            chosen.client, t[0].client,
+            "taking the first target must not pass this test"
         );
-        assert_eq!(escolhido.client, "Chrome-133");
-        assert_eq!(escolhido.os.as_deref(), Some("Macos-15"));
+        assert_eq!(chosen.client, "Chrome-133");
+        assert_eq!(chosen.os.as_deref(), Some("Macos-15"));
     }
 
     #[test]
-    fn cai_para_chrome_mobile_quando_nao_ha_desktop() {
-        let so_mobile =
+    fn falls_back_to_mobile_chrome_when_no_desktop() {
+        let mobile_only =
             "Chrome-99       Android-12   curl_cffi\nTor-14.5        Macos-14     curl_cffi\n";
-        let t = parse_targets(so_mobile);
+        let t = parse_targets(mobile_only);
         assert_eq!(preferred_target(&t).unwrap().client, "Chrome-99");
     }
 
     #[test]
-    fn sem_chrome_nenhum_pega_o_primeiro_disponivel() {
+    fn with_no_chrome_takes_the_first_available() {
         let t = parse_targets("Safari-18.0     Ios-18.0     curl_cffi\n");
         assert_eq!(preferred_target(&t).unwrap().client, "Safari-18.0");
         assert!(preferred_target(&[]).is_none());
     }
 
     #[test]
-    fn monta_o_valor_da_flag_no_formato_do_yt_dlp() {
+    fn builds_the_flag_value_in_yt_dlp_format() {
         let t = parse_targets(REAL);
         let chrome133 = t.iter().find(|x| x.client == "Chrome-133").unwrap();
         assert_eq!(chrome133.as_flag_value(), "Chrome-133:Macos-15");
-        let sem_os = ImpersonateTarget {
+        let no_os = ImpersonateTarget {
             client: "Chrome".into(),
             os: None,
         };
-        assert_eq!(sem_os.as_flag_value(), "Chrome");
+        assert_eq!(no_os.as_flag_value(), "Chrome");
     }
 
     #[test]
-    fn reconhece_bloqueio_por_fingerprint() {
+    fn recognizes_a_fingerprint_block() {
         for c in [
             "error: unable to handshake with the server",
             "error: <title>just a moment...</title> cloudflare",
@@ -185,9 +185,9 @@ Tor-14.5        Macos-14     curl_cffi\n";
     }
 
     #[test]
-    fn nao_confunde_falha_comum_com_bloqueio_de_fingerprint() {
-        // Sugerir impersonation para um video privado mandaria o usuario
-        // atras da solucao errada.
+    fn does_not_confuse_a_common_failure_with_a_fingerprint_block() {
+        // Suggesting impersonation for a private video would send the user
+        // chasing the wrong fix.
         for c in [
             "error: [youtube] abc: video unavailable",
             "error: http error 429: too many requests",
@@ -196,7 +196,7 @@ Tor-14.5        Macos-14     curl_cffi\n";
         ] {
             assert!(
                 !stderr_indicates_fingerprint_block(c),
-                "falso positivo: {c:?}"
+                "false positive: {c:?}"
             );
         }
     }

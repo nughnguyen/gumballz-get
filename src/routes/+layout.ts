@@ -18,7 +18,7 @@ export const load = async ({ url }) => {
   try {
     await loadTranslations(lang, url.pathname);
   } catch (e) {
-    // O inglês estático em `$lib/i18n` segura a UI; só registra o motivo.
+    // The static English in `$lib/i18n` holds the UI; just log the reason.
     console.warn(`[i18n] could not load "${lang}":`, e);
   }
   // The native tray has its own strings; push the ones for the active locale.

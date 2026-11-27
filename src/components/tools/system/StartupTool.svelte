@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Inicialização (estudos 10 e 25): o que abre com o sistema, com liga/desliga. */
+  /** Startup (studies 10 and 25): what opens with the system, with on/off. */
   import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
   import { t } from "$lib/i18n";

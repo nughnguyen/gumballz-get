@@ -6,8 +6,8 @@ use tauri::{AppHandle, Manager};
 const FIREFOX_STORE_URL: &str = "https://addons.mozilla.org/firefox/addon/gumballz-get/";
 const GITHUB_REPO: &str = "nughnguyen/gumballz-get";
 const CHROME_EXTENSION_ASSET_PREFIX: &str = "gumballz-get-chrome-extension-v";
-/// Where the bridge records which browser paired, so Settings can show
-/// "Đã cài đặt" for it. Written best-effort by `local_bridge::pair`.
+/// Where the bridge records which browser paired, so Settings can show it as
+/// installed. Written best-effort by `local_bridge::pair`.
 const PAIRED_BROWSERS_FILE: &str = "browser-extension/paired.json";
 
 #[derive(Debug, Clone, Serialize)]
@@ -179,7 +179,7 @@ pub async fn browser_extension_export(
     browser: String,
 ) -> Result<ExtensionExportResult, String> {
     if browser != "chrome" && browser != "firefox" {
-        return Err(format!("browser '{}' não suportado pra export", browser));
+        return Err(format!("browser '{}' not supported for export", browser));
     }
     export_bundled(&app, &browser).map_err(|e| {
         if browser == "firefox" {
@@ -228,7 +228,7 @@ pub async fn browser_extension_prepare_install(
     browser: String,
 ) -> Result<PrepareInstallResult, String> {
     if browser != "chrome" && browser != "firefox" {
-        return Err(format!("browser '{}' não suportado pra export", browser));
+        return Err(format!("browser '{}' not supported for export", browser));
     }
     if bundled_resource_dir(&app, &browser).is_some() {
         let res = export_bundled(&app, &browser)?;

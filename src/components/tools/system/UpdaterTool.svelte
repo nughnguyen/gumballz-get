@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** ⚠️ Só Windows. Atualizar programas em massa (estudo 10, Kudu) com winget, Chocolatey e Scoop. */
+  /** ⚠️ Windows only. Bulk-update programs (study 10, Kudu) with winget, Chocolatey and Scoop. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

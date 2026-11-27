@@ -18,9 +18,9 @@
 
 <script lang="ts">
   /**
-   * Linha de conta compartilhada por todas as tools do Instagram: qual
-   * sessão (cookies capturados pela extensão) está em uso, quem é o usuário
-   * logado e como capturar quando não há nenhuma.
+   * Account row shared by all Instagram tools: which
+   * session (cookies captured by the extension) is in use, who the logged-in
+   * user is, and how to capture one when there is none.
    */
   import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";

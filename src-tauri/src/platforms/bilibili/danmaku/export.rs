@@ -1,9 +1,10 @@
-//! Export standalone dos comentários flutuantes: resolve a parte pedida da
-//! URL, puxa o danmaku e grava nos formatos que o motor já sabe gerar.
+//! Standalone export of the floating comments: resolves the requested part of
+//! the URL, pulls the danmaku and writes it in the formats the engine already
+//! knows how to generate.
 //!
-//! Nada aqui baixa vídeo. O caminho é o mesmo que o motor de download usa de
-//! sidecar (`url_kind` → `parser` → `fetch_elems`), só que parando no `cid` e
-//! saindo direto para arquivo, com filtros e estilo pelo caminho.
+//! Nothing here downloads video. The path is the same one the download engine
+//! uses as a sidecar (`url_kind` → `parser` → `fetch_elems`), only stopping at
+//! the `cid` and going straight to a file, with filters and style along the way.
 
 use std::path::PathBuf;
 
@@ -17,29 +18,29 @@ use super::ass::AssRenderOptions;
 use super::filter::{self, DanmakuFilter};
 use super::{fetch_elems, DanmakuFormat};
 
-/// Id da tool no evento `tool-progress`.
+/// Tool id in the `tool-progress` event.
 pub const ID: &str = "bili-danmaku";
 
-/// Quando a API não diz quanto o vídeo dura, o número de segmentos vira chute.
-/// Seis minutos por segmento: dez segmentos cobrem uma hora, e segmento vazio
-/// só custa uma requisição (o `fetch_elems` avisa no log e segue).
+/// When the API does not say how long the video is, the segment count becomes a
+/// guess. Six minutes per segment: ten segments cover an hour, and an empty
+/// segment only costs one request (`fetch_elems` warns in the log and carries on).
 const FALLBACK_DURATION_SECS: u64 = 3600;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ExportOptions {
     /// Aceita link completo, `b23.tv`, `BV...`, `av...` ou `ep...`.
     pub url: String,
-    /// Parte do vídeo (`?p=N`); 0 usa a que estiver na URL, senão a primeira.
+    /// Video part (`?p=N`); 0 uses the one in the URL, otherwise the first.
     #[serde(default)]
     pub page: u32,
-    /// `xml`, `ass` e/ou `json`. Vazio exporta os três.
+    /// `xml`, `ass` and/or `json`. Empty exports all three.
     #[serde(default)]
     pub formats: Vec<String>,
     #[serde(default)]
     pub filter: DanmakuFilter,
     #[serde(default)]
     pub style: AssRenderOptions,
-    /// Pasta de saída; vazia cai na pasta de downloads do sistema.
+    /// Output folder; empty falls back to the system's downloads folder.
     #[serde(default)]
     pub output_dir: String,
 }
@@ -63,26 +64,26 @@ pub struct ExportFile {
 pub struct ExportResult {
     pub title: String,
     pub part: DanmakuPart,
-    /// Todas as partes que a URL tem, para a UI montar o seletor.
+    /// All the parts the URL has, so the UI can build the selector.
     pub parts: Vec<DanmakuPart>,
     pub fetched: usize,
     pub kept: usize,
     pub files: Vec<ExportFile>,
-    /// `true` quando saiu com a sessão de uma conta, não anônimo.
+    /// `true` when it went out with an account's session, not anonymous.
     pub with_account: bool,
 }
 
 pub async fn run(opts: &ExportOptions, progress: &ProgressFn) -> Result<ExportResult> {
     let url = opts.url.trim();
     if url.is_empty() {
-        return Err(anyhow!("cole o link do vídeo do Bilibili"));
+        return Err(anyhow!("paste the Bilibili video link"));
     }
     report(progress, ID, "started", 0, Some(4), None);
 
-    // Cookies anônimos (buvid3/buvid4/bili_ticket): sem eles a assinatura WBI
-    // do endpoint de danmaku é recusada em boa parte dos vídeos.
+    // Anonymous cookies (buvid3/buvid4/bili_ticket): without them the danmaku
+    // endpoint's WBI signature is rejected on a good share of videos.
     if let Err(e) = cookie::ensure_fresh().await {
-        tracing::warn!("[bili-danmaku] cookies anônimos falharam: {:?}", e);
+        tracing::warn!("[bili-danmaku] anonymous cookies failed: {:?}", e);
     }
     let slug = active_account_slug();
     let with_account = slug.is_some();
@@ -104,7 +105,7 @@ pub async fn run(opts: &ExportOptions, progress: &ProgressFn) -> Result<ExportRe
         }
     }
     let kind = url_kind::detect(&effective)
-        .map_err(|_| anyhow!("não reconheci um vídeo do Bilibili em: {}", url))?;
+        .map_err(|_| anyhow!("I did not recognise a Bilibili video in: {}", url))?;
     let parsed = parser::parse(&client, &kind)
         .await
         .map_err(|e| friendly(e, with_account))?;
@@ -112,7 +113,7 @@ pub async fn run(opts: &ExportOptions, progress: &ProgressFn) -> Result<ExportRe
     let parts = collect_parts(&parsed);
     if parts.is_empty() {
         return Err(anyhow!(
-            "esse link não tem parte de vídeo com comentários — abra uma parte específica"
+            "this link has no video part with comments — open a specific part"
         ));
     }
     let wanted = if opts.page > 0 {
@@ -122,7 +123,7 @@ pub async fn run(opts: &ExportOptions, progress: &ProgressFn) -> Result<ExportRe
     };
     let part = pick_part(&parts, wanted).ok_or_else(|| {
         anyhow!(
-            "a parte {} não existe; esse vídeo tem {}",
+            "part {} does not exist; this video has {}",
             wanted,
             describe_pages(&parts)
         )
@@ -139,7 +140,7 @@ pub async fn run(opts: &ExportOptions, progress: &ProgressFn) -> Result<ExportRe
         "progress",
         2,
         Some(4),
-        Some(format!("baixando os comentários de {}", part.title)),
+        Some(format!("downloading the comments of {}", part.title)),
     );
     let elems = fetch_elems(&client, part.cid, duration)
         .await
@@ -157,7 +158,7 @@ pub async fn run(opts: &ExportOptions, progress: &ProgressFn) -> Result<ExportRe
     let kept_elems = filter::apply(&elems, &opts.filter)?;
     if kept_elems.is_empty() {
         return Err(anyhow!(
-            "os filtros não deixaram nenhum comentário de pé ({} vieram do Bilibili)",
+            "the filters left no comment standing ({} came from Bilibili)",
             fetched
         ));
     }
@@ -173,7 +174,7 @@ pub async fn run(opts: &ExportOptions, progress: &ProgressFn) -> Result<ExportRe
         };
         let path = dir.join(format!("{}.danmaku.{}", stem, format.extension()));
         std::fs::write(&path, &body)
-            .map_err(|e| anyhow!("não consegui gravar {}: {}", path.display(), e))?;
+            .map_err(|e| anyhow!("could not write {}: {}", path.display(), e))?;
         files.push(ExportFile {
             format: format.extension().to_string(),
             path: path.to_string_lossy().to_string(),
@@ -201,27 +202,28 @@ fn build_client(slug: Option<&str>) -> Result<ApiClient> {
     })
 }
 
-/// Erro de API virando frase. Tudo que depende de sessão degrada com o mesmo
-/// recado — é o caso do conteúdo pago (`cheese`) e do bangumi regional.
+/// API error turned into a sentence. Everything session-dependent degrades with
+/// the same message — that is the case for paid content (`cheese`) and regional
+/// bangumi.
 fn friendly(e: BilibiliError, with_account: bool) -> anyhow::Error {
     match e {
         BilibiliError::NotLoggedIn | BilibiliError::CookieMissing => anyhow!(
-            "esse conteúdo pede a sessão do Bilibili — entre na conta pelo gerenciador de cookies e tente de novo"
+            "this content asks for a Bilibili session — sign in to the account via the cookie manager and try again"
         ),
         BilibiliError::PremiumRequired if with_account => anyhow!(
-            "a conta conectada não tem acesso a esse conteúdo pago"
+            "the connected account has no access to this paid content"
         ),
         BilibiliError::PremiumRequired => anyhow!(
-            "conteúdo pago: conecte uma conta do Bilibili que já tenha a compra"
+            "paid content: connect a Bilibili account that already has the purchase"
         ),
         BilibiliError::GeoBlocked => {
-            anyhow!("o Bilibili bloqueia esse conteúdo na sua região; tente com proxy")
+            anyhow!("Bilibili blocks this content in your region; try with a proxy")
         }
         BilibiliError::RateLimited => {
-            anyhow!("o Bilibili está limitando as requisições; espere um pouco e repita")
+            anyhow!("Bilibili is rate-limiting the requests; wait a bit and repeat")
         }
         BilibiliError::ContentUnavailable => {
-            anyhow!("não achei comentários nessa parte — ela pode ter sido removida")
+            anyhow!("I found no comments in this part — it may have been removed")
         }
         other => anyhow!("{}", other.i18n_key()),
     }
@@ -257,7 +259,7 @@ fn page_from_kind(kind: &url_kind::UrlKind) -> u32 {
     }
 }
 
-/// `wanted` 0 significa "a primeira que vier".
+/// `wanted` 0 means "the first one that comes".
 fn pick_part(parts: &[DanmakuPart], wanted: u32) -> Option<&DanmakuPart> {
     if wanted == 0 {
         return parts.first();
@@ -292,11 +294,11 @@ fn output_dir(raw: &str) -> Result<PathBuf> {
     }
     dirs::download_dir()
         .or_else(dirs::home_dir)
-        .ok_or_else(|| anyhow!("escolha a pasta de saída"))
+        .ok_or_else(|| anyhow!("choose the output folder"))
 }
 
-/// `Título - P2 Nome da parte`, já sem os caracteres que o sistema recusa.
-/// Vídeo de uma parte só não ganha sufixo.
+/// `Title - P2 Part name`, already without the characters the system refuses.
+/// A single-part video gets no suffix.
 fn file_stem(title: &str, part: &DanmakuPart, total_parts: usize) -> String {
     let base = sanitize_filename::sanitize(title.trim());
     let base = if base.is_empty() {
@@ -314,7 +316,7 @@ fn file_stem(title: &str, part: &DanmakuPart, total_parts: usize) -> String {
         format!("P{} {}", part.page, part_name)
     };
     let joined = format!("{} - {}", base, tail);
-    // Nome de arquivo longo demais quebra em ext4 (255 bytes) e em NTFS.
+    // A file name that is too long breaks on ext4 (255 bytes) and on NTFS.
     if joined.len() > 150 {
         joined.chars().take(150).collect()
     } else {
@@ -425,7 +427,7 @@ mod tests {
         assert!(!multi.contains('/'), "{}", multi);
     }
 
-    /// Puxa um vídeo público de verdade e grava os três formatos.
+    /// Pulls a real public video and writes all three formats.
     /// `cargo test -p gumballz-get --lib -- --ignored live_danmaku_export`
     #[tokio::test]
     #[ignore]
@@ -444,11 +446,11 @@ mod tests {
             .await
             .unwrap();
         eprintln!(
-            "{} — parte {} (cid {}), {} comentários, conta: {}",
+            "{} — part {} (cid {}), {} comments, account: {}",
             res.title, res.part.page, res.part.cid, res.fetched, res.with_account
         );
         assert!(res.fetched > 0);
-        assert_eq!(res.kept, res.fetched, "sem filtro nada pode sumir");
+        assert_eq!(res.kept, res.fetched, "without a filter nothing may disappear");
         assert_eq!(res.files.len(), 3);
         for f in &res.files {
             let body = std::fs::read_to_string(&f.path).unwrap();
@@ -460,8 +462,8 @@ mod tests {
             }
         }
 
-        // Segunda passada com filtro: o teto de densidade e a busca por
-        // palavra têm que morder de verdade num vídeo real.
+        // Second pass with a filter: the density ceiling and the word search have
+        // to really bite on a real video.
         let filtrado = ExportOptions {
             formats: vec!["json".into()],
             filter: DanmakuFilter {
@@ -475,10 +477,10 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(res2.files.len(), 1);
-        assert!(res2.kept < res2.fetched, "o filtro não cortou nada");
+        assert!(res2.kept < res2.fetched, "the filter cut nothing");
         assert!(
             res2.kept <= res2.part.duration_secs as usize + 1,
-            "{} comentários para {} segundos a 1/s",
+            "{} comments for {} seconds at 1/s",
             res2.kept,
             res2.part.duration_secs
         );

@@ -8,31 +8,31 @@ pub fn diagnose_download_error(stderr: String) -> Option<crate::core::root_cause
     crate::core::root_cause::diagnose(&stderr)
 }
 
-/// Despejo da caixa-preta, para colar num relatorio de bug.
+/// Black-box dump, to paste into a bug report.
 ///
-/// As linhas ja saem redigidas pelo `flight_recorder::redact` — token, cookie e
-/// caminho com nome de usuario nao chegam ate aqui.
+/// The lines already come redacted by `flight_recorder::redact` — tokens, cookies
+/// and paths with a username never reach here.
 #[tauri::command]
 pub fn flight_recorder_dump() -> Vec<String> {
     crate::core::flight_recorder::dump()
 }
 
-/// Apaga o que a caixa-preta guardou.
+/// Clears what the black box kept.
 ///
-/// Existe porque o usuario tem que poder decidir nao mandar nada, mesmo depois
-/// de ter aberto o relatorio.
+/// Exists because the user has to be able to decide to send nothing, even after
+/// opening the report.
 #[tauri::command]
 pub fn flight_recorder_clear() {
     crate::core::flight_recorder::clear();
 }
 
-/// Confere um lote antes de enfileirar: o que da para baixar, o que nao da, e
-/// se cabe no disco.
+/// Checks a batch before enqueueing: what can download, what cannot, and
+/// whether it fits on disk.
 ///
-/// B34. Existe porque descobrir que o disco encheu na metade de um lote de 40
-/// aulas custa muito mais do que a checagem. Nao consulta a rede: as perguntas
-/// caras (tamanho real de cada item) ficam de fora de proposito — a resposta
-/// util e "vale comecar?", nao "quanto exatamente".
+/// B34. Exists because finding out the disk filled up halfway through a batch of
+/// 40 lessons costs far more than the check. It does not consult the network: the
+/// expensive questions (the real size of each item) stay out on purpose — the
+/// useful answer is "is it worth starting?", not "how much exactly".
 #[tauri::command]
 pub async fn preflight_batch(
     state: tauri::State<'_, crate::AppState>,
@@ -49,8 +49,8 @@ pub async fn preflight_batch(
     Ok(crate::core::preflight::build_report(checks, livre))
 }
 
-/// Classifica cada URL do lote. Separado do comando para poder ser testado sem
-/// montar um `AppState`.
+/// Classifies each URL in the batch. Kept separate from the command so it can
+/// be tested without building an `AppState`.
 fn classificar_lote(
     urls: Vec<String>,
     suportada: impl Fn(&str) -> bool,
@@ -61,8 +61,8 @@ fn classificar_lote(
     urls.into_iter()
         .map(|url| {
             let problem = if !vistos.insert(url.clone()) {
-                // Duplicata dentro do proprio lote conta como "ja tenho": o
-                // usuario colou a mesma URL duas vezes.
+                // A duplicate inside the batch itself counts as "already have": the
+                // user pasted the same URL twice.
                 Some(Problem::AlreadyHave)
             } else if !suportada(&url) {
                 Some(Problem::Unsupported)
@@ -92,11 +92,11 @@ mod preflight_lote_tests {
             "https://a.com/2".to_string(),
         ];
         let checks = classificar_lote(urls, |_| true);
-        assert_eq!(checks[0].problem, None, "a primeira ocorrencia baixa");
+        assert_eq!(checks[0].problem, None, "the first occurrence downloads");
         assert_eq!(
             checks[1].problem,
             Some(Problem::AlreadyHave),
-            "a segunda e a mesma coisa"
+            "the second one is the same thing"
         );
         assert_eq!(checks[2].problem, None);
     }

@@ -1,4 +1,4 @@
-//! Comandos da categoria X / Twitter (estudo 67).
+//! Commands of the X / Twitter category (study 67).
 
 use gumballz_core::core::tools::x::{
     self, archive, bookmarks, follows, grok, media, profile, search, thread, XPost, XUser,
@@ -51,7 +51,7 @@ pub fn tool_x_cancel(job: String) {
 #[tauri::command]
 pub async fn tool_x_post(input: String) -> Result<XPost, String> {
     let id = x::post_id_from(&input)
-        .ok_or_else(|| format!("nao reconheci um post do X em: {}", input))?;
+        .ok_or_else(|| format!("I did not recognise an X post in: {}", input))?;
     x::fx::status(&id).await.map_err(err)
 }
 
@@ -108,7 +108,7 @@ pub async fn tool_x_profile(
 #[tauri::command]
 pub async fn tool_x_profile_lookup(input: String) -> Result<XUser, String> {
     let handle = x::handle_from(&input)
-        .ok_or_else(|| format!("nao reconheci um perfil do X em: {}", input))?;
+        .ok_or_else(|| format!("I did not recognise an X profile in: {}", input))?;
     x::fx::profile(&handle).await.map_err(err)
 }
 
@@ -271,7 +271,7 @@ pub async fn tool_x_grok_ask(request: grok::GrokRequest) -> Result<grok::GrokAns
     grok::ask(request).await.map_err(err)
 }
 
-/// Imagem remota como data URL (avatar e midia para o canvas do card).
+/// Remote image as a data URL (avatar and media for the card canvas).
 #[tauri::command]
 pub async fn tool_x_data_url(url: String) -> Result<String, String> {
     use base64::Engine;
@@ -302,11 +302,11 @@ pub async fn tool_x_data_url(url: String) -> Result<String, String> {
     ))
 }
 
-/// Grava um PNG (data URL) vindo do canvas.
+/// Writes a PNG (data URL) coming from the canvas.
 #[tauri::command]
 pub async fn tool_x_save_data_url(data_url: String, dest: String) -> Result<String, String> {
     use base64::Engine;
-    let b64 = data_url.split(',').nth(1).ok_or("data URL invalida")?;
+    let b64 = data_url.split(',').nth(1).ok_or("invalid data URL")?;
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(b64)
         .map_err(err)?;
@@ -317,7 +317,7 @@ pub async fn tool_x_save_data_url(data_url: String, dest: String) -> Result<Stri
     Ok(dest)
 }
 
-/// Grava texto (relatorios JSON gerados na UI).
+/// Writes text (JSON reports generated in the UI).
 #[tauri::command]
 pub async fn tool_x_write_text(dest: String, content: String) -> Result<String, String> {
     if let Some(parent) = std::path::Path::new(&dest).parent() {

@@ -1,6 +1,6 @@
-//! Renomear em massa (estudo 29, PowerRename): regex + substituição com
-//! tokens `{n}`, `{n:3}` (contador com zeros), `{name}`, `{ext}`, `{date}`,
-//! mais caixa (upper/lower/title). Sempre com prévia antes de aplicar.
+//! Bulk rename (study 29, PowerRename): regex + replacement with
+//! tokens `{n}`, `{n:3}` (zero-padded counter), `{name}`, `{ext}`, `{date}`,
+//! plus case (upper/lower/title). Always with a preview before applying.
 
 use std::path::Path;
 
@@ -79,7 +79,7 @@ pub fn plan(opts: &RenameOptions) -> Result<Vec<RenamePlan>, String> {
             regex::RegexBuilder::new(&opts.pattern)
                 .case_insensitive(opts.case_insensitive)
                 .build()
-                .map_err(|e| format!("expressao invalida: {}", e))?,
+                .map_err(|e| format!("invalid expression: {}", e))?,
         )
     };
     let mut out = Vec::new();

@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Índice unificado dos favoritos de DeviantArt, ArtStation e Flickr, com flag de duplicado. */
+  /** Unified index of DeviantArt, ArtStation and Flickr favorites, with a duplicate flag. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

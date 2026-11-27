@@ -18,9 +18,9 @@
 
 <script lang="ts">
   /**
-   * Chat de VOD: puxa o replay inteiro pelo GraphQL público da Twitch e
-   * exporta em JSON, CSV e legenda (SRT/ASS) já no tempo do vídeo. De brinde,
-   * o mapa de picos de chat — o atalho para achar os melhores momentos.
+   * VOD chat: pulls the whole replay via Twitch's public GraphQL and
+   * exports it as JSON, CSV and subtitles (SRT/ASS) already synced to the video time. As a bonus,
+   * the chat-peak map — the shortcut to finding the best moments.
    */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";

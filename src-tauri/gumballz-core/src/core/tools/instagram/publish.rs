@@ -1,14 +1,14 @@
-//! Publicar no Instagram. Dois caminhos:
-//! * **Sessão web** — o mesmo fluxo que o instagram.com faz no navegador:
-//!   `rupload_igphoto`/`rupload_igvideo` + `media/configure*`. Funciona com
-//!   os cookies da extensão, sem app da Meta. Beta: o Instagram muda esses
-//!   endpoints sem aviso.
-//! * **API oficial (Graph)** — precisa de conta profissional, app da Meta e
-//!   um token; os arquivos têm que estar numa URL pública. Estável e
-//!   documentado (referência: Postiz, AGPL — só a sequência de chamadas).
+//! Publish to Instagram. Two paths:
+//! * **Web session** — the same flow instagram.com does in the browser:
+//!   `rupload_igphoto`/`rupload_igvideo` + `media/configure*`. Works with
+//!   the extension's cookies, no Meta app. Beta: Instagram changes these
+//!   endpoints without warning.
+//! * **Official API (Graph)** — needs a professional account, a Meta app and
+//!   a token; the files must be on a public URL. Stable and
+//!   documented (reference: Postiz, AGPL — only the call sequence).
 //!
-//! Também guarda uma fila de agendamentos que o app executa enquanto
-//! estiver aberto.
+//! It also keeps a queue of scheduled posts the app runs while
+//! it is open.
 
 use std::path::Path;
 
@@ -23,10 +23,10 @@ use super::{s, IgClient, IgError};
 pub struct PublishRequest {
     /// "photo" | "video" | "reel" | "story" | "carousel"
     pub kind: String,
-    /// Caminhos locais (sessão web) ou URLs públicas (Graph).
+    /// Local paths (web session) or public URLs (Graph).
     pub files: Vec<String>,
     pub caption: String,
-    /// Reels: mostrar também no feed.
+    /// Reels: also show in the feed.
     pub share_to_feed: bool,
     pub disable_comments: bool,
     pub hide_like_counts: bool,
@@ -44,7 +44,7 @@ fn upload_id() -> String {
     chrono::Utc::now().timestamp_millis().to_string()
 }
 
-/// Dimensões de um JPEG lendo os marcadores SOF (sem crate de imagem).
+/// Dimensions of a JPEG by reading the SOF markers (no image crate).
 pub fn jpeg_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
     if bytes.len() < 4 || bytes[0] != 0xFF || bytes[1] != 0xD8 {
         return None;
@@ -81,7 +81,7 @@ fn png_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
     ))
 }
 
-/// Garante JPEG (o upload web só aceita JPEG); converte PNG/WebP/HEIC pelo ffmpeg.
+/// Guarantees JPEG (web upload only accepts JPEG); converts PNG/WebP/HEIC via ffmpeg.
 async fn as_jpeg(path: &Path) -> anyhow::Result<(Vec<u8>, u32, u32)> {
     let bytes = tokio::fs::read(path).await?;
     if let Some((w, h)) = jpeg_dimensions(&bytes) {
@@ -210,7 +210,7 @@ async fn probe_video(path: &Path) -> anyhow::Result<(u32, u32, u64)> {
         .streams
         .iter()
         .find(|s| s.codec_type == "video")
-        .ok_or_else(|| anyhow!("o arquivo nao tem faixa de video"))?;
+        .ok_or_else(|| anyhow!("the file has no video track"))?;
     let duration = if info.duration_seconds > 0.0 {
         info.duration_seconds
     } else {
@@ -223,7 +223,7 @@ async fn probe_video(path: &Path) -> anyhow::Result<(u32, u32, u64)> {
     ))
 }
 
-/// Extrai um frame como capa do vídeo.
+/// Extracts one frame as the video cover.
 async fn cover_frame(path: &Path) -> anyhow::Result<(Vec<u8>, u32, u32)> {
     let ffmpeg = crate::core::dependencies::ensure_ffmpeg().await?;
     let out = super::super::temp_dir().join(format!("ig-cover-{}.jpg", upload_id()));
@@ -291,7 +291,7 @@ fn common_form(req: &PublishRequest, uid: &str) -> Vec<(&'static str, String)> {
     ]
 }
 
-/// Publica pela sessão web.
+/// Publishes via the web session.
 pub async fn publish_web(
     client: &IgClient,
     req: &PublishRequest,
@@ -300,7 +300,7 @@ pub async fn publish_web(
 ) -> anyhow::Result<PublishResult> {
     let id = format!("ig:{}", job);
     if req.files.is_empty() {
-        return Err(anyhow!("escolha pelo menos um arquivo"));
+        return Err(anyhow!("choose at least one file"));
     }
     let report = |stage: &str, done: u64, total: u64| {
         super::super::report(progress, &id, stage, done, Some(total), None)
@@ -430,7 +430,7 @@ pub async fn publish_web(
                 }
                 .into(),
             ));
-            // O Instagram pode ainda estar transcodificando: tenta algumas vezes.
+            // Instagram may still be transcoding: try a few times.
             let mut last = None;
             for attempt in 0..6 {
                 match client
@@ -453,11 +453,11 @@ pub async fn publish_web(
                 }
                 tokio::time::sleep(std::time::Duration::from_secs(4 + attempt * 3)).await;
             }
-            Err(last.unwrap_or_else(|| anyhow!("o Instagram nao confirmou o video")))
+            Err(last.unwrap_or_else(|| anyhow!("Instagram did not confirm the video")))
         }
         "carousel" => {
             if req.files.len() < 2 || req.files.len() > 20 {
-                return Err(anyhow!("um carrossel tem de 2 a 20 arquivos"));
+                return Err(anyhow!("a carousel has from 2 to 20 files"));
             }
             let total = req.files.len() as u64 + 1;
             let sidecar_id = upload_id();
@@ -524,11 +524,11 @@ pub async fn publish_web(
             report("done", total, total);
             Ok(result_of(&json))
         }
-        other => Err(anyhow!("tipo desconhecido: {}", other)),
+        other => Err(anyhow!("unknown type: {}", other)),
     }
 }
 
-// ── API oficial (Graph) ──────────────────────────────────────────────────
+// ── Official API (Graph) ──────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct GraphAuth {
@@ -550,7 +550,7 @@ async fn graph_post(
             "Graph API: {}",
             err.get("message")
                 .and_then(|m| m.as_str())
-                .unwrap_or("erro")
+                .unwrap_or("error")
         ));
     }
     Ok(json)
@@ -563,7 +563,7 @@ async fn graph_get(http: &reqwest::Client, url: &str) -> anyhow::Result<Value> {
             "Graph API: {}",
             err.get("message")
                 .and_then(|m| m.as_str())
-                .unwrap_or("erro")
+                .unwrap_or("error")
         ));
     }
     Ok(json)
@@ -581,14 +581,14 @@ async fn wait_container(http: &reqwest::Client, id: &str, token: &str) -> anyhow
         .await?;
         match s(&st, "status_code").as_str() {
             "FINISHED" => return Ok(()),
-            "ERROR" | "EXPIRED" => return Err(anyhow!("o container falhou: {}", s(&st, "status"))),
+            "ERROR" | "EXPIRED" => return Err(anyhow!("the container failed: {}", s(&st, "status"))),
             _ => tokio::time::sleep(std::time::Duration::from_secs(5)).await,
         }
     }
-    Err(anyhow!("o Instagram demorou demais para processar a midia"))
+    Err(anyhow!("Instagram took too long to process the media"))
 }
 
-/// Publica pela API oficial. `req.files` são URLs públicas.
+/// Publishes via the official API. `req.files` are public URLs.
 pub async fn publish_graph(
     auth: &GraphAuth,
     req: &PublishRequest,
@@ -600,11 +600,11 @@ pub async fn publish_graph(
     let token = auth.access_token.trim().to_string();
     let user = auth.ig_user_id.trim().to_string();
     if token.is_empty() || user.is_empty() {
-        return Err(anyhow!("informe o token e o ID da conta do Instagram"));
+        return Err(anyhow!("provide the token and the Instagram account ID"));
     }
     if req.files.is_empty() || !req.files.iter().all(|f| f.starts_with("http")) {
         return Err(anyhow!(
-            "a API oficial so aceita URLs publicas (https://…) para os arquivos"
+            "the official API only accepts public URLs (https://…) for the files"
         ));
     }
     let media_url = format!("{}/{}/media", GRAPH, user);
@@ -718,7 +718,7 @@ pub async fn publish_graph(
     })
 }
 
-// ── Agendamento ──────────────────────────────────────────────────────────
+// ── Scheduling ──────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ScheduledPost {
@@ -782,7 +782,7 @@ pub fn schedule_update(post: &ScheduledPost) -> anyhow::Result<()> {
     schedule_save(&store)
 }
 
-/// Próximo agendamento vencido e ainda pendente.
+/// Next overdue schedule that is still pending.
 pub fn schedule_due(now: i64) -> Option<ScheduledPost> {
     schedule_list()
         .posts
@@ -796,7 +796,7 @@ mod tests {
 
     #[test]
     fn jpeg_dims() {
-        // JPEG mínimo: SOI + SOF0 (altura 2, largura 3).
+        // Minimal JPEG: SOI + SOF0 (height 2, width 3).
         let bytes = [
             0xFF, 0xD8, 0xFF, 0xC0, 0x00, 0x0B, 0x08, 0x00, 0x02, 0x00, 0x03, 0x01, 0x01, 0x11,
             0x00, 0xFF, 0xD9,

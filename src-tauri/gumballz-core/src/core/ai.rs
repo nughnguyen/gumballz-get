@@ -17,9 +17,9 @@ pub enum AiProvider {
 pub struct AiConfig {
     #[serde(default)]
     pub provider: AiProvider,
-    /// Provedor da tabela (`ai_keys::KINDS`) por trás do `provider`: é ele que
-    /// diz qual endereço usar e se a chave é obrigatória. Vazio nas configurações
-    /// antigas, feitas quando só existia "OpenAI / Anthropic / local".
+    /// Table provider (`ai_keys::KINDS`) behind `provider`: it is the one that
+    /// says which address to use and whether a key is required. Empty in old
+    /// settings, made when only "OpenAI / Anthropic / local" existed.
     #[serde(default)]
     pub kind: String,
     #[serde(default)]
@@ -61,8 +61,8 @@ impl AiConfig {
             AiProvider::None => false,
             AiProvider::Openai => !self.openai_key.is_empty(),
             AiProvider::Anthropic => !self.anthropic_key.is_empty(),
-            // Config antiga (sem `kind`): basta o endereço, como sempre foi.
-            // Com provedor da tabela, quem não dispensa chave precisa dela.
+            // Old config (no `kind`): the address alone is enough, as it always was.
+            // With a table provider, one that does not waive the key needs it.
             AiProvider::Local => {
                 !self.local_base_url.is_empty()
                     && (!self.kind_needs_key() || !self.openai_key.is_empty())
@@ -73,7 +73,7 @@ impl AiConfig {
     fn kind_needs_key(&self) -> bool {
         match crate::core::tools::ai_keys::find_kind(&self.kind) {
             Some(kind) => kind.needs_key(),
-            // Provedor fora da tabela é desconhecido: pede chave.
+            // Provider outside the table is unknown: ask for a key.
             None => !self.kind.is_empty(),
         }
     }
@@ -86,8 +86,8 @@ fn store() -> &'static Mutex<AiConfig> {
 }
 
 fn file_path() -> Option<std::path::PathBuf> {
-    // Nos testes o arquivo vai para uma pasta temporária: a configuração real do
-    // usuário não pode ser tocada por um `cargo test`.
+    // In tests the file goes to a temporary folder: the user's real config
+    // must not be touched by a `cargo test`.
     #[cfg(test)]
     if let Some(dir) = TEST_DIR.with(|d| d.borrow().clone()) {
         return Some(dir.join(AI_CONFIG_FILE));
@@ -171,15 +171,15 @@ pub fn set(
     guard.clone()
 }
 
-/// O que fazer com a credencial guardada quando a tela salva a configuração.
-/// O formulário nunca recebe o segredo de volta, então "não mexi no campo" e
-/// "apaguei o campo" precisam chegar aqui como coisas diferentes.
+/// What to do with the stored credential when the screen saves the config.
+/// The form never receives the secret back, so "I did not touch the field" and
+/// "I cleared the field" must arrive here as different things.
 pub enum KeyAction<'a> {
-    /// Mantém a chave guardada.
+    /// Keeps the stored key.
     Keep,
-    /// Substitui pela chave digitada.
+    /// Replaces it with the typed key.
     Set(&'a str),
-    /// Apaga a credencial (troca de provedor, ou campo esvaziado).
+    /// Deletes the credential (provider switch, or emptied field).
     Clear,
 }
 
@@ -187,7 +187,7 @@ fn provider_for_kind(kind: &str) -> AiProvider {
     match kind {
         "openai" => AiProvider::Openai,
         "anthropic" => AiProvider::Anthropic,
-        // Todo o resto fala o dialeto OpenAI (cada um no seu endereço).
+        // Everything else speaks the OpenAI dialect (each at its own address).
         _ => AiProvider::Local,
     }
 }
@@ -219,8 +219,8 @@ fn apply_kind(cfg: &mut AiConfig, kind: &str, model: String, base_url: String, k
     }
 }
 
-/// Salva a escolha da tela de IA: o provedor da tabela define a rota e a
-/// necessidade de chave, e `key` decide o destino da credencial guardada.
+/// Saves the AI screen's choice: the table provider sets the route and the
+/// key requirement, and `key` decides the fate of the stored credential.
 pub fn set_with_kind(kind: &str, model: String, base_url: String, key: KeyAction<'_>) -> AiConfig {
     let mut guard = store().lock().unwrap();
     apply_kind(&mut guard, kind, model, base_url, key);
@@ -228,8 +228,8 @@ pub fn set_with_kind(kind: &str, model: String, base_url: String, key: KeyAction
     guard.clone()
 }
 
-/// Desliga a IA (provedor "none"): some o provedor e o tipo; endereço, modelo e
-/// chave ficam guardados para quando o usuário religar.
+/// Turns AI off (provider "none"): provider and kind go away; address, model and
+/// key stay stored for when the user turns it back on.
 pub fn clear() -> AiConfig {
     let mut guard = store().lock().unwrap();
     guard.provider = AiProvider::None;
@@ -306,7 +306,7 @@ async fn openai_chat(
     }
     let json: serde_json::Value =
         serde_json::from_str(&text).map_err(|e| format!("Bad JSON: {}", e))?;
-    // Ledger de custo (Tools → Custos de IA): tokens que o provedor informou.
+    // Cost ledger (Tools → AI Costs): tokens the provider reported.
     let usage = json.get("usage");
     let input = usage
         .and_then(|u| u.get("prompt_tokens"))
@@ -561,7 +561,7 @@ mod tests {
 
     #[test]
     fn a_kindless_local_config_still_counts_as_configured() {
-        // Configuração antiga (antes do `kind`): só o endereço, sem chave.
+        // Old config (before `kind`): just the address, no key.
         let cfg = AiConfig {
             provider: AiProvider::Local,
             kind: String::new(),
@@ -584,7 +584,7 @@ mod tests {
         cfg.openai_key = "sk-x".to_string();
         assert!(cfg.is_configured());
 
-        // Ollama roda na máquina do usuário: chave não é obrigatória.
+        // Ollama runs on the user's machine: no key required.
         let ollama = AiConfig {
             provider: AiProvider::Local,
             kind: "ollama".to_string(),
@@ -593,10 +593,10 @@ mod tests {
         };
         assert!(ollama.is_configured());
 
-        // Provedor fora da tabela é desconhecido: pede chave.
+        // Provider outside the table is unknown: ask for a key.
         let unknown = AiConfig {
             provider: AiProvider::Local,
-            kind: "provedor-novo".to_string(),
+            kind: "provider-new".to_string(),
             local_base_url: "https://exemplo.com/v1".to_string(),
             ..AiConfig::default()
         };
@@ -627,7 +627,7 @@ mod tests {
         );
         assert_eq!(cfg.provider, AiProvider::Anthropic);
         assert_eq!(cfg.anthropic_key, "sk-a");
-        // Provedor da OpenAI não guarda endereço.
+        // The OpenAI provider stores no address.
         assert!(cfg.local_base_url.is_empty());
 
         apply_kind(
@@ -641,7 +641,7 @@ mod tests {
             cfg.local_base_url,
             "https://generativelanguage.googleapis.com/v1beta/openai"
         );
-        // O endereço digitado pelo usuário vence o da tabela.
+        // The address typed by the user beats the table's.
         apply_kind(
             &mut cfg,
             "custom",
@@ -674,8 +674,8 @@ mod tests {
 
     #[test]
     fn the_store_keeps_the_credential_where_it_belongs() {
-        // Passa pelo mesmo caminho da tela de IA (store + arquivo), só que numa
-        // pasta temporária: é o teste que pega troca de provedor vazando a chave.
+        // Goes through the same path as the AI screen (store + file), only in a
+        // temporary folder: this is the test that catches a provider switch leaking the key.
         let dir = std::env::temp_dir().join(format!("gumballz-get-ai-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         TEST_DIR.with(|d| *d.borrow_mut() = Some(dir.clone()));
@@ -690,7 +690,7 @@ mod tests {
         assert_eq!(saved.kind, "deepseek");
         assert_eq!(saved.local_base_url, "https://api.deepseek.com");
 
-        // O que ficou gravado é o que uma próxima execução vai ler.
+        // What was written is what the next run will read.
         let on_disk: AiConfig = serde_json::from_str(
             &std::fs::read_to_string(dir.join(AI_CONFIG_FILE)).expect("config escrita"),
         )
@@ -699,7 +699,7 @@ mod tests {
         assert_eq!(on_disk.model, "deepseek-chat");
         assert!(on_disk.is_configured());
 
-        // Trocar de provedor com o campo de chave vazio apaga a credencial antiga.
+        // Switching provider with an empty key field deletes the old credential.
         let switched = set_with_kind(
             "openai",
             "gpt-4o-mini".to_string(),
@@ -710,7 +710,7 @@ mod tests {
         assert!(switched.openai_key.is_empty());
         assert!(switched.anthropic_key.is_empty());
 
-        // "Desligar" tira o provedor e o tipo.
+        // "Turning off" removes the provider and the kind.
         let off = clear();
         assert_eq!(off.provider, AiProvider::None);
         assert!(off.kind.is_empty());

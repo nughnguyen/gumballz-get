@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Reparar PDF que não abre: Ghostscript quando existe, senão reconstrução da xref. */
+  /** Repair a PDF that won't open: Ghostscript when available, otherwise xref reconstruction. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

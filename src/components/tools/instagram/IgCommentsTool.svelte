@@ -18,8 +18,8 @@
 
 <script lang="ts">
   /**
-   * Comentários e curtidas de um post (exportar) e sorteio entre os
-   * comentários. `mode` = "comments" | "likers" | "giveaway".
+   * Comments and likes on a post (export) and a giveaway draw among the
+   * comments. `mode` = "comments" | "likers" | "giveaway".
    */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";

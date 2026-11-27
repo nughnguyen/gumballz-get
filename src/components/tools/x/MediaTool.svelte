@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Mídia em lote de um perfil (estudo 67): fotos em `name=orig` e o melhor mp4. */
+  /** Bulk media from a profile (study 67): photos at `name=orig` and the best mp4. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

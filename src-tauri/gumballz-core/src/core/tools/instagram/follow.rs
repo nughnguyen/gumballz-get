@@ -1,8 +1,8 @@
-//! Seguidores e seguindo: listas paginadas, quem não segue de volta, fãs,
-//! mútuos, lista branca, deixar de seguir / remover seguidor com ritmo
-//! seguro (referência: InstagramUnfollowers, MIT — 4 s entre ações e 5 min
-//! a cada cinco; aqui o padrão é mais conservador e há teto diário), e
-//! snapshots locais para saber quem deixou de seguir.
+//! Followers and following: paginated lists, who does not follow back, fans,
+//! mutuals, whitelist, unfollow / remove follower at a safe pace
+//! (reference: InstagramUnfollowers, MIT — 4 s between actions and 5 min
+//! every five; here the default is more conservative and there is a daily cap), and
+//! local snapshots to know who unfollowed.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::AtomicBool;
@@ -124,9 +124,9 @@ pub async fn following(
 pub struct FollowAnalysis {
     pub followers_count: usize,
     pub following_count: usize,
-    /// Eu sigo, não me segue.
+    /// I follow, they do not follow me.
     pub not_following_back: Vec<MiniUser>,
-    /// Me segue, eu não sigo.
+    /// Follows me, I do not follow them.
     pub fans: Vec<MiniUser>,
     pub mutuals: Vec<MiniUser>,
     pub whitelisted: usize,
@@ -176,7 +176,7 @@ pub fn analyze(
     }
 }
 
-// ── Ações ────────────────────────────────────────────────────────────────
+// ── Actions ────────────────────────────────────────────────────────────────
 
 pub async fn unfollow(client: &IgClient, user_id: &str) -> Result<(), IgError> {
     let r = client
@@ -219,10 +219,10 @@ pub async fn remove_follower(client: &IgClient, user_id: &str) -> Result<(), IgE
 pub struct Pacing {
     pub delay_min_ms: u64,
     pub delay_max_ms: u64,
-    /// Pausa longa a cada N ações.
+    /// Long pause every N actions.
     pub pause_every: u32,
     pub pause_ms: u64,
-    /// Teto de ações por dia (todas as ações de escrita somadas).
+    /// Cap on actions per day (all write actions summed).
     pub daily_cap: u32,
 }
 
@@ -281,9 +281,9 @@ pub struct ActionReport {
     pub actions_today: u32,
 }
 
-/// Executa `unfollow` ou `remove_follower` numa lista com ritmo humano.
-/// Para em 429 (espera 10 min e tenta mais uma vez), em bloqueio, em
-/// sessão caída, no teto diário e quando o job é cancelado.
+/// Runs `unfollow` or `remove_follower` on a list at a human pace.
+/// Stops on 429 (waits 10 min and tries once more), on a block, on a
+/// dropped session, on the daily cap and when the job is cancelled.
 pub async fn run_actions(
     client: &IgClient,
     action: &str,
@@ -426,7 +426,7 @@ pub async fn run_actions(
     }
 }
 
-// ── Lista branca ─────────────────────────────────────────────────────────
+// ── Whitelist ─────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Whitelist {

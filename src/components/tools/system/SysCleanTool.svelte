@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Limpar caches (estudo 10, Kudu): varrer → revisar → limpar. */
+  /** Clean caches (study 10, Kudu): scan → review → clean. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

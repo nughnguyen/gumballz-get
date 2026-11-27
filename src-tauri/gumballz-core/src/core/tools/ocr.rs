@@ -1,5 +1,4 @@
-//! OCR de imagens com o Tesseract do sistema (estudo 29, Text Extractor do
-//! PowerToys). `brew install tesseract tesseract-lang`, `apt install
+//! Image OCR with the system Tesseract (study 29, PowerToys Text Extractor). `brew install tesseract tesseract-lang`, `apt install
 //! tesseract-ocr tesseract-ocr-por`, `winget install UB-Mannheim.TesseractOCR`.
 
 use std::path::PathBuf;
@@ -98,7 +97,7 @@ pub async fn run(
 ) -> anyhow::Result<Vec<OcrResult>> {
     let bin = locate()
         .await
-        .ok_or_else(|| anyhow!("tesseract nao esta instalado"))?;
+        .ok_or_else(|| anyhow!("tesseract is not installed"))?;
     let langs = if langs.trim().is_empty() {
         "eng"
     } else {
@@ -122,7 +121,7 @@ pub async fn run(
             .await?;
         if !o.status.success() {
             return Err(anyhow!(
-                "tesseract falhou em {}: {}",
+                "tesseract failed on {}: {}",
                 input,
                 String::from_utf8_lossy(&o.stderr).trim()
             ));

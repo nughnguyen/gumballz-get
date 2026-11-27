@@ -64,8 +64,8 @@
     return map[key] ?? null;
   }
 
-  // O WebKit do macOS não dá foco a um `<button>` ao clicar, então o keydown
-  // nunca chegava e o gravador ficava preso em "Pressione as teclas…".
+  // macOS WebKit doesn't focus a `<button>` on click, so the keydown
+  // never arrived and the recorder got stuck on "Press the keys…".
   function startRecording(e: MouseEvent) {
     (e.currentTarget as HTMLButtonElement | null)?.focus();
   }

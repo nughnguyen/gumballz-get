@@ -1,7 +1,7 @@
-//! Busca avancada e trends (estudo 67). A query e montada na UI com os
-//! operadores do X (`from:`, `since:`, `min_faves:`, `filter:media`…); aqui
-//! ela roda no FxTwitter (publico) e, se a sessao existir e o FxTwitter
-//! falhar, no `SearchTimeline` do GraphQL.
+//! Advanced search and trends (study 67). The query is built in the UI with X's
+//! operators (`from:`, `since:`, `min_faves:`, `filter:media`…); here
+//! it runs on FxTwitter (public) and, if the session exists and FxTwitter
+//! fails, on GraphQL's `SearchTimeline`.
 
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -19,7 +19,7 @@ pub struct SearchPage {
 pub async fn search(query: &str, feed: &str, cursor: Option<&str>) -> anyhow::Result<SearchPage> {
     let q = query.trim();
     if q.is_empty() {
-        anyhow::bail!("busca vazia");
+        anyhow::bail!("empty search");
     }
     let feed = if feed == "top" { "top" } else { "latest" };
     match super::fx::search(q, feed, cursor).await {

@@ -1,7 +1,7 @@
-//! Comandos Tauri da seção Tools. Cada submódulo é um grupo da UI
-//! (fala, IA, YouTube, documentos, imagens, arquivos, downloads, sistema,
-//! celular); a lógica mora em `gumballz_core::core::tools`. Progresso sai
-//! pelo evento `tool-progress` com o payload `ToolProgress`.
+//! Tauri commands for the Tools section. Each submodule is a UI group (voice,
+//! AI, YouTube, documents, images, files, downloads, system, phone); the logic
+//! lives in `gumballz_core::core::tools`. Progress comes out through the
+//! `tool-progress` event with the `ToolProgress` payload.
 
 pub mod ai;
 pub mod audio;

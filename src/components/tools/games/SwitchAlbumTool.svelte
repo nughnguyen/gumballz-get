@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Importa o álbum do Switch (SD ou pasta) para uma biblioteca por jogo. */
+  /** Imports the Switch album (SD or folder) into a per-game library. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

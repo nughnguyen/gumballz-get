@@ -45,12 +45,12 @@ fn wal_path() -> Option<PathBuf> {
     crate::core::paths::app_data_dir().map(|d| d.join(WAL_FILE))
 }
 
-/// Anexa um registro ao log, com `fsync` por registro.
+/// Appends a record to the log, with one `fsync` per record.
 ///
-/// Isto e o ponto do B32: o formato anterior reescrevia o arquivo inteiro a
-/// cada mudanca, entao um crash no meio da escrita podia levar a fila toda.
-/// Anexar so pode corromper o ultimo registro, e o `decode_log` descarta a
-/// linha truncada e mantem o resto.
+/// This is the point of B32: the previous format rewrote the whole file on
+/// every change, so a crash in the middle of a write could take the whole queue.
+/// Appending can only corrupt the last record, and `decode_log` discards the
+/// truncated line and keeps the rest.
 fn append(record: &crate::core::queue_wal::WalRecord) {
     let Some(path) = wal_path() else { return };
     let Some(parent) = path.parent() else { return };
@@ -69,8 +69,8 @@ fn append(record: &crate::core::queue_wal::WalRecord) {
             .open(&path)?;
         f.write_all(line.as_bytes())?;
         f.write_all(b"\n")?;
-        // Sem o fsync, o WAL nao vale mais que o JSON: o kernel pode nao ter
-        // escrito nada quando o processo morre.
+        // Without the fsync, the WAL is worth no more than the JSON: the kernel
+        // may not have written anything when the process dies.
         f.sync_all()?;
         Ok(())
     })();
@@ -108,24 +108,25 @@ fn recovered_to_item(r: &crate::core::queue_wal::RecoveredItem) -> RecoveryItem 
     }
 }
 
-/// Converte um `recovery.json` da 0.7.x para o WAL, uma vez so.
+/// Converts a 0.7.x `recovery.json` to the WAL, exactly once.
 ///
-/// Retorna os itens migrados. O JSON e renomeado em vez de apagado: se algo
-/// der errado na primeira execucao com o WAL, o arquivo original ainda esta la.
-/// Ordem em que os itens do `recovery.json` entram no WAL.
+/// Returns the migrated items. The JSON is renamed instead of deleted: if
+/// something goes wrong on the first run with the WAL, the original file is
+/// still there.
+/// Order in which the `recovery.json` items enter the WAL.
 ///
-/// Estavel por id: o JSON nao guardava posicao, e inventar uma ordem arbitraria
-/// mudaria a fila do usuario sem motivo. Separado do I/O para poder ser testado
-/// sem tocar em disco nem no estado global.
+/// Stable by id: the JSON kept no position, and inventing an arbitrary order
+/// would change the user's queue for no reason. Kept separate from I/O so it
+/// can be tested without touching disk or global state.
 fn ordenar_para_migracao(mut itens: Vec<RecoveryItem>) -> Vec<RecoveryItem> {
     itens.sort_by_key(|i| i.id);
     itens
 }
 
-/// Le um `recovery.json` da 0.7.x e devolve os registros equivalentes.
+/// Reads a 0.7.x `recovery.json` and returns the equivalent records.
 ///
-/// Puro de proposito: e a funcao que o teste de migracao precisa exercitar, e
-/// e onde um campo esquecido some em silencio.
+/// Pure on purpose: it is the function the migration test needs to exercise,
+/// and it is where a forgotten field disappears silently.
 fn json_para_registros(content: &str) -> Vec<crate::core::queue_wal::WalRecord> {
     let parsed: RecoveryFile = match serde_json::from_str(content) {
         Ok(v) => v,
@@ -146,11 +147,11 @@ fn migrate_from_json() -> Vec<RecoveryItem> {
         return Vec::new();
     };
 
-    // Mesma funcao que o teste de migracao exercita. Se a producao parseasse
-    // por fora, o teste estaria provando algo que ninguem executa.
+    // Same function the migration test exercises. If production parsed it
+    // separately, the test would be proving something nobody runs.
     let registros = json_para_registros(&content);
     if registros.is_empty() && !content.trim().is_empty() {
-        tracing::warn!("[recovery] recovery.json ilegivel ou vazio, nada migrado");
+        tracing::warn!("[recovery] recovery.json unreadable or empty, nothing migrated");
     }
     for r in &registros {
         append(r);
@@ -162,9 +163,9 @@ fn migrate_from_json() -> Vec<RecoveryItem> {
 
     let destino = json_path.with_extension("json.migrated");
     if let Err(e) = std::fs::rename(&json_path, &destino) {
-        tracing::warn!("[recovery] nao foi possivel renomear o json migrado: {}", e);
+        tracing::warn!("[recovery] could not rename the migrated json: {}", e);
     }
-    tracing::info!("[recovery] {} itens migrados do recovery.json", itens.len());
+    tracing::info!("[recovery] {} items migrated from recovery.json", itens.len());
     itens
 }
 
@@ -177,9 +178,9 @@ pub fn init_from_disk() {
         Some(contents) => {
             let (records, descartados) = crate::core::queue_wal::decode_log(&contents);
             if descartados > 0 {
-                // Esperado apos um crash: a ultima linha estava pela metade.
+                // Expected after a crash: the last line was cut in half.
                 tracing::warn!(
-                    "[recovery] {} registro(s) truncado(s) descartado(s)",
+                    "[recovery] {} truncated record(s) discarded",
                     descartados
                 );
             }
@@ -230,7 +231,7 @@ mod migracao_tests {
     use super::*;
     use crate::core::queue_wal::{replay, WalRecord};
 
-    /// Recorte no formato exato que a 0.7.x gravava, com `referer` preenchido.
+    /// A snippet in the exact format 0.7.x wrote, with `referer` filled in.
     const JSON_0_7_X: &str = r#"{
       "items": [
         {
@@ -256,9 +257,9 @@ mod migracao_tests {
 
     #[test]
     fn migracao_preserva_o_referer() {
-        // O `Enqueued` do WAL nao tinha `referer` quando a #217 foi escrita.
-        // Sem este teste, migrar teria descartado o campo em silencio, e o
-        // download so falharia depois, no site que exige o header.
+        // The WAL `Enqueued` had no `referer` when #217 was written. Without
+        // this test, migrating would have dropped the field silently, and the
+        // download would only fail later, on the site that requires the header.
         let registros = json_para_registros(JSON_0_7_X);
         let itens = replay(&registros);
         let com_referer = itens.iter().find(|i| i.id == 7).expect("item 7");
@@ -283,8 +284,8 @@ mod migracao_tests {
 
     #[test]
     fn campos_opcionais_ausentes_nao_quebram_a_migracao() {
-        // O item 2 do recorte nao tem download_mode, quality, format_id nem
-        // referer — arquivo de quem so usou os padroes.
+        // Item 2 of the snippet has no download_mode, quality, format_id or
+        // referer — a file from someone who only ever used the defaults.
         let itens = replay(&json_para_registros(JSON_0_7_X));
         let i = itens.iter().find(|i| i.id == 2).expect("item 2");
         assert_eq!(i.platform, "instagram");
@@ -294,11 +295,11 @@ mod migracao_tests {
 
     #[test]
     fn ordem_da_fila_sobrevive_a_migracao() {
-        // O JSON guardava um mapa sem ordem. Ordenar por id e a unica escolha
-        // que nao embaralha a fila de quem atualizar.
+        // The JSON kept an unordered map. Ordering by id is the only choice
+        // that does not shuffle the queue of whoever upgrades.
         let itens = replay(&json_para_registros(JSON_0_7_X));
         assert_eq!(itens.len(), 2);
-        assert_eq!(itens[0].id, 2, "o menor id vem primeiro");
+        assert_eq!(itens[0].id, 2, "the smallest id comes first");
         assert_eq!(itens[1].id, 7);
         assert_eq!(itens[0].position, 0);
         assert_eq!(itens[1].position, 1);
@@ -306,8 +307,8 @@ mod migracao_tests {
 
     #[test]
     fn json_corrompido_nao_derruba_o_boot() {
-        // Um arquivo ilegivel nao pode impedir o app de subir; a fila perdida e
-        // ruim, o app que nao abre e pior.
+        // An unreadable file must not stop the app from starting; a lost queue is
+        // bad, an app that does not open is worse.
         assert!(json_para_registros("{ isto nao e json").is_empty());
         assert!(json_para_registros("").is_empty());
     }

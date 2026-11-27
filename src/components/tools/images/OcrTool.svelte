@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** OCR com o Tesseract do sistema (estudo 29). */
+  /** OCR with the system Tesseract (study 29). */
   import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
   import { t } from "$lib/i18n";

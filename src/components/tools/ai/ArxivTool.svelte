@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** arXiv -> Markdown com o LaTeX da matematica preservado. */
+  /** arXiv -> Markdown with the math LaTeX preserved. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

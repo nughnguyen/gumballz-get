@@ -1,6 +1,6 @@
-//! Comandos da categoria Blogs para Tumblr e favoritos de arte: índice dos
-//! likes, espelho offline de um blog e índice unificado de DeviantArt,
-//! ArtStation e Flickr. A leitura é toda pós-processamento do gallery-dl.
+//! Commands of the Blogs category for Tumblr and art favorites: index of likes,
+//! offline mirror of a blog and unified index of DeviantArt, ArtStation and
+//! Flickr. Reading is all gallery-dl post-processing.
 
 use gumballz_core::core::tools::tumblr::{art, backup, gdl, likes};
 
@@ -8,9 +8,9 @@ use super::{err, progress};
 
 const TUMBLR: &str = "tumblr.com";
 
-/// Cookies da conta escolhida no gerenciador (None = `_default`). Likes e
-/// favoritos são páginas de conta: sem sessão o gallery-dl só enxerga o que
-/// é público.
+/// Cookies of the account chosen in the manager (None = `_default`). Likes and
+/// favorites are account pages: without a session gallery-dl only sees what is
+/// public.
 fn session_of(domain: &str, slug: Option<&str>) -> Option<String> {
     let slug = slug.unwrap_or("_default");
     let content = crate::cookies::storage::read_account_file(domain, slug).ok()?;
@@ -21,8 +21,8 @@ fn session_of(domain: &str, slug: Option<&str>) -> Option<String> {
     Some(content)
 }
 
-/// As três plataformas de arte num arquivo Netscape só — é o que o
-/// `--cookies` do gallery-dl aceita.
+/// The three art platforms in a single Netscape file — that is what gallery-dl's
+/// `--cookies` accepts.
 fn art_session(slug: Option<&str>) -> Option<String> {
     let parts: Vec<String> = art::domains()
         .into_iter()

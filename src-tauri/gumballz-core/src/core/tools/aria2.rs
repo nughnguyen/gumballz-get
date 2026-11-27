@@ -1,4 +1,4 @@
-//! Download acelerado com aria2c (estudo 53): 16 conexões, resume, checksum.
+//! Accelerated download with aria2c (study 53): 16 connections, resume, checksum.
 
 use std::path::PathBuf;
 
@@ -64,7 +64,7 @@ pub async fn download(
     let bin = crate::core::dependencies::ensure_aria2c()
         .await
         .ok_or_else(|| {
-            anyhow!("aria2c nao esta instalado (Linux/macOS: instale pelo gerenciador de pacotes)")
+            anyhow!("aria2c is not installed (Linux/macOS: install it via your package manager)")
         })?;
     std::fs::create_dir_all(&opts.dest_dir)?;
     let conns = opts.connections.clamp(1, 16).to_string();
@@ -103,7 +103,7 @@ pub async fn download(
         .stderr(std::process::Stdio::piped());
     let mut child = cmd
         .spawn()
-        .map_err(|e| anyhow!("nao foi possivel iniciar o aria2c: {}", e))?;
+        .map_err(|e| anyhow!("could not start aria2c: {}", e))?;
     let stdout = child.stdout.take();
     let id = format!("aria2:{}", opts.url);
     let p2 = progress.clone();
@@ -125,9 +125,9 @@ pub async fn download(
     let st = child.wait().await?;
     let last = task.await.unwrap_or_default();
     if !st.success() {
-        return Err(anyhow!("aria2c falhou: {}", last));
+        return Err(anyhow!("aria2c failed: {}", last));
     }
-    // aria2 decide o nome pelo Content-Disposition/URL; pega o arquivo mais novo da pasta
+    // aria2 picks the name from Content-Disposition/URL; take the newest file in the folder
     let path = if !opts.file_name.trim().is_empty() {
         PathBuf::from(&opts.dest_dir).join(opts.file_name.trim())
     } else {
@@ -136,7 +136,7 @@ pub async fn download(
             .filter(|e| e.path().is_file() && !e.path().to_string_lossy().ends_with(".aria2"))
             .max_by_key(|e| e.metadata().and_then(|m| m.modified()).ok())
             .map(|e| e.path())
-            .ok_or_else(|| anyhow!("download terminou mas nao achei o arquivo"))?
+            .ok_or_else(|| anyhow!("download finished but the file was not found"))?
     };
     let bytes = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
     super::report(&progress, &id, "done", 100, Some(100), None);

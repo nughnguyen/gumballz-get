@@ -1,13 +1,13 @@
-//! PDF → Markdown limpo, offline, para jogar num LLM. Sai texto com títulos,
-//! parágrafos remontados, listas, tabelas simples e blocos de código — sem
-//! serviço na nuvem e sem crate de PDF: a posição de cada caractere vem do
-//! PDFium que o app já gerencia (`pdf::read_pages`).
+//! Clean PDF → Markdown, offline, to throw at an LLM. Out comes text with headings,
+/// reassembled paragraphs, lists, simple tables and code blocks — no
+/// cloud service and no PDF crate: each character's position comes from the
+/// PDFium the app already manages (`pdf::read_pages`).
 //!
-//! O caminho é sempre o mesmo: caractere → linha (com células separadas por
-//! espaço grande) → coluna (histograma de x) → ordem de leitura → bloco →
-//! Markdown. As etapas do meio são funções puras sobre `Line`, então dá para
-//! testar leitura em duas colunas, hifenização e tabela sem abrir PDF nenhum.
-//! Referência de arquitetura: yfedoseev/pdf_oxide (MIT).
+//! The path is always the same: character → line (with cells split by a
+//! big horizontal gap) → column (x histogram) → reading order → block →
+//! Markdown. The middle steps are pure functions over `Line`, so it is possible to
+//! test two-column reading, hyphenation and tables without opening any PDF.
+//! Architecture reference: yfedoseev/pdf_oxide (MIT).
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -20,10 +20,10 @@ use super::ProgressFn;
 
 const ID: &str = "pdf-markdown";
 
-// ── Estruturas intermediárias ──────────────────────────────────────────
+// ── Intermediate structures ──────────────────────────────────────────
 
-/// Um pedaço de linha separado dos vizinhos por um espaço grande. É o que
-/// vira célula de tabela e o que preserva o alinhamento de código.
+/// A piece of a line separated from its neighbors by a big space. It is what
+/// becomes a table cell and what preserves code alignment.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Cell {
     pub text: String,
@@ -31,9 +31,9 @@ pub struct Cell {
     pub x1: f32,
 }
 
-/// Uma linha de texto da página, em pontos do PDF (y cresce para cima).
-/// `col0`/`col1` são as bordas da coluna a que a linha pertence — é com elas
-/// que se decide se um parágrafo acabou.
+/// A line of text on the page, in PDF points (y grows upward).
+/// `col0`/`col1` are the edges of the column the line belongs to — they are what
+/// decides whether a paragraph has ended.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Line {
     pub cells: Vec<Cell>,
@@ -50,7 +50,7 @@ pub struct Line {
 }
 
 impl Line {
-    /// Texto da linha com um espaço entre células.
+    /// The line's text with one space between cells.
     pub fn text(&self) -> String {
         let mut out = String::new();
         for c in &self.cells {
@@ -62,7 +62,7 @@ impl Line {
         out
     }
 
-    /// Linha de uma célula só — atalho dos testes.
+    /// A single-cell line — a test shortcut.
     #[cfg(test)]
     fn simple(text: &str, x0: f32, x1: f32, top: f32, size: f32) -> Line {
         Line {
@@ -85,7 +85,7 @@ impl Line {
     }
 }
 
-/// Bloco de Markdown já decidido, antes de virar texto.
+/// A Markdown block already decided, before it becomes text.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Block {
     Heading { level: u8, text: String },
@@ -102,21 +102,21 @@ pub enum Block {
 pub struct Item {
     pub level: u8,
     pub ordered: bool,
-    /// Marcador como veio do PDF ("3", "a", "•") — a lista numerada sai com o
-    /// número do documento, não com uma contagem inventada.
+    /// Marker as it came from the PDF ("3", "a", "•") — a numbered list comes out with the
+    /// document's number, not with an invented count.
     pub marker: String,
     pub text: String,
 }
 
-// ── Caracteres → linhas ────────────────────────────────────────────────
+// ── Characters → lines ────────────────────────────────────────────────
 
-/// Agrupa caracteres em linhas pela altura do centro e corta a linha em
-/// células onde o vão horizontal é grande. Espaço em branco do PDF é
-/// descartado: o espaçamento sai da geometria, que é mais confiável.
+/// Groups characters into lines by the center's height and cuts the line into
+/// cells where the horizontal gap is big. PDF whitespace is
+/// discarded: the spacing comes from the geometry, which is more reliable.
 pub fn lines_from_chars(chars: &[TextChar], page: usize) -> Vec<Line> {
     let mut cs: Vec<&TextChar> = chars.iter().filter(|c| !c.ch.is_whitespace()).collect();
-    // (o `read_pages` já entrega sem espaço em branco; o filtro é cinto e
-    // suspensório para quem montar `TextChar` na mão)
+    // (`read_pages` already delivers without whitespace; the filter is belt and
+    // braces for whoever builds `TextChar` by hand)
     if cs.is_empty() {
         return Vec::new();
     }
@@ -220,11 +220,11 @@ fn row_to_line(mut row: Vec<&TextChar>, page: usize) -> Option<Line> {
     })
 }
 
-// ── Colunas ────────────────────────────────────────────────────────────
+// ── Columns ────────────────────────────────────────────────────────────
 
-/// Acha as colunas da página por histograma de x: uma faixa vertical quase
-/// sem tinta, no meio do conteúdo, é medianiz. Só aceita a divisão se cada
-/// coluna tiver conteúdo próprio — página de uma coluna volta como uma.
+/// Finds the page's columns by x histogram: an almost ink-free vertical strip,
+/// in the middle of the content, is a divider. It only accepts the split if each
+/// column has content of its own — a one-column page comes back as one.
 pub fn detect_columns(lines: &[Line], width: f32) -> Vec<(f32, f32)> {
     let full = |w: f32| vec![(0.0f32, if w > 0.0 { w } else { 1.0 })];
     if lines.len() < 6 || width <= 1.0 {
@@ -272,7 +272,7 @@ pub fn detect_columns(lines: &[Line], width: f32) -> Vec<(f32, f32)> {
     if gaps.is_empty() {
         return full(width);
     }
-    // No máximo três colunas: fica com as maiores medianizes.
+    // At most three columns: keep the biggest dividers.
     gaps.sort_by_key(|(a, b)| std::cmp::Reverse(b - a));
     gaps.truncate(2);
     gaps.sort_by_key(|(a, _)| *a);
@@ -287,7 +287,7 @@ pub fn detect_columns(lines: &[Line], width: f32) -> Vec<(f32, f32)> {
     }
     cols.push((edge, right + 1.0));
 
-    // Só vale se cada coluna se sustenta sozinha e poucas linhas atravessam.
+    // It only counts if each column stands on its own and few lines cross it.
     let mut own = vec![0usize; cols.len()];
     let mut crossing = 0usize;
     for l in lines {
@@ -306,10 +306,10 @@ pub fn detect_columns(lines: &[Line], width: f32) -> Vec<(f32, f32)> {
     cols
 }
 
-/// Reparte a linha entre as colunas. `None` quer dizer que uma célula pisa em
-/// duas colunas — é linha larga, de título ou de tabela que atravessa a
-/// medianiz. Isso é o que permite ler duas colunas mesmo quando as linhas das
-/// duas nascem na mesma altura e chegam grudadas do PDFium.
+/// Splits the line between the columns. `None` means a cell steps on
+/// two columns — it is a wide line, of a heading or a table that crosses the
+/// divider. That is what lets two columns be read even when the lines of
+/// both are born at the same height and arrive stuck together from PDFium.
 fn split_cols(line: &Line, cols: &[(f32, f32)]) -> Option<Vec<(usize, Line)>> {
     let mut groups: Vec<Vec<Cell>> = vec![Vec::new(); cols.len()];
     for cell in &line.cells {
@@ -340,8 +340,8 @@ fn split_cols(line: &Line, cols: &[(f32, f32)]) -> Option<Vec<(usize, Line)>> {
     (!out.is_empty()).then_some(out)
 }
 
-/// Ordem de leitura: de cima para baixo dentro de cada coluna, coluna a
-/// coluna, e uma linha que atravessa as colunas fecha o bloco anterior.
+/// Reading order: top to bottom inside each column, column by
+/// column, and a line that crosses the columns closes the previous block.
 pub fn order_lines(mut lines: Vec<Line>, cols: &[(f32, f32)]) -> Vec<Line> {
     lines.sort_by(|a, b| {
         b.top
@@ -398,10 +398,10 @@ fn bounds_of(lines: &[Line]) -> (f32, f32) {
     }
 }
 
-// ── Cabeçalho e rodapé que se repetem ──────────────────────────────────
+// ── Repeating header and footer ──────────────────────────────────
 
-/// Texto comparável entre páginas: sem caixa, sem espaço duplo e com todo
-/// número virando `#`, para "Página 3 de 12" bater com "Página 4 de 12".
+/// Text comparable across pages: no case, no double space and every
+/// number becoming `#`, so "Page 3 of 12" matches "Page 4 of 12".
 fn running_key(text: &str) -> String {
     let mut out = String::new();
     let mut digit = false;
@@ -425,8 +425,8 @@ fn running_key(text: &str) -> String {
     out.trim().to_string()
 }
 
-/// Tira das faixas de topo e pé as linhas que se repetem na maioria das
-/// páginas — cabeçalho corrido e número de página.
+/// Removes from the top and bottom bands the lines that repeat on most
+/// pages — running header and page number.
 pub fn strip_running(pages: &mut [Vec<Line>], heights: &[f32]) {
     if pages.len() < 2 {
         return;
@@ -458,16 +458,16 @@ pub fn strip_running(pages: &mut [Vec<Line>], heights: &[f32]) {
                 return true;
             }
             let k = running_key(&l.text());
-            // Número de página solto vira "#" e cai fora sem precisar repetir.
+            // A lone page number becomes "#" and drops out without needing to repeat.
             !(repeated.contains(&k) || k == "#" || k.is_empty())
         });
     }
 }
 
-// ── Corpo do texto, títulos, listas ────────────────────────────────────
+// ── Body text, headings, lists ────────────────────────────────────
 
-/// Corpo do texto = tamanho de fonte com mais caracteres na obra. É a régua
-/// de tudo: título é o que é maior que isso.
+/// Body text = the font size with the most characters in the work. It is the ruler
+/// for everything: a heading is what is bigger than that.
 pub fn body_size(pages: &[Vec<Line>]) -> f32 {
     let mut hist: HashMap<i32, usize> = HashMap::new();
     for lines in pages {
@@ -487,8 +487,8 @@ pub fn body_size(pages: &[Vec<Line>]) -> f32 {
         .unwrap_or(10.0)
 }
 
-/// Espaçamento típico entre linhas, para saber quando o salto virou
-/// parágrafo novo.
+/// Typical spacing between lines, to know when the jump became a
+/// new paragraph.
 pub fn median_lead(lines: &[Line], body: f32) -> f32 {
     let mut leads: Vec<f32> = lines
         .windows(2)
@@ -502,8 +502,8 @@ pub fn median_lead(lines: &[Line], body: f32) -> f32 {
     leads[leads.len() / 2]
 }
 
-/// Nível de título pela razão entre o corpo da fonte da linha e o do texto.
-/// Linha grande é título; linha em negrito, curta e sem ponto final também.
+/// Heading level by the ratio between the line's font size and the text's.
+/// A big line is a heading; a bold, short line without a final period also is.
 pub fn heading_level(line: &Line, body: f32) -> Option<u8> {
     if body <= 0.0 || line.mono {
         return None;
@@ -530,7 +530,7 @@ pub fn heading_level(line: &Line, body: f32) -> Option<u8> {
     None
 }
 
-/// Marcador de lista no começo da linha: `(marcador, é numerada, resto)`.
+/// List marker at the start of the line: `(marker, is numbered, rest)`.
 pub fn split_marker(text: &str) -> Option<(String, bool, String)> {
     let t = text.trim_start();
     let mut it = t.chars();
@@ -580,7 +580,7 @@ pub fn split_marker(text: &str) -> Option<(String, bool, String)> {
     Some((mark, ordered, rest.to_string()))
 }
 
-/// Junta linhas de um parágrafo desfazendo a hifenização de fim de linha.
+/// Joins a paragraph's lines, undoing end-of-line hyphenation.
 pub fn join_lines(parts: &[String]) -> String {
     let mut out = String::new();
     for part in parts {
@@ -592,8 +592,8 @@ pub fn join_lines(parts: &[String]) -> String {
             out.push_str(part);
             continue;
         }
-        // Hífen de fim de linha: some antes de minúscula ("legí-vel") e fica
-        // quando é composto de verdade ("Rio-Niterói"), mas nunca vira espaço.
+        // End-of-line hyphen: disappears before a lowercase letter ("legí-vel") and stays
+        // when it is a real compound ("Rio-Niterói"), but never becomes a space.
         if out.ends_with(['-', '\u{2010}', '\u{00ad}']) {
             if part.chars().next().is_some_and(char::is_lowercase) {
                 out.pop();
@@ -610,11 +610,11 @@ pub fn join_lines(parts: &[String]) -> String {
     out
 }
 
-// ── Tabela ─────────────────────────────────────────────────────────────
+// ── Table ─────────────────────────────────────────────────────────────
 
-/// Tenta montar uma tabela com as linhas dadas: as células têm que cair em
-/// colunas de x alinhadas em quase todas as linhas. Sem confiança devolve
-/// `None` — é melhor sair como texto do que sair torta.
+/// Tries to build a table with the given lines: the cells have to fall in
+/// x columns aligned on almost every line. Without confidence it returns
+/// `None` — it is better to come out as text than to come out crooked.
 pub fn try_table(rows: &[Line]) -> Option<Vec<Vec<String>>> {
     let corpo = rows.iter().filter(|r| r.cells.len() >= 2).count();
     if rows.len() < 2 || corpo < 2 {
@@ -633,16 +633,16 @@ pub fn try_table(rows: &[Line]) -> Option<Vec<Vec<String>>> {
     }
     anchors.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     let widest = rows.iter().map(|r| r.cells.len()).max().unwrap_or(0);
-    // Mais colunas do que a linha mais cheia quer dizer célula fora de prumo:
-    // é texto com vão grande, não tabela.
+    // More columns than the fullest line means a cell off plumb:
+    // it is text with a big gap, not a table.
     if anchors.len() < 2 || anchors.len() > 12 || anchors.len() > widest {
         return None;
     }
     let mut grid: Vec<Vec<String>> = Vec::with_capacity(rows.len());
     let mut filled = 0usize;
     for r in rows {
-        // Linha de uma célula só que cai numa coluna do meio é a continuação
-        // da célula de cima, não uma linha nova.
+        // A single-cell line that lands in a middle column is the continuation
+        // of the cell above, not a new row.
         if r.cells.len() < 2 {
             let cell = &r.cells[0];
             match (nearest(&anchors, cell.x0, tol), grid.last_mut()) {
@@ -664,14 +664,14 @@ pub fn try_table(rows: &[Line]) -> Option<Vec<Vec<String>>> {
         }
         grid.push(cells);
     }
-    // Tabela esburacada demais não convence.
+    // A table with too many holes does not convince.
     if grid.is_empty() || filled * 10 < grid.len() * anchors.len() * 6 {
         return None;
     }
     Some(grid)
 }
 
-/// Índice da coluna mais perto de `x`, dentro da tolerância.
+/// Index of the column nearest to `x`, within the tolerance.
 fn nearest(anchors: &[f32], x: f32, tol: f32) -> Option<usize> {
     let (idx, dist) = anchors
         .iter()
@@ -687,7 +687,7 @@ fn nearest(anchors: &[f32], x: f32, tol: f32) -> Option<usize> {
     (dist <= tol).then_some(idx)
 }
 
-// ── Linhas → blocos ────────────────────────────────────────────────────
+// ── Lines → blocks ────────────────────────────────────────────────────
 
 pub struct Shape {
     pub body: f32,
@@ -696,8 +696,8 @@ pub struct Shape {
     pub code: bool,
 }
 
-/// Monta os blocos de uma página já em ordem de leitura. Devolve cada bloco
-/// com o `y` de onde ele começa, para intercalar imagem depois.
+/// Builds the blocks of a page already in reading order. Returns each block
+/// with the `y` where it starts, to interleave images later.
 pub fn assemble(lines: &[Line], shape: &Shape) -> Vec<(f32, Block)> {
     let mut out: Vec<(f32, Block)> = Vec::new();
     let mut i = 0usize;
@@ -744,7 +744,7 @@ pub fn assemble(lines: &[Line], shape: &Shape) -> Vec<(f32, Block)> {
             i = j;
             continue;
         }
-        // Corrida de texto até o próximo título, código ou marcador.
+        // A run of text until the next heading, code or marker.
         let mut j = i + 1;
         while j < lines.len() {
             let n = &lines[j];
@@ -760,8 +760,8 @@ pub fn assemble(lines: &[Line], shape: &Shape) -> Vec<(f32, Block)> {
     out
 }
 
-/// Dentro de uma corrida de texto, o que forma tabela vira tabela e o resto
-/// vira parágrafo.
+/// Inside a run of text, what forms a table becomes a table and the rest
+/// becomes a paragraph.
 fn text_blocks(run: &[Line], shape: &Shape) -> Vec<(f32, Block)> {
     let mut out = Vec::new();
     let mut i = 0usize;
@@ -773,8 +773,8 @@ fn text_blocks(run: &[Line], shape: &Shape) -> Vec<(f32, Block)> {
                 while j < run.len() && run[j].cells.len() >= 2 {
                     j += 1;
                 }
-                // Puxa a linha solta logo abaixo quando ela não começa na
-                // primeira coluna: é célula que quebrou em duas linhas.
+                // Pulls in the loose line right below when it does not start at the
+                // first column: it is a cell that broke into two lines.
                 while j < run.len()
                     && run[j].cells.len() == 1
                     && run[j].x0 > run[i].cells[0].x1 + 0.5 * shape.body
@@ -791,7 +791,7 @@ fn text_blocks(run: &[Line], shape: &Shape) -> Vec<(f32, Block)> {
                 continue;
             }
         }
-        // Não virou tabela: segue como texto até o começo da próxima tentativa.
+        // It did not become a table: continues as text until the start of the next attempt.
         let mut j = i + 1;
         while j < run.len() && !(shape.tables && run[j].cells.len() >= 2) {
             j += 1;
@@ -802,7 +802,7 @@ fn text_blocks(run: &[Line], shape: &Shape) -> Vec<(f32, Block)> {
                 k += 1;
             }
             if try_table(&run[j..k]).is_none() {
-                j = k; // a próxima corrida também não é tabela: segue no texto
+                j = k; // the next run is not a table either: keep going in the text
                 while j < run.len() && run[j].cells.len() < 2 {
                     j += 1;
                 }
@@ -814,7 +814,7 @@ fn text_blocks(run: &[Line], shape: &Shape) -> Vec<(f32, Block)> {
     out
 }
 
-/// Quebra a corrida em parágrafos e junta as linhas de cada um.
+/// Breaks the run into paragraphs and joins the lines of each one.
 pub fn paragraphs(run: &[Line], shape: &Shape) -> Vec<(f32, Block)> {
     let mut out = Vec::new();
     let mut buf: Vec<String> = Vec::new();
@@ -843,11 +843,11 @@ fn breaks_paragraph(prev: &Line, cur: &Line, shape: &Shape) -> bool {
     if (prev.size - cur.size).abs() > 0.15 * shape.body {
         return true;
     }
-    // Primeira linha recuada começa parágrafo.
+    // A first indented line starts a paragraph.
     if cur.x0 > prev.col0 + 0.9 * shape.body && (prev.x0 - prev.col0).abs() < 0.9 * shape.body {
         return true;
     }
-    // Linha anterior terminou a frase e sobrou muito branco à direita.
+    // The previous line ended the sentence and a lot of white space is left on the right.
     let text = prev.text();
     let closed = text.ends_with(['.', '!', '?', '"', '”', '»']);
     let width = (prev.col1 - prev.col0).max(1.0);
@@ -902,7 +902,7 @@ fn code_block(run: &[Line]) -> Block {
     Block::Code(out)
 }
 
-// ── Blocos → Markdown ──────────────────────────────────────────────────
+// ── Blocks → Markdown ──────────────────────────────────────────────────
 
 fn escape_cell(text: &str) -> String {
     text.replace('|', "\\|").replace('\n', " ")
@@ -964,15 +964,15 @@ pub fn render(blocks: &[Block]) -> String {
 #[serde(default)]
 pub struct Options {
     pub input: String,
-    /// "1-3, 5" ou vazio para todas.
+    /// "1-3, 5" or empty for all.
     pub pages: String,
-    /// Caminho do .md; vazio grava ao lado do PDF.
+    /// Path of the .md; empty writes beside the PDF.
     pub output: String,
     pub save: bool,
     /// "none" | "rule" | "comment"
     pub page_marks: String,
     pub extract_images: bool,
-    /// Manter cabeçalho e rodapé repetidos.
+    /// Keep repeated header and footer.
     pub keep_running: bool,
     pub tables: bool,
     pub code: bool,
@@ -1003,7 +1003,7 @@ pub struct PageReport {
     pub columns: usize,
     pub headings: usize,
     pub tables: usize,
-    /// Página sem texto: é digitalização, precisa de OCR.
+    /// A page with no text: it is a scan, it needs OCR.
     pub needs_ocr: bool,
 }
 
@@ -1024,7 +1024,7 @@ pub struct MdResult {
 fn stem(path: &Path) -> String {
     path.file_stem()
         .map(|s| s.to_string_lossy().to_string())
-        .unwrap_or_else(|| "documento".into())
+        .unwrap_or_else(|| "document".into())
 }
 
 fn unique(path: PathBuf) -> PathBuf {
@@ -1049,7 +1049,7 @@ fn unique(path: PathBuf) -> PathBuf {
 pub fn run(opts: &Options, progress: &ProgressFn) -> anyhow::Result<MdResult> {
     let input = opts.input.trim();
     if input.is_empty() {
-        return Err(anyhow!("escolha um PDF"));
+        return Err(anyhow!("choose a PDF"));
     }
     let path = PathBuf::from(input);
     super::report(progress, ID, "read", 0, None, Some("PDF".into()));
@@ -1070,7 +1070,7 @@ pub fn run(opts: &Options, progress: &ProgressFn) -> anyhow::Result<MdResult> {
         },
     )?;
     if pages.is_empty() {
-        return Err(anyhow!("nenhuma pagina selecionada"));
+        return Err(anyhow!("no page selected"));
     }
 
     let mut per_page: Vec<Vec<Line>> = Vec::with_capacity(pages.len());
@@ -1087,7 +1087,7 @@ pub fn run(opts: &Options, progress: &ProgressFn) -> anyhow::Result<MdResult> {
     }
     let body = body_size(&per_page);
 
-    // Pasta das imagens, só criada se sair alguma.
+    // The images folder, only created if something comes out of it.
     let out_path = if opts.output.trim().is_empty() {
         unique(
             path.parent()
@@ -1137,8 +1137,8 @@ pub fn run(opts: &Options, progress: &ProgressFn) -> anyhow::Result<MdResult> {
         };
         let mut made = assemble(lines, &shape);
 
-        // Imagens entram na posição delas quando a página é de uma coluna;
-        // com duas, o y não é monotônico, então vão para o fim da página.
+        // Images go in at their position when the page has one column;
+        // with two, y is not monotonic, so they go to the end of the page.
         let mut shots: Vec<(f32, Block)> = Vec::new();
         for (n, im) in page.images.iter().enumerate() {
             let file = format!("p{}-{}.png", page.number, n + 1);
@@ -1172,7 +1172,7 @@ pub fn run(opts: &Options, progress: &ProgressFn) -> anyhow::Result<MdResult> {
         headings += page_headings;
         tables += page_tables;
         if needs_ocr {
-            blocks.push(Block::Para("<!-- sem texto: precisa de OCR -->".into()));
+            blocks.push(Block::Para("<!-- no text: needs OCR -->".into()));
         }
         blocks.extend(made.into_iter().map(|(_, b)| b));
         reports.push(PageReport {
@@ -1235,7 +1235,7 @@ mod tests {
         }
     }
 
-    /// Escreve uma palavra a partir de x, com passo de meia largura.
+    /// Writes a word from x, stepping by half a width.
     fn word(text: &str, x: f32, y: f32, size: f32) -> Vec<TextChar> {
         text.chars()
             .enumerate()
@@ -1258,16 +1258,16 @@ mod tests {
         cs.extend(word("Valor", 200.0, 700.0, 10.0));
         cs.extend(word("Fim", 50.0, 680.0, 10.0));
         let lines = lines_from_chars(&cs, 1);
-        assert_eq!(lines.len(), 2, "duas alturas, duas linhas");
-        assert_eq!(lines[0].cells.len(), 2, "vão grande virou duas células");
+        assert_eq!(lines.len(), 2, "two heights, two lines");
+        assert_eq!(lines[0].cells.len(), 2, "wide gap became two cells");
         assert_eq!(lines[0].text(), "Nome Valor");
         assert_eq!(lines[1].text(), "Fim");
-        assert!(lines[0].top > lines[1].top, "ordem de cima para baixo");
+        assert!(lines[0].top > lines[1].top, "top-to-bottom order");
     }
 
     #[test]
-    fn duas_colunas_saem_na_ordem_de_leitura() {
-        // Coluna esquerda em x=50, direita em x=320, mesmas alturas.
+    fn two_columns_come_out_in_reading_order() {
+        // Left column at x=50, right at x=320, same heights.
         let mut lines = Vec::new();
         for i in 0..6 {
             let y = 700.0 - i as f32 * 14.0;
@@ -1275,7 +1275,7 @@ mod tests {
             lines.push(Line::simple(&format!("D{}", i), 320.0, 520.0, y, 10.0));
         }
         let cols = detect_columns(&lines, 595.0);
-        assert_eq!(cols.len(), 2, "achou a medianiz: {:?}", cols);
+        assert_eq!(cols.len(), 2, "found the divider: {:?}", cols);
         let ordered = order_lines(lines, &cols);
         let seq: Vec<String> = ordered.iter().map(|l| l.text()).collect();
         assert_eq!(
@@ -1339,7 +1339,7 @@ mod tests {
             joined,
             "o documento fica muito mais legível quando o texto é remontado"
         );
-        // Hífen antes de maiúscula é composto e fica.
+        // A hyphen before an uppercase letter is a compound and stays.
         assert_eq!(
             join_lines(&["Rio-".into(), "Niterói".into()]),
             "Rio-Niterói"
@@ -1481,14 +1481,14 @@ mod tests {
             row("Cadeira", "199", "4", 686.0),
             row("Mesa", "499", "2", 672.0),
         ])
-        .expect("colunas alinhadas viram tabela");
+        .expect("aligned columns become a table");
         assert_eq!(grid.len(), 3);
         assert_eq!(grid[1], vec!["Cadeira", "199", "4"]);
         let md = render(&[Block::Table(grid)]);
         assert!(md.contains("| Nome | Preço | Estoque |"), "{}", md);
         assert!(md.contains("| --- | --- | --- |"), "{}", md);
 
-        // Uma linha com célula fora de qualquer coluna derruba a tabela.
+        // One row with a cell outside every column brings the table down.
         let mut torta = row("Nome", "Preço", "Estoque", 700.0);
         torta.cells[1].x0 = 127.0;
         assert!(try_table(&[torta, row("Mesa", "499", "2", 686.0)]).is_none());
@@ -1600,9 +1600,9 @@ mod tests {
         );
     }
 
-    /// Ponta a ponta com um PDF montado à mão (mesma técnica do teste de
-    /// tarja em `pdf.rs`): três páginas com cabeçalho e rodapé corridos,
-    /// título, parágrafo hifenizado, lista, duas colunas e um bloco em
+    /// End to end with a hand-built PDF (same technique as the redaction test
+    /// in `pdf.rs`): three pages with running header and footer,
+    /// heading, hyphenated paragraph, list, two columns and a block in
     /// Courier. `cargo test -p gumballz-core --lib -- --ignored live_pdf_markdown`
     #[test]
     #[ignore]
@@ -1715,8 +1715,8 @@ mod tests {
         eprintln!("--- markdown ---\n{}\n----------------", out.markdown);
         let md = &out.markdown;
         assert_eq!(out.pages.len(), 3);
-        assert!(md.contains("# Guia rapido"), "sem titulo H1");
-        assert!(md.contains("## Como comecar"), "sem titulo H2");
+        assert!(md.contains("# Guia rapido"), "no H1 title");
+        assert!(md.contains("## Como comecar"), "no H2 title");
         assert!(
             md.contains("linha de baixo sem nenhuma quebra"),
             "hifenizacao nao foi desfeita"
@@ -1733,7 +1733,7 @@ mod tests {
         assert_eq!(out.pages[1].columns, 2, "nao viu as duas colunas");
         let esq = md.find("esquerda linha 6").expect("coluna esquerda");
         let dir_pos = md.find("direita linha 1").expect("coluna direita");
-        assert!(esq < dir_pos, "leu as colunas intercaladas");
+        assert!(esq < dir_pos, "read the interleaved columns");
         assert!(md.contains("```"), "bloco de codigo nao saiu:\n{}", md);
         assert_eq!(out.needs_ocr, 0);
         assert!(out.output.is_some(), "nao gravou o .md");

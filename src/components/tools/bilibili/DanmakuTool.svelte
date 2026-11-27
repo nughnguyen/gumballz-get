@@ -18,8 +18,8 @@
 
 <script lang="ts">
   /**
-   * Danmaku do Bilibili: `mode="export"` puxa os comentários flutuantes de
-   * uma parte e grava em XML/ASS/JSON; `mode="burn"` queima o ASS num clipe.
+   * Bilibili danmaku: `mode="export"` pulls the floating comments from a
+   * part and writes them as XML/ASS/JSON; `mode="burn"` burns the ASS into a clip.
    */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
@@ -130,7 +130,7 @@
         style: {
           font_name: fontName,
           font_size: fontSize,
-          // O ASS conta transparência, não opacidade.
+          // ASS counts transparency, not opacity.
           alpha: Math.round((1 - opacity / 100) * 255),
           scroll_lanes: lanes,
           scroll_duration_secs: speed,
@@ -140,7 +140,7 @@
     });
     exported = out;
     page = out.part.page;
-    // Encadeia com a queima: o ASS recém-gravado já entra no outro modo.
+    // Chains with the burn: the freshly written ASS already goes into the other mode.
     const ass = out.files.find((f) => f.format === "ass");
     if (ass) subtitle = ass.path;
     showToast("success", `${out.kept} / ${out.fetched}`);

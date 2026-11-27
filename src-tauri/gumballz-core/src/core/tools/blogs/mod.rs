@@ -1,25 +1,25 @@
-//! Camada comum das exportações de blog (Substack, Medium).
+//! Shared layer for the blog exports (Substack, Medium).
 //!
-//! Três coisas moram aqui, porque toda tool da categoria precisa das três:
+//! Three things live here, because every tool in the category needs all three:
 //!
-//! 1. **Cliente com freio e com a sessão do usuário.** Mesmo desenho do
-//!    `Fetcher` do Reddit: uma requisição por vez, espera configurável entre
-//!    elas, recuo crescente em 429, e um pote de cookies semeado do arquivo
-//!    Netscape que o gerenciador grava — filtrado pelo domínio, para o cookie
-//!    de um site nunca vazar para outro.
-//! 2. **HTML → Markdown com o gosto do projeto.** O `htmd` faz o trabalho
-//!    bruto; aqui a gente decide o resto, no mesmo espírito do
-//!    `pdf_markdown.rs`: ATX para títulos, `-` para lista, cerca de crase para
-//!    código, imagem preservada (com a URL original, sem o redimensionador da
-//!    CDN), legenda em itálico logo abaixo, e nada de widget de assinatura,
-//!    botão de compartilhar ou parâmetro de rastreio no link.
-//! 3. **Gravação do post.** Front-matter YAML, nome de arquivo seguro e
-//!    previsível (`AAAA-MM-DD-slug`), e download opcional das imagens para uma
-//!    pasta ao lado com o link reescrito para caminho relativo.
+//! 1. **A throttled client carrying the user's session.** Same design as the
+//!    Reddit `Fetcher`: one request at a time, a configurable wait between
+//!    them, growing backoff on 429, and a cookie jar seeded from the Netscape
+//!    file the manager writes — filtered by domain, so a cookie from one site
+//!    never leaks to another.
+//! 2. **HTML → Markdown with the project's taste.** `htmd` does the rough
+//!    work; here we decide the rest, in the same spirit as
+//!    `pdf_markdown.rs`: ATX for headings, `-` for lists, backticks for
+//!    code, the image preserved (with the original URL, without the CDN's
+//!    resizer), caption in italics right below it, and no signature widget,
+//!    share button or tracking parameter in the link.
+//! 3. **Saving the post.** YAML front-matter, a safe and predictable
+//!    filename (`YYYY-MM-DD-slug`), and optional download of the images into a
+//!    folder next to it with the link rewritten to a relative path.
 //!
-//! Limite que as tools desta categoria respeitam: só sai daqui o que a conta
-//! logada do usuário legitimamente recebe ou é dona. Post pago de terceiro que
-//! a sessão não abre é contado como pulado, nunca contornado.
+//! Limit the tools in this category respect: only what the logged-in account
+//! legitimately receives or owns leaves here. A third-party paid post the
+//! session cannot open is counted as skipped, never worked around.
 
 pub mod medium;
 pub mod substack;
@@ -42,11 +42,11 @@ use serde::Serialize;
 
 use super::ProgressFn;
 
-// ── Cliente ────────────────────────────────────────────────────────────
+// ── Client ─────────────────────────────────────────────────────────────
 
-/// Um domínio do arquivo Netscape casa com o alvo quando é exatamente ele ou
-/// um subdomínio dele. `substack.com` casa `on.substack.com`, mas
-/// `notsubstack.com` não casa nada.
+/// A domain from the Netscape file matches the target when it is exactly it or
+/// a subdomain of it. `substack.com` matches `on.substack.com`, but
+/// `notsubstack.com` matches nothing.
 pub fn domain_matches(domain: &str, allowed: &[String]) -> bool {
     let d = domain.trim_start_matches('.').to_lowercase();
     allowed.iter().any(|a| {
@@ -55,9 +55,9 @@ pub fn domain_matches(domain: &str, allowed: &[String]) -> bool {
     })
 }
 
-/// Monta o pote de cookies do cliente a partir do arquivo Netscape do
-/// gerenciador, deixando entrar só o que pertence aos domínios pedidos.
-/// Devolve o pote e quantos cookies entraram.
+/// Builds the client's cookie jar from the manager's Netscape file, letting in
+/// only what belongs to the requested domains. Returns the jar and how many
+/// cookies got in.
 pub fn jar_from_netscape(content: &str, allowed: &[String]) -> (Arc<reqwest::cookie::Jar>, usize) {
     let jar = reqwest::cookie::Jar::default();
     let mut n = 0;
@@ -105,8 +105,8 @@ fn cookie_client(session: Option<&str>, allowed: &[String]) -> Result<(reqwest::
     Ok((client, seeded > 0))
 }
 
-/// Cliente paciente: uma requisição por vez, com espera entre elas. Arquivo de
-/// newsletter é leitura em massa; martelar o servidor de graça só rende 429.
+/// Patient client: one request at a time, with a wait between them. A newsletter
+/// archive is bulk reading; hammering the server for free only earns a 429.
 pub struct Fetcher {
     client: reqwest::Client,
     delay: Duration,
@@ -150,7 +150,7 @@ impl Fetcher {
         *last = Some(Instant::now());
     }
 
-    /// GET com texto de volta. Repete em 429 e em erro de servidor.
+    /// GET with text back. Retries on 429 and on server errors.
     pub async fn get_text(&self, url: &str) -> Result<String> {
         const TRIES: u32 = 4;
         let mut wait = Duration::from_secs(3);
@@ -166,12 +166,12 @@ impl Fetcher {
                     ));
                 }
                 Ok(r) if r.status().as_u16() == 404 => {
-                    return Err(anyhow!("não encontrado: {}", url));
+                    return Err(anyhow!("not found: {}", url));
                 }
                 Ok(r) if r.status().as_u16() == 429 || r.status().is_server_error() => {
                     if attempt == TRIES {
                         return Err(anyhow!(
-                            "o servidor está limitando o acesso (HTTP {}). Tente de novo daqui a pouco",
+                            "the server is limiting access (HTTP {}). Try again in a bit",
                             r.status()
                         ));
                     }
@@ -184,7 +184,7 @@ impl Fetcher {
                     tokio::time::sleep(retry.unwrap_or(wait)).await;
                     wait *= 2;
                 }
-                Ok(r) => return Err(anyhow!("HTTP {} em {}", r.status(), url)),
+                Ok(r) => return Err(anyhow!("HTTP {} on {}", r.status(), url)),
                 Err(e) if attempt < TRIES => {
                     tokio::time::sleep(wait).await;
                     wait *= 2;
@@ -193,21 +193,21 @@ impl Fetcher {
                 Err(e) => return Err(e.into()),
             }
         }
-        Err(anyhow!("não foi possível ler {}", url))
+        Err(anyhow!("could not read {}", url))
     }
 
-    /// GET com JSON de volta. Tolera o prefixo anti-sequestro do Medium.
+    /// GET with JSON back. Tolerates Medium's anti-hijack prefix.
     pub async fn get_json(&self, url: &str) -> Result<serde_json::Value> {
         let text = self.get_text(url).await?;
         let body = strip_json_prefix(&text);
         serde_json::from_str(body)
-            .map_err(|e| anyhow!("o servidor respondeu algo que não é JSON ({}): {}", e, url))
+            .map_err(|e| anyhow!("the server answered something that is not JSON ({}): {}", e, url))
     }
 }
 
-/// O Medium serve JSON prefixado com `])}while(1);</x>` para que ninguém
-/// consiga incluir a resposta como `<script>`. É lixo antes do primeiro `{`
-/// ou `[`; cortar é obrigatório antes de parsear.
+/// Medium serves JSON prefixed with `])}while(1);</x>` so nobody can include
+/// the response as a `<script>`. It is junk before the first `{` or `[`;
+/// trimming it is mandatory before parsing.
 pub fn strip_json_prefix(text: &str) -> &str {
     let t = text.trim_start();
     if t.starts_with('{') || t.starts_with('[') {
@@ -221,9 +221,9 @@ pub fn strip_json_prefix(text: &str) -> &str {
 
 // ── HTML → Markdown ────────────────────────────────────────────────────
 
-/// Blocos que não são o texto: assinatura, botão, caixa de compartilhar,
-/// rodapé de post. Casamento por pedaço de `class`, que é como Substack e
-/// Medium nomeiam essas caixas.
+/// Blocks that are not the text: signature, button, share box, post footer.
+/// Matched by a piece of `class`, which is how Substack and Medium name
+/// these boxes.
 const JUNK_CLASSES: &[&str] = &[
     "subscription-widget",
     "subscribe-widget",
@@ -252,9 +252,9 @@ fn is_junk(class: &str) -> bool {
     JUNK_CLASSES.iter().any(|j| c.contains(&j.to_lowercase()))
 }
 
-/// Substack serve imagem por um redimensionador que embute a URL original
-/// no fim do caminho, escapada. `.../w_1456,c_limit,f_auto/https%3A%2F%2F…png`
-/// vira a URL de verdade — é ela que a gente guarda.
+/// Substack serves images through a resizer that embeds the original URL at
+/// the end of the path, escaped. `.../w_1456,c_limit,f_auto/https%3A%2F%2F…png`
+/// becomes the real URL — it is the one we keep.
 pub fn unwrap_cdn_image(url: &str) -> String {
     let marker = ["https%3A%2F%2F", "http%3A%2F%2F", "https%3a%2f%2f"];
     for m in marker {
@@ -271,7 +271,7 @@ pub fn unwrap_cdn_image(url: &str) -> String {
     url.to_string()
 }
 
-/// Parâmetros que só servem para contar clique. Somem do link e da imagem.
+/// Parameters that only serve to count clicks. They leave the link and the image.
 const TRACKING_KEYS: &[&str] = &[
     "utm_source",
     "utm_medium",
@@ -292,7 +292,7 @@ const TRACKING_KEYS: &[&str] = &[
     "sk",
 ];
 
-/// Tira os parâmetros de rastreio de uma URL, preservando o resto da query.
+/// Removes the tracking parameters from a URL, preserving the rest of the query.
 pub fn clean_url(url: &str) -> String {
     let Some((base, query)) = url.split_once('?') else {
         return url.to_string();
@@ -321,8 +321,8 @@ pub fn clean_url(url: &str) -> String {
     out
 }
 
-/// O conversor com o gosto do projeto. É caro montar (registra handlers), por
-/// isso vive num `Lazy`.
+/// The converter with the project's taste. It is expensive to build (it registers
+/// handlers), so it lives in a `Lazy`.
 static CONVERTER: Lazy<HtmlToMarkdown> = Lazy::new(build_converter);
 
 fn build_converter() -> HtmlToMarkdown {
@@ -345,8 +345,8 @@ fn build_converter() -> HtmlToMarkdown {
         .skip_tags(vec![
             "script", "style", "noscript", "form", "button", "svg", "nav", "input", "select",
         ])
-        // Caixa de assinatura, botão e rodapé: fora. O resto do bloco segue
-        // pelo caminho normal do htmd.
+        // Signature box, button and footer: out. The rest of the block follows
+        // the normal htmd path.
         .add_handler(
             vec!["div", "section", "aside", "footer"],
             |handlers: &dyn htmd::element_handler::Handlers, el: Element| {
@@ -356,7 +356,7 @@ fn build_converter() -> HtmlToMarkdown {
                 handlers.fallback(el)
             },
         )
-        // Imagem: URL original em vez do redimensionador, sem rastreio.
+        // Image: original URL instead of the resizer, no tracking.
         .add_handler(
             vec!["img"],
             |_h: &dyn htmd::element_handler::Handlers, el: Element| {
@@ -373,7 +373,7 @@ fn build_converter() -> HtmlToMarkdown {
                 Some(HandlerResult::from(format!("![{}]({})", alt.trim(), url)))
             },
         )
-        // Legenda de figura em itálico, na linha de baixo da imagem.
+        // Figure caption in italics, on the line below the image.
         .add_handler(
             vec!["figcaption"],
             |handlers: &dyn htmd::element_handler::Handlers, el: Element| {
@@ -385,8 +385,8 @@ fn build_converter() -> HtmlToMarkdown {
                 Some(HandlerResult::from(format!("\n\n*{}*\n\n", text)))
             },
         )
-        // Embed (vídeo, tuíte, player): vira um link, que é o que sobrevive
-        // num arquivo de texto.
+        // Embed (video, tweet, player): becomes a link, which is what survives
+        // in a text file.
         .add_handler(
             vec!["iframe", "video", "audio", "embed"],
             |_h: &dyn htmd::element_handler::Handlers, el: Element| {
@@ -403,40 +403,41 @@ fn build_converter() -> HtmlToMarkdown {
         .build()
 }
 
-/// Converte o HTML de um post no Markdown do projeto.
+/// Converts a post's HTML into the project's Markdown.
 pub fn html_to_markdown(html: &str) -> String {
     let md = CONVERTER.convert(html).unwrap_or_default();
     tidy_markdown(&md)
 }
 
 static BLANKS: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"\n{3,}").expect("regex de linhas em branco"));
+    Lazy::new(|| Regex::new(r"\n{3,}").expect("blank-lines regex"));
 static TRAIL: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?m)[ \t]+$").expect("regex de espaço no fim da linha"));
+    Lazy::new(|| Regex::new(r"(?m)[ \t]+$").expect("trailing-space regex"));
 
-/// Acerta o espaçamento: no máximo uma linha em branco entre blocos, sem
-/// espaço sobrando no fim das linhas, e o arquivo termina com um `\n`.
+/// Fixes the spacing: at most one blank line between blocks, no trailing
+/// space at the end of lines, and the file ends with a `\n`.
 pub fn tidy_markdown(md: &str) -> String {
     let md = TRAIL.replace_all(md, "");
     let md = BLANKS.replace_all(&md, "\n\n");
     format!("{}\n", md.trim())
 }
 
-// ── Front-matter e arquivos ────────────────────────────────────────────
+// ── Front-matter and files ─────────────────────────────────────────────
 
-/// Metadados de um post, iguais para Substack e Medium. Viram o front-matter
-/// YAML no topo do `.md` e o `meta` do JSON.
+/// Metadata of a post, the same for Substack and Medium. They become the
+/// front-matter
+/// YAML at the top of the `.md` and the JSON `meta`.
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct PostMeta {
     pub title: String,
     pub subtitle: Option<String>,
     pub author: String,
     pub publication: String,
-    /// ISO 8601, como o servidor entrega.
+    /// ISO 8601, as the server delivers it.
     pub date: String,
     pub url: String,
     pub tags: Vec<String>,
-    /// "everyone" | "only_paid" | "founding" no Substack; ausente no Medium.
+    /// "everyone" | "only_paid" | "founding" on Substack; absent on Medium.
     pub audience: Option<String>,
     /// "post" | "draft".
     pub kind: String,
@@ -448,8 +449,8 @@ fn yaml_scalar(s: &str) -> String {
     format!("\"{}\"", clean.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
-/// Front-matter YAML do post. Campo vazio não vira linha: arquivo de texto
-/// com `subtitle: ""` só atrapalha quem lê depois.
+/// YAML front-matter of the post. An empty field does not become a line: a text
+/// file with `subtitle: ""` only gets in the way of whoever reads it later.
 pub fn front_matter(meta: &PostMeta) -> String {
     let mut out = String::from("---\n");
     out.push_str(&format!("title: {}\n", yaml_scalar(&meta.title)));
@@ -488,20 +489,20 @@ pub fn front_matter(meta: &PostMeta) -> String {
     out
 }
 
-/// Documento pronto para gravar: metadados, corpo em Markdown e, quando a
-/// origem tinha HTML, o HTML original.
+/// Document ready to save: metadata, Markdown body and, when the source had
+/// HTML, the original HTML.
 #[derive(Debug, Clone)]
 pub struct PostDoc {
     pub meta: PostMeta,
     pub slug: String,
     pub markdown: String,
     pub html: Option<String>,
-    /// O corpo veio truncado ou não veio: a conta não tem acesso a este post.
+    /// The body came truncated or did not come: the account has no access to this post.
     pub locked: bool,
 }
 
-/// Um pedaço de texto virando pedaço de nome de arquivo: minúsculas, ASCII,
-/// hífen no lugar de tudo que não é letra ou número.
+/// A piece of text becoming a piece of filename: lowercase, ASCII, a hyphen
+/// in place of everything that is not a letter or number.
 pub fn slugify(text: &str) -> String {
     let mut out = String::new();
     let mut dash = false;
@@ -510,8 +511,8 @@ pub fn slugify(text: &str) -> String {
             out.push(ch.to_ascii_lowercase());
             dash = false;
         } else if ch.is_alphanumeric() {
-            // Acentos e alfabetos não-ASCII viram hífen: nome de arquivo
-            // previsível vale mais do que fidelidade aqui.
+            // Accents and non-ASCII alphabets become a hyphen: a predictable
+            // filename is worth more than fidelity here.
             if !dash && !out.is_empty() {
                 out.push('-');
                 dash = true;
@@ -529,9 +530,9 @@ pub fn slugify(text: &str) -> String {
     }
 }
 
-/// Nome base do arquivo: `AAAA-MM-DD-slug`, com o slug do próprio serviço
-/// quando ele existe. Ordena sozinho na pasta e nunca colide com o sistema
-/// de arquivos.
+/// Base filename: `YYYY-MM-DD-slug`, with the service's own slug when it
+/// exists. It sorts itself in the folder and never collides with the
+/// filesystem.
 pub fn file_stem(date: &str, title: &str, slug: &str) -> String {
     let day: String = date.chars().take(10).collect();
     let day = if day.len() == 10 && day.as_bytes()[4] == b'-' {
@@ -554,7 +555,7 @@ pub fn file_stem(date: &str, title: &str, slug: &str) -> String {
     super::sanitize_name(&joined)
 }
 
-/// Caminho livre: se já existe, vira `nome (2)`, `nome (3)`…
+/// Free path: if it already exists, it becomes `name (2)`, `name (3)`…
 pub fn unique_path(path: PathBuf) -> PathBuf {
     if !path.exists() {
         return path;
@@ -577,7 +578,7 @@ pub fn unique_path(path: PathBuf) -> PathBuf {
     path
 }
 
-/// HTML mínimo para o arquivo `.html` ficar legível sozinho, sem CSS de fora.
+/// Minimal HTML so the `.html` file stays readable on its own, with no outside CSS.
 pub fn wrap_html(meta: &PostMeta, body: &str) -> String {
     let esc = |s: &str| {
         s.replace('&', "&amp;")
@@ -600,13 +601,13 @@ pub fn wrap_html(meta: &PostMeta, body: &str) -> String {
     )
 }
 
-// ── Imagens ────────────────────────────────────────────────────────────
+// ── Images ─────────────────────────────────────────────────────────────
 
 static MD_IMAGE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"!\[(?P<alt>[^\]]*)\]\((?P<url>[^)\s]+)\)").expect("regex de imagem markdown")
+    Regex::new(r"!\[(?P<alt>[^\]]*)\]\((?P<url>[^)\s]+)\)").expect("markdown image regex")
 });
 
-/// URLs das imagens que aparecem no Markdown, na ordem, sem repetir.
+/// URLs of the images that appear in the Markdown, in order, without repeats.
 pub fn image_urls(md: &str) -> Vec<String> {
     let mut seen: Vec<String> = Vec::new();
     for c in MD_IMAGE.captures_iter(md) {
@@ -621,11 +622,11 @@ pub fn image_urls(md: &str) -> Vec<String> {
     seen
 }
 
-/// Nome do arquivo de uma imagem a partir da URL: o último pedaço do caminho,
-/// com número na frente para não colidir e extensão adivinhada quando falta.
+/// Filename of an image from its URL: the last piece of the path, with a
+/// number in front so it does not collide and a guessed extension when missing.
 pub fn image_file_name(index: usize, url: &str) -> String {
     let path = url.split('?').next().unwrap_or(url);
-    let tail = path.rsplit('/').next().unwrap_or("imagem");
+    let tail = path.rsplit('/').next().unwrap_or("image");
     let tail = super::sanitize_name(tail);
     let has_ext = Path::new(&tail)
         .extension()
@@ -666,9 +667,9 @@ pub fn rewrite_images(md: &str, map: &HashMap<String, String>) -> String {
         .to_string()
 }
 
-/// Baixa as imagens do post para `dir/rel` e devolve o Markdown com os links
-/// apontando para os arquivos locais. Imagem que falha fica com a URL
-/// original — o texto continua completo.
+/// Downloads the post's images into `dir/rel` and returns the Markdown with the
+/// links pointing at the local files. An image that fails keeps its original
+/// URL — the text stays complete.
 pub async fn localize_images(
     md: &str,
     fetcher: &Fetcher,
@@ -707,14 +708,14 @@ pub async fn localize_images(
                 ok += 1;
             }
             Err(e) => {
-                tracing::warn!("blogs: imagem {} falhou: {}", url, e);
+                tracing::warn!("blogs: image {} failed: {}", url, e);
             }
         }
     }
     Ok((rewrite_images(md, &map), ok))
 }
 
-/// Grava o post nos formatos pedidos e devolve os caminhos criados.
+/// Saves the post in the requested formats and returns the created paths.
 pub fn write_post(
     dir: &Path,
     stem: &str,
@@ -764,7 +765,7 @@ on.substack.com\tTRUE\t/\tTRUE\t0\tconnect.sid\tdef\n\
 .medium.com\tTRUE\t/\tTRUE\t0\tsid\txyz\n\
 notsubstack.com\tTRUE\t/\tTRUE\t0\tfake\t666\n";
         let (_, n) = jar_from_netscape(content, &["substack.com".to_string()]);
-        assert_eq!(n, 2, "só substack.com e seus subdomínios");
+        assert_eq!(n, 2, "only substack.com and its subdomains");
         let (_, m) = jar_from_netscape(content, &["medium.com".to_string()]);
         assert_eq!(m, 1);
         let (_, z) = jar_from_netscape("# vazio\n", &["substack.com".to_string()]);
@@ -785,7 +786,7 @@ notsubstack.com\tTRUE\t/\tTRUE\t0\tfake\t666\n";
     fn prefixo_anti_sequestro_do_medium_e_cortado() {
         let raw = "])}while(1);</x>{\"payload\":{\"value\":[]}}";
         let v: serde_json::Value =
-            serde_json::from_str(strip_json_prefix(raw)).expect("json depois do corte");
+            serde_json::from_str(strip_json_prefix(raw)).expect("json after the trim");
         assert!(v["payload"]["value"].is_array());
         // JSON limpo passa intacto.
         assert_eq!(strip_json_prefix("  {\"a\":1}"), "{\"a\":1}");
@@ -899,7 +900,7 @@ notsubstack.com\tTRUE\t/\tTRUE\t0\tfake\t666\n";
         );
         assert!(fm.contains("tags: [\"ia\", \"rust\"]"), "{}", fm);
         assert!(fm.contains("words: 1200"));
-        assert!(!fm.contains("subtitle:"), "campo vazio não vira linha");
+        assert!(!fm.contains("subtitle:"), "empty field does not become a line");
     }
 
     #[test]
@@ -912,14 +913,14 @@ notsubstack.com\tTRUE\t/\tTRUE\t0\tfake\t666\n";
             ),
             "2026-09-08-god-help-us-lets"
         );
-        // Sem slug do serviço, o título vira slug.
+        // Without the service's slug, the title becomes the slug.
         assert_eq!(
             file_stem("2026-01-02T00:00:00Z", "Ação: café & pão!", ""),
             "2026-01-02-a-o-caf-p-o"
         );
-        // Sem data, só o slug.
+        // No date, just the slug.
         assert_eq!(file_stem("", "Título", "meu-post"), "meu-post");
-        // Barra e dois-pontos nunca chegam ao sistema de arquivos.
+        // Slash and colon never reach the filesystem.
         let s = file_stem("2026-01-02", "a/b:c", "");
         assert!(!s.contains('/') && !s.contains(':'), "{}", s);
     }
@@ -950,7 +951,7 @@ notsubstack.com\tTRUE\t/\tTRUE\t0\tfake\t666\n";
         assert!(out.contains("![a de novo](img/001-1.png)"), "{}", out);
         assert!(
             out.contains("![b](https://x.com/2.png)"),
-            "não mapeada fica"
+            "unmapped stays"
         );
         assert!(out.contains("![local](imagens/3.png)"), "relativa fica");
     }

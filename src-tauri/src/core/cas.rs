@@ -1,28 +1,28 @@
-//! Store endereçado por conteudo: o mesmo video em tres qualidades, ou o mesmo
-//! PDF em quatro cursos, ocupa espaço uma vez.
+//! Content-addressed store: the same video in three qualities, or the same
+//! PDF in four courses, takes up space once.
 //!
-//! O arquivo real vive no store sob o hash do conteudo, e cada lugar onde ele
-//! aparece e um hardlink. Apagar uma copia nao apaga as outras — o kernel so
-//! libera o espaço quando o ultimo link some.
+//! The real file lives in the store under its content hash, and each place it
+//! appears is a hardlink. Deleting one copy does not delete the others — the
+//! kernel only frees the space when the last link goes away.
 //!
-//! Origem: restic e borg. O chunking definido por conteudo deles fica de fora:
-//! aqui o arquivo inteiro e a unidade, o que perde dedup parcial mas dispensa
-//! formato proprio e mantem os arquivos legiveis por qualquer programa.
+//! Origin: restic and borg. Their content-defined chunking stays out: here the
+//! whole file is the unit, which loses partial dedup but needs no own format
+//! and keeps the files readable by any program.
 //!
-//! **Limite conhecido:** hardlink nao atravessa sistema de arquivos. O app deixa
-//! o usuario escolher a pasta de saida, entao a copia e o caminho normal, nao a
-//! excecao.
+//! **Known limit:** a hardlink does not cross filesystems. The app lets the
+//! user pick the output folder, so copying is the normal path, not the
+//! exception.
 
 use std::path::{Path, PathBuf};
 
-/// Caminho de um conteudo dentro do store, fatiado pelos dois primeiros
-/// caracteres do hash.
+/// Path of a content inside the store, sharded by the first two characters
+/// of the hash.
 ///
-/// O fatiamento existe porque um diretorio unico com dezenas de milhares de
-/// entradas degrada listagem em qualquer sistema de arquivos.
+/// Sharding exists because a single directory with tens of thousands of
+/// entries degrades listing on any filesystem.
 ///
-/// Rejeita hash que nao seja SHA-256 hexadecimal: o valor vira componente de
-/// caminho, e aceitar entrada arbitraria aqui seria travessia de diretorio.
+/// Rejects a hash that is not hexadecimal SHA-256: the value becomes a path
+/// component, and accepting arbitrary input here would be directory traversal.
 pub fn object_path(store_root: &Path, sha256: &str) -> Option<PathBuf> {
     if sha256.len() != 64 || !sha256.bytes().all(|b| b.is_ascii_hexdigit()) {
         return None;
@@ -32,18 +32,18 @@ pub fn object_path(store_root: &Path, sha256: &str) -> Option<PathBuf> {
     Some(store_root.join(prefix).join(rest))
 }
 
-/// Como o arquivo foi materializado no destino.
+/// How the file was materialized at the destination.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LinkOutcome {
-    /// Hardlink: espaco compartilhado com o store.
+    /// Hardlink: space shared with the store.
     Linked,
-    /// Copia: destino em outro sistema de arquivos, ou hardlink recusado.
+    /// Copy: destination on another filesystem, or hardlink refused.
     Copied,
-    /// Destino ja apontava para o mesmo conteudo.
+    /// Destination already pointed at the same content.
     AlreadyPresent,
 }
 
-/// Coloca `sha256` no store, a partir de `source`, sem duplicar se ja existir.
+/// Puts `sha256` into the store, from `source`, without duplicating if it already exists.
 pub fn ingest(store_root: &Path, source: &Path, sha256: &str) -> std::io::Result<PathBuf> {
     let object = object_path(store_root, sha256)
         .ok_or_else(|| std::io::Error::other(format!("invalid sha256: {sha256:?}")))?;
@@ -54,8 +54,8 @@ pub fn ingest(store_root: &Path, source: &Path, sha256: &str) -> std::io::Result
     if let Some(parent) = object.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    // Hardlink primeiro: ingerir nao deve duplicar o espaco enquanto o arquivo
-    // de origem ainda existe.
+    // Hardlink first: ingesting must not duplicate the space while the
+    // source file still exists.
     match std::fs::hard_link(source, &object) {
         Ok(()) => Ok(object),
         Err(_) => {
@@ -79,15 +79,15 @@ pub fn materialize(object: &Path, dest: &Path) -> std::io::Result<LinkOutcome> {
     match std::fs::hard_link(object, dest) {
         Ok(()) => Ok(LinkOutcome::Linked),
         Err(_) => {
-            // Volume diferente e o caso normal, nao a excecao: a pasta de saida
-            // e escolhida pelo usuario e costuma estar em outro disco.
+            // A different volume is the normal case, not the exception: the
+            // output folder is picked by the user and is usually on another disk.
             std::fs::copy(object, dest)?;
             Ok(LinkOutcome::Copied)
         }
     }
 }
 
-/// Dois caminhos apontam para o mesmo inode?
+/// Do two paths point at the same inode?
 pub fn same_file(a: &Path, b: &Path) -> bool {
     #[cfg(unix)]
     {
@@ -99,18 +99,19 @@ pub fn same_file(a: &Path, b: &Path) -> bool {
     }
     #[cfg(not(unix))]
     {
-        // Sem `dev`/`ino` no Windows estavel (`volume_serial_number` e
-        // `file_index` seguem unstable), a resposta conservadora e "nao sei,
-        // trate como diferente". Efeito pratico: `materialize` sobre um destino
-        // que ja e o mesmo arquivo refaz o link em vez de devolver
-        // `AlreadyPresent`. Idempotente e correto, so um pouco mais caro.
+        // Without `dev`/`ino` on stable Windows (`volume_serial_number` and
+        // `file_index` are still unstable), the conservative answer is "don't
+        // know, treat as different". Practical effect: `materialize` over a
+        // destination that is already the same file re-links instead of
+        // returning `AlreadyPresent`. Idempotent and correct, just a bit more
+        // expensive.
         let _ = (a, b);
         false
     }
 }
 
-/// Quantos links apontam para este objeto. `1` significa que so o store o
-/// segura e apagar libera espaco de verdade.
+/// How many links point at this object. `1` means only the store holds it
+/// and deleting frees real space.
 #[cfg(unix)]
 pub fn link_count(object: &Path) -> Option<u64> {
     use std::os::unix::fs::MetadataExt;
@@ -143,8 +144,8 @@ mod tests {
 
     #[test]
     fn hash_invalido_nao_vira_caminho() {
-        // O hash e componente de path: aceitar entrada arbitraria seria
-        // travessia de diretorio.
+        // The hash is a path component: accepting arbitrary input would be
+        // directory traversal.
         for ruim in [
             "../../etc/passwd",
             "e3b0",
@@ -154,7 +155,7 @@ mod tests {
         ] {
             assert!(
                 object_path(Path::new("/store"), ruim).is_none(),
-                "aceitou {ruim:?}"
+                "accepted {ruim:?}"
             );
         }
     }
@@ -182,8 +183,8 @@ mod tests {
 
     #[test]
     fn materializar_no_mesmo_volume_compartilha_o_inode() {
-        // O ponto da feature: tres qualidades do mesmo video ocupam espaco uma
-        // vez. Se isto virar copia, a feature nao existe.
+        // The point of the feature: three qualities of the same video take up
+        // space once. If this becomes a copy, the feature does not exist.
         let dir = tmp("link");
         let store = dir.join("store");
         let src = dir.join("original.mp4");
@@ -195,16 +196,16 @@ mod tests {
         assert_eq!(materialize(&object, &d1).unwrap(), LinkOutcome::Linked);
         assert_eq!(materialize(&object, &d2).unwrap(), LinkOutcome::Linked);
 
-        // Verificacao comportamental, nao por inode: escrever por um link e ler
-        // pelo outro so funciona se os dois apontarem para o mesmo arquivo.
-        // `same_file` nao consegue responder isso no Windows estavel (as APIs
-        // de volume/indice seguem unstable), entao afirmar identidade de inode
-        // faria o teste reprovar num lugar onde a feature funciona.
+        // Behavioural check, not by inode: writing through one link and reading
+        // through the other only works if both point at the same file.
+        // `same_file` cannot answer that on stable Windows (the volume/index
+        // APIs are still unstable), so asserting inode identity would fail
+        // the test somewhere the feature works.
         std::fs::write(&d1, "editado por d1").unwrap();
         assert_eq!(
             std::fs::read_to_string(&d2).unwrap(),
             "editado por d1",
-            "d1 e d2 deviam ser o mesmo arquivo"
+            "d1 and d2 should have been the same file"
         );
 
         #[cfg(unix)]
@@ -213,7 +214,7 @@ mod tests {
             // object + src + d1 + d2
             assert!(
                 link_count(&object).unwrap() >= 3,
-                "esperava links compartilhados"
+                "expected shared links"
             );
         }
         let _ = std::fs::remove_dir_all(&dir);

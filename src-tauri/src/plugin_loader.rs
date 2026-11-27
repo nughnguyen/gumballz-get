@@ -328,25 +328,25 @@ impl PluginManager {
         &self.plugins_dir
     }
 
-    /// Diretorio de um plugin, com o id validado.
+    /// A plugin's directory, with the id validated.
     ///
-    /// Todo caminho derivado de `plugin_id` passa por aqui. O id chega de fora
-    /// — registro remoto -> `installed.json` -> frontend -> comando Tauri — e
-    /// nenhum ponto dessa cadeia o sanitizava, entao um id com `..` escapava do
-    /// diretorio de plugins e o `remove_dir_all` do `unregister` apagava
-    /// caminho arbitrario.
+    /// Every path derived from `plugin_id` goes through here. The id comes from
+    /// outside — remote registry -> `installed.json` -> frontend -> Tauri command
+    /// — and no point in that chain sanitized it, so an id with `..` escaped the
+    /// plugins directory and `unregister`'s `remove_dir_all` deleted an arbitrary
+    /// path.
     pub fn plugin_dir(&self, plugin_id: &str) -> anyhow::Result<PathBuf> {
         validate_plugin_id(plugin_id)?;
         Ok(self.plugins_dir.join(plugin_id))
     }
 }
 
-/// Aceita apenas `[A-Za-z0-9._-]`, recusando separador de caminho, byte nulo,
-/// componente relativo e id vazio.
+/// Accepts only `[A-Za-z0-9._-]`, refusing path separators, null bytes,
+/// relative components and empty ids.
 ///
-/// Allowlist e nao blocklist de proposito: o conjunto de ids reais e pequeno e
-/// conhecido (`courses`, `telegram`, `convert`, `misc`), e uma
-/// blocklist erra por omissao a cada codificacao nova.
+/// Allowlist and not blocklist on purpose: the set of real ids is small and
+/// known (`courses`, `telegram`, `convert`, `misc`), and a blocklist misses by
+/// omission with every new encoding.
 pub fn validate_plugin_id(plugin_id: &str) -> anyhow::Result<()> {
     if plugin_id.is_empty() {
         anyhow::bail!("plugin id must not be empty");
@@ -717,8 +717,8 @@ mod plugin_id_tests {
 
     #[test]
     fn recusa_travessia_de_caminho() {
-        // Criterio de aceite do B48: um id relativo falha explicitamente em vez
-        // de virar um caminho fora do diretorio de plugins.
+        // B48 acceptance criterion: a relative id fails explicitly instead of
+        // becoming a path outside the plugins directory.
         for id in [
             "../../algo",
             "..",
@@ -748,8 +748,8 @@ mod plugin_id_tests {
         assert_eq!(ok, base.join("courses"));
         assert!(ok.starts_with(&base));
 
-        // Sem o guard, `join("../../etc")` normalizaria para fora de `base` e o
-        // `remove_dir_all` do `unregister` apagaria caminho arbitrario.
+        // Without the guard, `join("../../etc")` would normalize outside `base`
+        // and `unregister`'s `remove_dir_all` would delete an arbitrary path.
         assert!(manager.plugin_dir("../../etc").is_err());
         assert!(manager.plugin_dir("..").is_err());
     }

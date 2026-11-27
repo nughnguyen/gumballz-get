@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Busca instantânea (estudos 26/27): Everything, Spotlight ou fd/find. */
+  /** Instant search (studies 26/27): Everything, Spotlight or fd/find. */
   import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
   import { t } from "$lib/i18n";

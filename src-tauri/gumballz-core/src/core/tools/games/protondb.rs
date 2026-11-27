@@ -1,15 +1,15 @@
-//! "Roda no Linux?" — o resumo do ProtonDB antes de comprar.
+//! "Does it run on Linux?" — the ProtonDB summary before buying.
 //!
-//! `https://www.protondb.com/api/v1/reports/summaries/<appid>.json` devolve o
-//! consenso dos relatos da comunidade: `tier`, `confidence`, `score`, `total`,
-//! `trendingTier` e `bestReportedTier`. Um appid sem nenhum relato responde
-//! 404 — isso não é erro, é "pending".
+//! `https://www.protondb.com/api/v1/reports/summaries/<appid>.json` returns the
+//! community reports' consensus: `tier`, `confidence`, `score`, `total`,
+//! `trendingTier` and `bestReportedTier`. An appid with no reports answers
+//! 404 — that is not an error, it is "pending".
 //!
-//! A entrada aceita appid, link da loja e nome do jogo (resolvido pelo
-//! `appmanifest` local), e a biblioteca Steam inteira de uma vez, com pausa
-//! entre as consultas para não bater na API sem educação. Cada resposta fica
-//! em cache por um dia, então exportar CSV depois de consultar não repete a
-//! rodada de rede.
+//! The input accepts an appid, a store link and a game name (resolved via the
+//! local `appmanifest`), and the whole Steam library at once, with a pause
+//! between queries so it does not hammer the API impolitely. Each answer stays
+//! cached for a day, so exporting CSV after querying does not repeat the
+//! network round.
 
 use std::path::PathBuf;
 
@@ -22,7 +22,7 @@ const ID: &str = "protondb";
 const API: &str = "https://www.protondb.com/api/v1/reports/summaries";
 const CACHE_TTL_SECS: i64 = 24 * 60 * 60;
 
-/// A resposta crua da API. Os campos vêm em camelCase.
+/// The API's raw response. The fields come in camelCase.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Summary {
     #[serde(default)]
@@ -44,7 +44,7 @@ pub fn parse_summary(body: &str) -> anyhow::Result<Summary> {
     Ok(s)
 }
 
-/// Ordem dos degraus, do melhor para o pior. Serve para ordenar a tabela.
+/// Order of the tiers, best to worst. Used to sort the table.
 pub fn tier_rank(tier: &str) -> u8 {
     match tier.to_ascii_lowercase().as_str() {
         "platinum" => 6,
@@ -68,13 +68,13 @@ pub struct ProtonOptions {
     /// Pastas `steamapps` extras.
     #[serde(default)]
     pub steam_dirs: Vec<String>,
-    /// Pausa entre consultas, em ms.
+    /// Pause between queries, in ms.
     #[serde(default = "default_delay")]
     pub delay_ms: u64,
-    /// Ignora o cache do dia.
+    /// Ignore the day's cache.
     #[serde(default)]
     pub refresh: bool,
-    /// Caminho do arquivo a escrever; vazio não exporta.
+    /// Path of the file to write; empty means no export.
     #[serde(default)]
     pub export_path: String,
     /// "csv" | "md"
@@ -111,7 +111,7 @@ pub struct ProtonResult {
     pub entries: Vec<ProtonEntry>,
     pub checked: u64,
     pub from_cache: u64,
-    /// O que foi digitado e não virou appid.
+    /// What was typed and did not become an appid.
     pub unresolved: Vec<String>,
     pub exported: Option<String>,
 }
@@ -155,7 +155,7 @@ fn write_cache(app_id: u32, summary: &Summary) {
     }
 }
 
-/// Página da loja, para o botão "abrir" da tabela.
+/// Store page, for the table's "open" button.
 pub fn store_url(app_id: u32) -> String {
     format!("https://store.steampowered.com/app/{}/", app_id)
 }
@@ -193,7 +193,7 @@ pub fn to_csv(entries: &[ProtonEntry]) -> String {
 }
 
 pub fn to_markdown(entries: &[ProtonEntry]) -> String {
-    let mut out = String::from("| Jogo | Tier | Confiança | Relatos | ProtonDB |\n");
+    let mut out = String::from("| Game | Tier | Confidence | Reports | ProtonDB |\n");
     out.push_str("| --- | --- | --- | ---: | --- |\n");
     for e in entries {
         out.push_str(&format!(
@@ -208,8 +208,8 @@ pub fn to_markdown(entries: &[ProtonEntry]) -> String {
     out
 }
 
-/// Transforma o que o usuário digitou em `(appid, nome)`. O que não vira
-/// appid volta na lista de não resolvidos, para a UI pedir o número.
+/// Turns what the user typed into `(appid, name)`. Whatever does not become
+/// an appid goes back in the unresolved list, so the UI asks for the number.
 pub fn resolve_targets(
     inputs: &[String],
     apps: &[steam::SteamApp],
@@ -252,7 +252,7 @@ async fn fetch(client: &reqwest::Client, app_id: u32) -> anyhow::Result<Option<S
         .send()
         .await?;
     if resp.status() == reqwest::StatusCode::NOT_FOUND {
-        // Jogo sem nenhum relato: o ProtonDB chama isso de "pending".
+        // Game with no reports: ProtonDB calls that "pending".
         return Ok(None);
     }
     if !resp.status().is_success() {
@@ -309,10 +309,10 @@ pub async fn run(opts: ProtonOptions, progress: ProgressFn) -> anyhow::Result<Pr
     let (targets, unresolved) = resolve_targets(&opts.inputs, &apps, opts.scan_library);
     if targets.is_empty() {
         if unresolved.is_empty() {
-            anyhow::bail!("informe um appid, um link da loja ou marque a biblioteca inteira");
+            anyhow::bail!("enter an appid, a store link, or scan the whole library");
         }
         anyhow::bail!(
-            "não achei appid para: {} — cole o link da loja ou o número",
+            "could not find appid for: {} — paste the store link or the number",
             unresolved.join(", ")
         );
     }
@@ -402,7 +402,7 @@ mod tests {
 
     #[test]
     fn fixture_parses_into_every_field() {
-        let s = parse_summary(FIXTURE).expect("resumo válido");
+        let s = parse_summary(FIXTURE).expect("valid summary");
         assert_eq!(s.tier, "gold");
         assert_eq!(s.confidence, "strong");
         assert_eq!(s.total, 355);
@@ -413,13 +413,13 @@ mod tests {
 
     #[test]
     fn missing_fields_do_not_break_the_parse() {
-        let s = parse_summary(r#"{"tier":"borked"}"#).expect("resumo mínimo");
+        let s = parse_summary(r#"{"tier":"borked"}"#).expect("minimal summary");
         assert_eq!(s.tier, "borked");
         assert_eq!(s.total, 0);
         assert!(s.best_reported_tier.is_empty());
         assert!(parse_summary("não é json").is_err());
         assert!(parse_summary("42").is_err());
-        // Uma lista JSON no lugar do objeto também não passa por resumo.
+        // A JSON list instead of the object also does not pass as a summary.
         assert!(parse_summary("[1,2,3]").is_err());
     }
 
@@ -499,7 +499,7 @@ mod tests {
         );
         assert_eq!(unresolved, vec!["Um Jogo Que Nao Tenho".to_string()]);
 
-        // A biblioteca inteira entra sem repetir o que já estava na lista.
+        // The whole library goes in without repeating what was already in the list.
         let (targets, _) = resolve_targets(&["570".into()], &apps, true);
         assert_eq!(targets.len(), 2);
         assert_eq!(targets[0], (570, "Dota 2".to_string()));
@@ -523,29 +523,29 @@ mod tests {
         assert!(r.is_err());
     }
 
-    /// Bate na API de verdade com o appid 570 (Dota 2) e confere o formato.
+    /// Hits the real API with appid 570 (Dota 2) and checks the shape.
     /// `cargo test -p gumballz-core --lib -- --ignored live_protondb`
     #[tokio::test]
     #[ignore]
     async fn live_protondb_answers_in_the_expected_shape() {
-        let client = crate::core::tools::client().expect("cliente");
+        let client = crate::core::tools::client().expect("client");
         let s = fetch(&client, 570)
             .await
-            .expect("consulta")
-            .expect("570 tem relatos");
+            .expect("query")
+            .expect("570 has reports");
         eprintln!("570 → {:?}", s);
-        assert!(tier_rank(&s.tier) >= 2, "tier fora da escala: {}", s.tier);
-        assert!(s.total > 0, "sem relatos");
+        assert!(tier_rank(&s.tier) >= 2, "tier out of range: {}", s.tier);
+        assert!(s.total > 0, "no reports");
         assert!(!s.confidence.is_empty());
         assert!(
             (0.0..=1.0).contains(&s.score),
-            "score fora de 0..1: {}",
+            "score outside 0..1: {}",
             s.score
         );
-        // Um appid que não existe responde 404, e isso vira "pending".
+        // A nonexistent appid answers 404, and that becomes "pending".
         assert!(fetch(&client, 999_999_999)
             .await
-            .expect("404 não é erro")
+            .expect("404 is not an error")
             .is_none());
     }
 }

@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Tarja de verdade: apaga o texto e só depois pinta a barra preta. */
+  /** A real redaction bar: erases the text and only then paints the black bar. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Índice pesquisável (CSV/JSON) dos Likes do Tumblr, separado da pasta de mídia. */
+  /** Searchable index (CSV/JSON) of Tumblr Likes, separate from the media folder. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

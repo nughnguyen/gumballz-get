@@ -18,9 +18,9 @@
 
 <script lang="ts">
   /**
-   * Duplicados no board (estudo 67): o programa que a thread do Reddit pediu
-   * durante dois anos. Iguais por `image_signature`, parecidos por dHash;
-   * com cookies dá para desfazer o save dos escolhidos.
+   * Duplicates on the board (study 67): the program the Reddit thread asked for
+   * for two years. Identical by `image_signature`, similar by dHash;
+   * with cookies you can unsave the chosen ones.
    */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";

@@ -1,14 +1,14 @@
-//! Filtros sobre a lista de comentários flutuantes.
+//! Filters over the list of floating comments.
 //!
-//! Três cortes, todos opcionais: por texto (palavra solta ou expressão
-//! regular), por tipo (rolante, topo, fundo) e por densidade.
+//! Three cuts, all optional: by text (loose word or regular expression), by type
+//! (scrolling, top, bottom) and by density.
 //!
-//! O corte por densidade é o que salva o vídeo. Em estreia popular passam de
-//! duzentos comentários por segundo e a tela vira sopa de letrinha. Dentro de
-//! cada segundo os comentários são ordenados pelo `weight` — a nota que o
-//! próprio Bilibili usa no filtro inteligente dele — e só os N primeiros
-//! ficam. Com pesos iguais a ordenação é estável, então sobra quem chegou
-//! primeiro e o resultado não muda entre execuções.
+//! The density cut is what saves the video. On a popular premiere more than two
+//! hundred comments a second go by and the screen turns into alphabet soup.
+//! Within each second the comments are ordered by `weight` — the score Bilibili
+//! itself uses in its own smart filter — and only the first N stay. With equal
+//! weights the ordering is stable, so whoever arrived first survives and the
+//! result does not change between runs.
 
 use anyhow::anyhow;
 use regex::Regex;
@@ -24,21 +24,21 @@ pub const KIND_OTHER: &str = "other";
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default)]
 pub struct DanmakuFilter {
-    /// Trecho que o comentário precisa conter, sem diferenciar maiúsculas.
+    /// Snippet the comment must contain, case-insensitive.
     pub keyword: String,
-    /// Expressão regular; quando vem preenchida, substitui a busca por palavra.
+    /// Regular expression; when filled in, it replaces the word search.
     pub regex: String,
-    /// Inverte a busca: o que casa é descartado em vez de mantido.
+    /// Inverts the search: what matches is discarded instead of kept.
     pub invert: bool,
-    /// Tipos aceitos (`scroll`, `top`, `bottom`, `other`). Vazio = todos.
+    /// Accepted types (`scroll`, `top`, `bottom`, `other`). Empty = all.
     pub kinds: Vec<String>,
-    /// Teto de comentários por segundo; 0 = sem teto.
+    /// Ceiling of comments per second; 0 = no ceiling.
     pub max_per_second: u32,
 }
 
-/// O `mode` do Bilibili: 1-3 rolam da direita para a esquerda, 4 fica preso no
-/// rodapé, 5 no topo. O resto (6 reverso, 7 posicionado, 8 script) é raro e
-/// nem chega a ser desenhado no ASS, mas continua valendo no XML e no JSON.
+/// Bilibili's `mode`: 1-3 scroll right to left, 4 stays stuck at the bottom, 5
+/// at the top. The rest (6 reverse, 7 positioned, 8 script) is rare and never
+/// even gets drawn in the ASS, but still counts in the XML and JSON.
 pub fn kind_of(mode: i32) -> &'static str {
     match mode {
         1..=3 => KIND_SCROLL,
@@ -53,7 +53,7 @@ pub fn apply(elems: &[DanmakuElem], f: &DanmakuFilter) -> anyhow::Result<Vec<Dan
     let re = if pattern.is_empty() {
         None
     } else {
-        Some(Regex::new(pattern).map_err(|e| anyhow!("expressão regular inválida: {}", e))?)
+        Some(Regex::new(pattern).map_err(|e| anyhow!("invalid regular expression: {}", e))?)
     };
     let needle = f.keyword.trim().to_lowercase();
     let kinds: Vec<&str> = f
@@ -72,7 +72,7 @@ pub fn apply(elems: &[DanmakuElem], f: &DanmakuFilter) -> anyhow::Result<Vec<Dan
             Some(r) => r.is_match(&e.content),
             None => {
                 if needle.is_empty() {
-                    // Sem termo de busca não há o que inverter: passa todo mundo.
+                    // With no search term there is nothing to invert: everyone passes.
                     kept.push(e.clone());
                     continue;
                 }
@@ -229,8 +229,8 @@ mod tests {
         };
         let kept = apply(&elems, &f).unwrap();
         let texts: Vec<&str> = kept.iter().map(|e| e.content.as_str()).collect();
-        // Segundo 0: sobram os pesos 9 e 5, de volta em ordem de tempo.
-        // Segundos 1 e 2 já cabem no teto.
+        // Second 0: weights 9 and 5 remain, back in time order.
+        // Seconds 1 and 2 already fit the ceiling.
         assert_eq!(texts, vec!["b", "c", "d", "e", "f"]);
     }
 

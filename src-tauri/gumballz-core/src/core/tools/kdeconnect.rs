@@ -1,5 +1,5 @@
-//! KDE Connect pela CLI oficial (estudo 30): listar dispositivos pareados,
-//! mandar arquivo/URL/texto, ping. Sem daemon, a tool explica como instalar.
+//! KDE Connect via the official CLI (study 30): list paired devices,
+//! send file/URL/text, ping. No daemon; the tool explains how to install it.
 
 use std::path::PathBuf;
 
@@ -94,14 +94,14 @@ pub async fn status() -> KdeStatus {
 async fn run(args: &[&str]) -> anyhow::Result<String> {
     let bin = locate()
         .await
-        .ok_or_else(|| anyhow!("kdeconnect-cli nao encontrado"))?;
+        .ok_or_else(|| anyhow!("kdeconnect-cli not found"))?;
     let out = crate::core::process::command(&bin)
         .args(args)
         .output()
         .await?;
     if !out.status.success() {
         return Err(anyhow!(
-            "kdeconnect-cli falhou: {}",
+            "kdeconnect-cli failed: {}",
             String::from_utf8_lossy(&out.stderr).trim()
         ));
     }

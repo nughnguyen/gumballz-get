@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Exporta as histórias que o próprio usuário publicou no Medium, com os rascunhos. */
+  /** Exports the stories the user published on Medium themselves, drafts included. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

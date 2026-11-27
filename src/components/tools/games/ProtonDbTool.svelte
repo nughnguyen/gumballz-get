@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Tier do ProtonDB por appid, link da loja, nome ou biblioteca Steam inteira. */
+  /** ProtonDB tier by appid, store link, name, or whole Steam library. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";
@@ -42,7 +42,7 @@
   type Result = { entries: Entry[]; checked: number; from_cache: number; unresolved: string[]; exported: string | null };
 
   const TIERS = ["platinum", "gold", "silver", "bronze", "borked", "pending"];
-  /** Cor do degrau. Fica em JS porque a classe é montada em tempo de execução. */
+  /** Step color. Lives in JS because the class is built at runtime. */
   const TIER_COLOR: Record<string, [string, string]> = {
     platinum: ["#d5dbe6", "#17181c"],
     gold: ["#ffcc4d", "#17181c"],
@@ -103,7 +103,7 @@
     }
   }
 
-  /** A segunda consulta sai do cache do dia, então exportar não repete a rede. */
+  /** The second query comes from the day's cache, so exporting doesn't repeat the network call. */
   async function exportAs(format: "csv" | "md") {
     if (busy || !result) return;
     const path = await saveAs(`protondb.${format}`, [{ name: format.toUpperCase(), extensions: [format] }]);

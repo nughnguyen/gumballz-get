@@ -1,5 +1,5 @@
-//! Comandos da categoria Música: playlist -> m3u8/pls, letra sincronizada
-//! e análise do histórico do Spotify.
+//! Commands of the Music category: playlist -> m3u8/pls, synced lyrics and
+//! analysis of Spotify history.
 
 use gumballz_core::core::tools::music::{history, lyrics, playlist};
 

@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Analisador de disco (estudo 10, Kudu): volumes, treemap e maiores arquivos. */
+  /** Disk analyzer (study 10, Kudu): volumes, treemap and largest files. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";
@@ -54,7 +54,7 @@
 
   let current = $derived(trail[trail.length - 1]);
 
-  // Treemap "squarified" (Bruls, Huizing, van Wijk) numa caixa 1000×600.
+  // "Squarified" treemap (Bruls, Huizing, van Wijk) in a 1000×600 box.
   type Rect = { node: Node; x: number; y: number; w: number; h: number; color: string };
   const COLORS = ["#5AA9FF", "#FF6B6B", "#4CD964", "#FFB340", "#C77DFF", "#48CFDF", "#FF5E7A", "#D8A15C", "#6E8CFF", "#FFD426", "#A3A3A8"];
   function squarify(nodes: Node[], x: number, y: number, w: number, h: number): Rect[] {
@@ -72,7 +72,7 @@
     };
     const layout = (r: Node[]) => {
       const s = r.reduce((a, n) => a + area(n), 0);
-      const vertical = cw >= ch; // fatia numa coluna à esquerda
+      const vertical = cw >= ch; // slice in a column on the left
       if (vertical) {
         const colW = s / ch;
         let yy = cy;

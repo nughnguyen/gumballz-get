@@ -1,16 +1,16 @@
-//! Instagram pela sessão web (estudos 67-68): tudo aqui usa os cookies que a
-//! extensão captura (`sessionid`, `csrftoken`, `ds_user_id`) e os mesmos
-//! endpoints `/api/v1/...` e `/graphql/query` que o instagram.com chama no
-//! navegador. Sem senha, sem API mobile, sem token de app.
+//! Instagram via the web session (studies 67-68): everything here uses the cookies the
+//! extension captures (`sessionid`, `csrftoken`, `ds_user_id`) and the same
+//! endpoints `/api/v1/...` and `/graphql/query` that instagram.com calls in the
+//! browser. No password, no mobile API, no app token.
 //!
-//! Regras que valem para todos os submódulos:
-//! * GET leva `X-IG-App-ID`, `X-ASBD-ID`, `X-IG-WWW-Claim` e `X-Requested-With`;
-//!   POST leva só `X-IG-App-ID` + `X-CSRFToken` (com `X-Requested-With` o
-//!   Instagram responde 403, verificado em 2026-09-05).
-//! * Redirect para `/accounts/login/` = sessão caiu; 429 = esperar; corpo com
-//!   `checkpoint_required`/`challenge_required` = abrir o app e resolver.
-//! * Paginação com pausa aleatória entre páginas; ações (unfollow, remover
-//!   seguidor) com pausa longa, lote pequeno e teto diário.
+//! Rules that hold for all submodules:
+//! * GET carries `X-IG-App-ID`, `X-ASBD-ID`, `X-IG-WWW-Claim` and `X-Requested-With`;
+//!   POST carries only `X-IG-App-ID` + `X-CSRFToken` (with `X-Requested-With`
+//!   Instagram answers 403, verified on 2026-09-05).
+//! * Redirect to `/accounts/login/` = session dropped; 429 = wait; body with
+//!   `checkpoint_required`/`challenge_required` = open the app and resolve it.
+//! * Pagination with a random pause between pages; actions (unfollow, remove
+//!   follower) with a long pause, small batch and daily cap.
 
 pub mod analytics;
 pub mod follow;
@@ -35,31 +35,31 @@ pub const ASBD_ID: &str = "129477";
 const UA: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
-// ── Erros ────────────────────────────────────────────────────────────────
+// ── Errors ────────────────────────────────────────────────────────────────
 
 #[derive(Debug, thiserror::Error)]
 pub enum IgError {
-    #[error("sessao do Instagram nao encontrada: capture os cookies pela extensao do GumballZ Get com o instagram.com aberto e logado")]
+    #[error("Instagram session not found: capture the cookies via the GumballZ Get extension with instagram.com open and logged in")]
     NoSession,
-    #[error("a sessao do Instagram expirou ou foi desconectada; capture os cookies de novo pela extensao")]
+    #[error("the Instagram session expired or was disconnected; capture the cookies again via the extension")]
     LoginRequired,
-    #[error("o Instagram pediu para esperar (429). Tente de novo em alguns minutos")]
+    #[error("Instagram asked to wait (429). Try again in a few minutes")]
     RateLimited,
-    #[error("o Instagram pediu uma verificacao (checkpoint). Abra o app ou o site, resolva o aviso e tente de novo")]
+    #[error("Instagram asked for a verification (checkpoint). Open the app or the site, resolve the warning and try again")]
     Checkpoint,
-    #[error("o Instagram bloqueou esta acao por enquanto (feedback_required). Espere algumas horas antes de continuar")]
+    #[error("Instagram blocked this action for now (feedback_required). Wait a few hours before continuing")]
     ActionBlocked,
-    #[error("nao encontrado: {0}")]
+    #[error("not found: {0}")]
     NotFound(String),
-    #[error("conteudo privado: voce precisa seguir esta conta para ver isso")]
+    #[error("private content: you need to follow this account to see it")]
     Private,
     #[error("{0}")]
     Other(String),
 }
 
-// ── Sessão ───────────────────────────────────────────────────────────────
+// ── Session ───────────────────────────────────────────────────────────────
 
-/// Um cookie no formato Netscape que o gerenciador de cookies do app grava.
+/// A cookie in Netscape format, as the app's cookie manager writes it.
 #[derive(Debug, Clone)]
 pub struct NetscapeCookie {
     pub domain: String,
@@ -102,7 +102,7 @@ pub struct SessionInfo {
     pub cookie_count: usize,
 }
 
-/// Cookies de uma conta + o que o cliente precisa saber deles.
+/// Cookies of one account + what the client needs to know about them.
 #[derive(Debug, Clone)]
 pub struct Session {
     pub cookies: Vec<NetscapeCookie>,
@@ -143,14 +143,14 @@ impl Session {
     }
 }
 
-// ── Cliente ──────────────────────────────────────────────────────────────
+// ── Client ──────────────────────────────────────────────────────────────
 
 pub struct IgClient {
     http: reqwest::Client,
     pub session: Session,
     www_claim: Mutex<String>,
     csrf: Mutex<String>,
-    /// Pausa entre requisições de paginação (min, max) em ms.
+    /// Pause between pagination requests (min, max) in ms.
     pub page_delay_ms: (u64, u64),
 }
 
@@ -281,7 +281,7 @@ impl IgClient {
                 });
             }
             return Err(IgError::Other(format!(
-                "{}: redirecionado para {}",
+                "{}: redirected to {}",
                 what, loc
             )));
         }
@@ -299,10 +299,10 @@ impl IgClient {
                     if text.contains("/accounts/login") && !text.contains("logged-in") {
                         return Err(IgError::LoginRequired);
                     }
-                    return Err(IgError::Other(format!("{}: o Instagram respondeu HTML em vez de JSON (endpoint mudou ou sessao invalida, HTTP {})", what, status.as_u16())));
+                    return Err(IgError::Other(format!("{}: Instagram answered HTML instead of JSON (endpoint changed or invalid session, HTTP {})", what, status.as_u16())));
                 }
                 return Err(IgError::Other(format!(
-                    "{}: resposta invalida (HTTP {})",
+                    "{}: invalid response (HTTP {})",
                     what,
                     status.as_u16()
                 )));
@@ -346,7 +346,7 @@ impl IgClient {
         Ok(json)
     }
 
-    /// GET `/api/v1/...` (ou URL absoluta) com os cabeçalhos da web.
+    /// GET `/api/v1/...` (or absolute URL) with the web headers.
     pub async fn get_json(&self, path: &str, query: &[(&str, String)]) -> Result<Value, IgError> {
         let url = if path.starts_with("http") {
             path.to_string()
@@ -364,7 +364,7 @@ impl IgClient {
         self.finish(resp, path).await
     }
 
-    /// POST de formulário para `/api/v1/...`.
+    /// Form POST to `/api/v1/...`.
     pub async fn post_form(&self, path: &str, form: &[(&str, String)]) -> Result<Value, IgError> {
         let url = if path.starts_with("http") {
             path.to_string()
@@ -382,7 +382,7 @@ impl IgClient {
         self.finish(resp, path).await
     }
 
-    /// POST cru (upload) com cabeçalhos extras.
+    /// Raw POST (upload) with extra headers.
     pub async fn post_raw(
         &self,
         url: &str,
@@ -402,7 +402,7 @@ impl IgClient {
         self.finish(resp, "upload").await
     }
 
-    /// GET de uma página HTML (perfil, bundles) com cookies.
+    /// GET of an HTML page (profile, bundles) with cookies.
     pub async fn get_text(&self, url: &str) -> Result<String, IgError> {
         let resp = self
             .http
@@ -420,7 +420,7 @@ impl IgClient {
         resp.text().await.map_err(|e| IgError::Other(e.to_string()))
     }
 
-    /// Baixa um arquivo de CDN (sem cabeçalhos de API).
+    /// Downloads a file from a CDN (no API headers).
     pub async fn download(&self, url: &str, dest: &std::path::Path) -> anyhow::Result<u64> {
         use futures::StreamExt;
         use tokio::io::AsyncWriteExt;
@@ -431,7 +431,7 @@ impl IgClient {
             .send()
             .await?;
         if !resp.status().is_success() {
-            bail!("download falhou: HTTP {}", resp.status());
+            bail!("download failed: HTTP {}", resp.status());
         }
         if let Some(p) = dest.parent() {
             std::fs::create_dir_all(p)?;
@@ -451,8 +451,8 @@ impl IgClient {
         Ok(n)
     }
 
-    /// GraphQL por `doc_id` (POST `/graphql/query`), com as variáveis
-    /// "provider" que a query exige; sem elas o servidor devolve
+    /// GraphQL by `doc_id` (POST `/graphql/query`), with the variables
+    /// "provider" the query requires; without them the server returns
     /// "execution error".
     pub async fn graphql(
         &self,
@@ -462,7 +462,7 @@ impl IgClient {
         let ids = doc_ids(self).await;
         let doc_id = ids.ids.get(friendly_name).cloned().ok_or_else(|| {
             IgError::Other(format!(
-                "nao achei o doc_id de {} nos bundles do Instagram",
+                "could not find the doc_id of {} in the Instagram bundles",
                 friendly_name
             ))
         })?;
@@ -493,7 +493,7 @@ impl IgClient {
             let msg = err
                 .get("message")
                 .and_then(|m| m.as_str())
-                .unwrap_or("erro");
+                .unwrap_or("error");
             if msg.contains("execution error") {
                 invalidate_doc_ids();
             }
@@ -517,7 +517,7 @@ pub async fn sleep_jitter(min_ms: u64, max_ms: u64) {
     tokio::time::sleep(Duration::from_millis(ms)).await;
 }
 
-// ── doc_ids do GraphQL ───────────────────────────────────────────────────
+// ── GraphQL doc_ids ───────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DocIds {
@@ -530,8 +530,8 @@ fn doc_ids_path() -> Option<std::path::PathBuf> {
     super::tools_dir().map(|d| d.join("instagram").join("doc_ids.json"))
 }
 
-/// Valores vistos em 2026-09-05; servem de fallback quando a varredura dos
-/// bundles não acha o módulo (ele pode estar num chunk carregado depois).
+/// Values seen on 2026-09-05; they serve as a fallback when the sweep of the
+/// bundles do not find the module (it may be in a chunk loaded later).
 fn default_doc_ids() -> DocIds {
     let mut ids = HashMap::new();
     ids.insert(
@@ -573,9 +573,9 @@ fn invalidate_doc_ids() {
     }
 }
 
-/// Lê o cache (12 h) ou varre os bundles JS da página de perfil procurando
-/// `__d("<Nome>_instagramRelayOperation",[],(function(...){e.exports="<id>"`
-/// e a lista de providers em `__d("<Nome>.graphql",[deps])`.
+/// Reads the cache (12 h) or scans the profile page's JS bundles looking for
+/// `__d("<Name>_instagramRelayOperation",[],(function(...){e.exports="<id>"`
+/// and the list of providers in `__d("<Name>.graphql",[deps])`.
 pub async fn doc_ids(client: &IgClient) -> DocIds {
     let cell = DOC_IDS.get_or_init(|| Mutex::new(None));
     if let Some(d) = cell.lock().unwrap().clone() {
@@ -695,7 +695,7 @@ pub enum IgTarget {
         username: String,
         media_id: Option<String>,
     },
-    /// `/stories/highlights/<id>` ou `/s/<base64>`
+    /// `/stories/highlights/<id>` or `/s/<base64>`
     Highlight {
         id: String,
     },
@@ -727,7 +727,7 @@ pub fn parse_target(input: &str) -> IgTarget {
         s.to_string()
     };
     let Ok(url) = url::Url::parse(&candidate) else {
-        // Só um nome de usuário ou um shortcode?
+        // Only a username or a shortcode?
         if s.chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_')
             && !s.is_empty()
@@ -791,7 +791,7 @@ pub fn parse_target(input: &str) -> IgTarget {
     }
 }
 
-// ── Jobs canceláveis ─────────────────────────────────────────────────────
+// ── Cancellable jobs ─────────────────────────────────────────────────────
 
 static JOBS: OnceLock<Mutex<HashMap<String, Arc<AtomicBool>>>> = OnceLock::new();
 
@@ -824,7 +824,7 @@ pub fn cancelled(flag: &AtomicBool) -> bool {
     flag.load(Ordering::Relaxed)
 }
 
-// ── Pasta de dados ───────────────────────────────────────────────────────
+// ── Data folder ───────────────────────────────────────────────────────
 
 pub fn data_dir() -> std::path::PathBuf {
     let d = super::tools_dir()
@@ -851,7 +851,7 @@ pub fn write_json<T: Serialize>(path: &std::path::Path, value: &T) -> anyhow::Re
     Ok(())
 }
 
-// ── Utilidades de JSON ───────────────────────────────────────────────────
+// ── JSON utilities ───────────────────────────────────────────────────
 
 pub(crate) fn s(v: &Value, key: &str) -> String {
     match v.get(key) {

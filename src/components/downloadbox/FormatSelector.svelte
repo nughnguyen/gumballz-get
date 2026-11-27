@@ -54,8 +54,8 @@
 
   function formatFilesize(bytes: number | null, isEstimate = false): string {
     if (bytes === null) return "—";
-    // O `~` é um contrato com o usuário: número sem til é o que o site
-    // informou; com til, foi calculado por bitrate × duração.
+    // The `~` is a contract with the user: a number without a tilde is what the site
+    // reported; with a tilde, it was computed from bitrate × duration.
     const prefix = isEstimate ? "~" : "";
     if (bytes < 1024) return `${prefix}${bytes} B`;
     if (bytes < 1024 * 1024) return `${prefix}${(bytes / 1024).toFixed(0)} KB`;

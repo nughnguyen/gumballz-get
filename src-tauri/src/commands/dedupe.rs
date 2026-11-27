@@ -1,27 +1,27 @@
-//! Deduplicacao por conteudo dos arquivos ja baixados.
+//! Content dedup of files already downloaded.
 //!
-//! B38. O `core::cas` sabe guardar um arquivo sob o hash do conteudo e
-//! materializar com hard link; o que faltava era alguem chamar.
+//! B38. `core::cas` knows how to keep a file under its content hash and
+//! materialize it with a hard link; what was missing was someone calling it.
 //!
-//! Roda **depois** do download, nunca durante. Mexer no caminho de escrita do
-//! download para economizar disco seria trocar a funcao principal do app por
-//! uma secundaria — e o risco cai justamente sobre o arquivo que o usuario
-//! acabou de esperar.
+//! It runs **after** the download, never during. Touching the download's write
+//! path to save disk would be swapping the app's main function for a secondary
+//! one — and the risk would fall exactly on the file the user just waited for.
 //!
-//! O ganho aparece quando o mesmo conteudo existe em dois lugares: a mesma aula
-//! em dois cursos, o mesmo video baixado em duas pastas. Depois do dedupe os
-//! dois caminhos continuam existindo e apontam para o mesmo inode.
+//! The gain shows up when the same content exists in two places: the same lesson
+//! in two courses, the same video downloaded into two folders. After the dedup
+//! both paths keep existing and point at the same inode.
 
 use std::path::{Path, PathBuf};
 
 use crate::core::cas::{ingest, materialize, same_file, LinkOutcome};
 
-/// Quantos caminhos apontam para o mesmo objeto.
+/// How many paths point at the same object.
 ///
-/// So o Unix responde: `link_count` do `core::cas` esta atras de `cfg(unix)`
-/// porque le `nlink` do metadata. No Windows nao ha equivalente barato, e
-/// **inventar 1 seria pior que nao saber** — o app reportaria economia zero com
-/// a mesma cara de quem mediu. Por isso devolve `None`, e quem chama distingue.
+/// Only Unix answers: `core::cas`'s `link_count` is behind `cfg(unix)` because
+/// it reads `nlink` from the metadata. On Windows there is no cheap equivalent,
+/// and **inventing 1 would be worse than not knowing** — the app would report
+/// zero savings with the same face as someone who measured. That is why it
+/// returns `None`, and the caller tells the difference.
 fn quantos_links(object: &Path) -> Option<u64> {
     #[cfg(unix)]
     {
@@ -50,24 +50,24 @@ fn sha256_of(path: &Path) -> std::io::Result<String> {
 pub struct DedupeReport {
     pub examined: usize,
     pub deduplicated: usize,
-    /// Bytes que deixaram de ser ocupados duas vezes. Zero quando a plataforma
-    /// nao sabe distinguir link de copia — ver `savings_measurable`.
+    /// Bytes that stopped being occupied twice. Zero when the platform cannot
+    /// tell a link from a copy — see `savings_measurable`.
     pub bytes_saved: u64,
-    /// `false` no Windows. `cas::same_file` nao tem como responder ali
-    /// (`volume_serial_number` e `file_index` seguem unstable), entao um arquivo
-    /// que **ja** era link e re-linkado e contaria como economia nova a cada
-    /// execucao. Preferimos nao dar numero a inflar um.
+    /// `false` on Windows. `cas::same_file` has no way to answer there
+    /// (`volume_serial_number` and `file_index` are still unstable), so a file
+    /// that **already** was a link and gets re-linked would count as new savings
+    /// on every run. We prefer giving no number to inflating one.
     pub savings_measurable: bool,
     pub errors: Vec<String>,
 }
 
-/// Roda o dedupe sobre uma lista de arquivos ja baixados.
+/// Runs the dedupe over a list of files already downloaded.
 ///
-/// Um arquivo que ja esta ligado ao store e pulado sem custo — a operacao e
-/// idempotente de proposito, porque o usuario vai clicar duas vezes.
+/// A file that is already linked to the store is skipped at no cost — the
+/// operation is idempotent on purpose, because the user is going to click twice.
 #[tauri::command]
 pub async fn deduplicate_files(paths: Vec<String>) -> Result<DedupeReport, String> {
-    let root = store_root().ok_or_else(|| "sem diretorio de dados".to_string())?;
+    let root = store_root().ok_or_else(|| "no data directory".to_string())?;
 
     tokio::task::spawn_blocking(move || {
         let mut rep = DedupeReport {
@@ -105,7 +105,7 @@ pub async fn deduplicate_files(paths: Vec<String>) -> Result<DedupeReport, Strin
                 }
             };
 
-            // Ja e o mesmo inode: nada a fazer, e nao conta como economia.
+            // Already the same inode: nothing to do, and it does not count as savings.
             if same_file(&objeto, &path) {
                 continue;
             }
@@ -113,21 +113,21 @@ pub async fn deduplicate_files(paths: Vec<String>) -> Result<DedupeReport, Strin
             match materialize(&objeto, &path) {
                 Ok(LinkOutcome::Linked) => {
                     rep.deduplicated += 1;
-                    // So soma onde `same_file` consegue garantir que o destino
-                    // ainda nao era um link para este objeto. Sem isso, a
-                    // segunda execucao no Windows somaria tudo de novo.
+                    // Only add where `same_file` can guarantee the destination
+                    // was not already a link to this object. Without that, the
+                    // second run on Windows would add everything again.
                     if rep.savings_measurable {
                         rep.bytes_saved += tamanho;
                     }
                 }
                 Ok(LinkOutcome::AlreadyPresent) => {
-                    // Ja estava ligado. Nao conta como economia nova, senao o
-                    // numero cresce a cada clique sem nada ter mudado.
+                    // Already linked. Does not count as new savings, or the
+                    // number would grow with every click without anything having changed.
                 }
                 Ok(LinkOutcome::Copied) => {
-                    // Volume diferente: hard link nao atravessa sistema de
-                    // arquivos. Copiar mantem o arquivo correto e nao economiza
-                    // nada — reportar economia aqui seria mentira.
+                    // Different volume: a hard link does not cross filesystems.
+                    // Copying keeps the file correct and saves nothing —
+                    // reporting savings here would be a lie.
                 }
                 Err(e) => rep.errors.push(format!("{}: {}", path.display(), e)),
             }
@@ -142,14 +142,14 @@ pub async fn deduplicate_files(paths: Vec<String>) -> Result<DedupeReport, Strin
 pub struct StoreStats {
     pub objects: usize,
     pub bytes_on_disk: u64,
-    /// Quanto seria ocupado se cada link fosse uma copia de verdade.
+    /// How much would be occupied if every link were a real copy.
     pub bytes_without_dedupe: u64,
-    /// `false` quando a plataforma nao sabe contar links (Windows). A interface
-    /// precisa distinguir "economizou zero" de "nao da para medir".
+    /// `false` when the platform cannot count links (Windows). The UI needs to
+    /// tell "saved zero" apart from "cannot measure".
     pub savings_measurable: bool,
 }
 
-/// Quanto o store esta economizando hoje.
+/// How much the store is saving today.
 #[tauri::command]
 pub async fn content_store_stats() -> Result<StoreStats, String> {
     let Some(root) = store_root() else {
@@ -174,7 +174,7 @@ pub async fn content_store_stats() -> Result<StoreStats, String> {
                 }
                 s.objects += 1;
                 s.bytes_on_disk += meta.len();
-                // Cada link extra e uma copia que nao foi feita.
+                // Each extra link is a copy that was never made.
                 let links = quantos_links(&obj.path()).unwrap_or(1).max(1);
                 s.bytes_without_dedupe += meta.len() * links;
             }
@@ -192,7 +192,7 @@ mod tests {
     fn tempdir(tag: &str) -> PathBuf {
         let d = std::env::temp_dir().join(format!("gumballz-get-dedupe-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).expect("cria");
+        std::fs::create_dir_all(&d).expect("create");
         d
     }
 
@@ -206,18 +206,18 @@ mod tests {
         std::fs::write(&b, b"mesmo conteudo").unwrap();
 
         let h = sha256_of(&a).unwrap();
-        assert_eq!(h, sha256_of(&b).unwrap(), "conteudo igual, hash igual");
+        assert_eq!(h, sha256_of(&b).unwrap(), "same content, same hash");
 
         let obj = ingest(&root, &a, &h).unwrap();
         materialize(&obj, &a).unwrap();
         materialize(&obj, &b).unwrap();
 
-        // O teste comportamental, nao de inode: escrever por um caminho tem que
-        // aparecer no outro. Em Windows `same_file` nem sempre responde.
+        // The behavioural test, not an inode one: writing through one path has to
+        // show up on the other. On Windows `same_file` does not always answer.
         assert_eq!(
             std::fs::read(&a).unwrap(),
             std::fs::read(&b).unwrap(),
-            "os dois caminhos tem que ver o mesmo conteudo"
+            "both paths have to see the same content"
         );
         let _ = std::fs::remove_dir_all(&d);
     }
@@ -232,18 +232,18 @@ mod tests {
         assert_ne!(
             sha256_of(&a).unwrap(),
             sha256_of(&b).unwrap(),
-            "arquivos diferentes nao podem colidir"
+            "different files must not collide"
         );
         let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]
     fn rodar_duas_vezes_nao_corrompe_o_arquivo() {
-        // A propriedade que vale nas tres plataformas: materializar duas vezes e
-        // seguro e o conteudo continua certo. Este teste ja pegou um defeito
-        // real — a primeira versao afirmava identidade de inode via `same_file`,
-        // que no Windows sempre diz "diferente", e foi assim que apareceu que a
-        // contagem de economia dobrava por lá.
+        // The property that holds on all three platforms: materializing twice is
+        // safe and the content stays right. This test already caught a real defect
+        // — the first version asserted inode identity via `same_file`, which on
+        // Windows always says "different", and that is how it showed up that the
+        // savings count doubled over there.
         let d = tempdir("idempotente");
         let root = d.join("store");
         let a = d.join("a.mp4");
@@ -255,22 +255,22 @@ mod tests {
         assert_eq!(
             std::fs::read(&a).unwrap(),
             b"conteudo",
-            "materializar duas vezes nao pode estragar o arquivo"
+            "materializing twice must not break the file"
         );
         let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]
     fn economia_so_e_somada_onde_da_para_medir() {
-        // O numero e reportado como nao-medido em vez de zerado por acidente:
-        // "nao sei" e uma resposta diferente de "nao economizou".
+        // The number is reported as unmeasured instead of zeroed by accident:
+        // "don't know" is a different answer from "did not save".
         let rep = DedupeReport {
             savings_measurable: cfg!(unix),
             ..Default::default()
         };
         assert_eq!(rep.savings_measurable, cfg!(unix));
         if !rep.savings_measurable {
-            assert_eq!(rep.bytes_saved, 0, "sem medicao nao se inventa numero");
+            assert_eq!(rep.bytes_saved, 0, "without measurement, do not invent a number");
         }
     }
 }

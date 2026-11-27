@@ -22,7 +22,7 @@ pub fn tool_yt_video_id(url: String) -> Option<String> {
     sponsorblock::video_id(&url)
 }
 
-/// Baixa uma URL simples (thumbnail, frame) para um arquivo.
+/// Downloads a plain URL (thumbnail, frame) to a file.
 #[tauri::command]
 pub async fn tool_save_url(url: String, dest: String) -> Result<String, String> {
     let client = gumballz_core::core::tools::client().map_err(err)?;
@@ -38,7 +38,7 @@ pub async fn tool_save_url(url: String, dest: String) -> Result<String, String> 
     Ok(dest)
 }
 
-// ── Arquivo, notas e capítulos (rodada 3) ──────────────────────────────
+// ── Archive, notes and chapters (round 3) ──────────────────────────────
 
 use gumballz_core::core::tools::{yt_archive, yt_chapters, yt_notes};
 
@@ -46,8 +46,8 @@ use super::progress;
 
 const YT_DOMAIN: &str = "youtube.com";
 
-/// Cookies da conta escolhida no gerenciador (None = `_default`). Watch Later
-/// e playlist privada não existem sem sessão; vídeo público não precisa.
+/// Cookies of the account chosen in the manager (None = `_default`). Watch Later
+/// and private playlists do not exist without a session; a public video needs none.
 fn yt_session(slug: Option<&str>) -> Option<String> {
     let slug = slug.unwrap_or("_default");
     let content = crate::cookies::storage::read_account_file(YT_DOMAIN, slug).ok()?;
@@ -58,7 +58,7 @@ fn yt_session(slug: Option<&str>) -> Option<String> {
     Some(content)
 }
 
-/// Só enumera a coleção e funde com o estado gravado — não baixa nada.
+/// Only enumerates the collection and merges it with the saved state — downloads nothing.
 #[tauri::command]
 pub async fn tool_yt_archive_scan(
     app: tauri::AppHandle,
@@ -69,7 +69,7 @@ pub async fn tool_yt_archive_scan(
     yt_archive::scan(&opts, &progress(&app)).await.map_err(err)
 }
 
-/// Continua o arquivo de onde parou.
+/// Continues the archive from where it stopped.
 #[tauri::command]
 pub async fn tool_yt_archive_run(
     app: tauri::AppHandle,
@@ -80,7 +80,7 @@ pub async fn tool_yt_archive_run(
     yt_archive::run(opts, progress(&app)).await.map_err(err)
 }
 
-/// Estado gravado na pasta, sem rede — é o que a tela mostra ao abrir.
+/// State saved in the folder, no network — it is what the screen shows on open.
 #[tauri::command]
 pub fn tool_yt_archive_state(dest: String) -> Result<yt_archive::ArchiveResult, String> {
     yt_archive::state(&dest).map_err(err)
@@ -109,8 +109,8 @@ pub async fn tool_yt_chapters(
     yt_chapters::run(opts, progress(&app)).await.map_err(err)
 }
 
-/// Identificador estável da chave local do SponsorBlock. A chave em si nunca
-/// sai do backend.
+/// Stable identifier of the local SponsorBlock key. The key itself never leaves
+/// the backend.
 #[derive(serde::Serialize)]
 pub struct SponsorUser {
     pub fingerprint: String,
@@ -124,8 +124,8 @@ pub fn tool_sb_user() -> Result<SponsorUser, String> {
     })
 }
 
-/// Envia trechos ao SponsorBlock. `opts.confirmed` só pode vir da confirmação
-/// explícita do usuário: o envio é público e vale para todo mundo.
+/// Sends segments to SponsorBlock. `opts.confirmed` may only come from the user's
+/// explicit confirmation: the submission is public and counts for everyone.
 #[tauri::command]
 pub async fn tool_sb_submit(
     opts: sponsorblock::SubmitOptions,

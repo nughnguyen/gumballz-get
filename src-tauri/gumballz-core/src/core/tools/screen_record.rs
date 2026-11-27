@@ -1,10 +1,10 @@
-//! Gravar tela (estudo 28, ShareX): FFmpeg com o capturador nativo de cada
-//! sistema (avfoundation, gdigrab, x11grab), microfone opcional e buffer de
-//! replay: em vez de um arquivo só, o FFmpeg grava segmentos de 5 s num anel
-//! e "salvar os últimos N segundos" concatena os segmentos mais recentes.
-//! Áudio do sistema: no Windows via "Stereo Mix"/loopback quando existe; no
-//! macOS exige um dispositivo virtual (BlackHole); no Linux o monitor do
-//! PulseAudio.
+//! Screen recording (study 28, ShareX): FFmpeg with each system's native
+//! capturer (avfoundation, gdigrab, x11grab), optional microphone and a
+//! replay buffer: instead of a single file, FFmpeg records 5 s segments in a ring
+//! and "save the last N seconds" concatenates the newest segments.
+//! System audio: on Windows via "Stereo Mix"/loopback when present; on
+//! macOS it needs a virtual device (BlackHole); on Linux the PulseAudio
+//! monitor.
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -23,20 +23,20 @@ pub struct Source {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecordOptions {
-    /// tela (índice avfoundation, "desktop" no Windows, ":0.0" no Linux)
+    /// screen (avfoundation index, "desktop" on Windows, ":0.0" on Linux)
     #[serde(default)]
     pub screen: String,
     #[serde(default = "thirty")]
     pub fps: u32,
-    /// microfone/dispositivo de áudio; vazio = sem áudio
+    /// microphone/audio device; empty = no audio
     #[serde(default)]
     pub audio: String,
     #[serde(default)]
     pub output_dir: String,
-    /// 0 = gravação normal; N = anel de replay com N segundos
+    /// 0 = normal recording; N = replay ring of N seconds
     #[serde(default)]
     pub replay_seconds: u32,
-    /// área x,y,largura,altura (vazio = tela inteira)
+    /// area x,y,width,height (empty = whole screen)
     #[serde(default)]
     pub area: Option<(u32, u32, u32, u32)>,
     #[serde(default = "twenty_three")]
@@ -91,7 +91,7 @@ pub fn state() -> RecordState {
     }
 }
 
-/// Telas e dispositivos de áudio que o FFmpeg enxerga.
+/// Screens and audio devices FFmpeg can see.
 pub async fn sources() -> Vec<Source> {
     let mut out = Vec::new();
     if cfg!(target_os = "macos") {
@@ -145,7 +145,7 @@ pub async fn sources() -> Vec<Source> {
     } else if cfg!(target_os = "windows") {
         out.push(Source {
             id: "desktop".into(),
-            name: "Área de trabalho (todas as telas)".into(),
+            name: "Desktop (all screens)".into(),
             kind: "screen".into(),
         });
         for d in super::dictation::devices().await {
@@ -179,7 +179,7 @@ pub async fn sources() -> Vec<Source> {
                 if cols.len() > 1 && cols[1].ends_with(".monitor") {
                     out.push(Source {
                         id: cols[1].to_string(),
-                        name: format!("Áudio do sistema ({})", cols[1]),
+                        name: format!("System audio ({})", cols[1]),
                         kind: "audio".into(),
                     });
                 }
@@ -331,14 +331,14 @@ fn build_args(opts: &RecordOptions, target: &Path, ring: bool) -> Vec<String> {
 
 pub async fn start(opts: RecordOptions) -> anyhow::Result<RecordState> {
     if SESSION.lock().unwrap_or_else(|e| e.into_inner()).is_some() {
-        return Err(anyhow!("ja esta gravando"));
+        return Err(anyhow!("already recording"));
     }
     if cfg!(target_os = "linux")
         && std::env::var("WAYLAND_DISPLAY").is_ok()
         && std::env::var("DISPLAY").is_err()
     {
         return Err(anyhow!(
-            "sessao Wayland sem XWayland: o x11grab nao enxerga a tela. Entre numa sessao X11."
+            "Wayland session without XWayland: x11grab cannot see the screen. Join an X11 session."
         ));
     }
     let ffmpeg = crate::core::dependencies::ensure_ffmpeg().await?;
@@ -372,7 +372,7 @@ pub async fn start(opts: RecordOptions) -> anyhow::Result<RecordState> {
         ring_dir,
         opts,
     });
-    // Se o ffmpeg morrer nos primeiros instantes (permissão, dispositivo), avisa.
+    // If ffmpeg dies in the first moments (permission, device), say so.
     tokio::time::sleep(std::time::Duration::from_millis(900)).await;
     let died = {
         let mut s = SESSION.lock().unwrap_or_else(|e| e.into_inner());
@@ -416,11 +416,11 @@ async fn stop_child(mut child: tokio::process::Child) {
     }
 }
 
-/// Para a gravação. Normal: devolve o arquivo. Replay: descarta o anel.
+/// Stops the recording. Normal: returns the file. Replay: discards the ring.
 pub async fn stop() -> anyhow::Result<RecordState> {
     let sess = SESSION.lock().unwrap_or_else(|e| e.into_inner()).take();
     let Some(sess) = sess else {
-        return Err(anyhow!("nao esta gravando"));
+        return Err(anyhow!("not recording"));
     };
     stop_child(sess.child).await;
     if let Some(out) = &sess.output {
@@ -433,16 +433,16 @@ pub async fn stop() -> anyhow::Result<RecordState> {
     Ok(state())
 }
 
-/// Replay: junta os últimos segmentos num arquivo na pasta de saída, sem
-/// interromper a gravação do anel.
+/// Replay: joins the newest segments into a file in the output folder, without
+/// interrupting the ring recording.
 pub async fn save_replay() -> anyhow::Result<String> {
     let (ring, opts) = {
         let s = SESSION.lock().unwrap_or_else(|e| e.into_inner());
         let Some(sess) = s.as_ref() else {
-            return Err(anyhow!("o replay nao esta ligado"));
+            return Err(anyhow!("replay is not on"));
         };
         let Some(r) = sess.ring_dir.clone() else {
-            return Err(anyhow!("a gravacao atual nao e um replay"));
+            return Err(anyhow!("the current recording is not a replay"));
         };
         (r, sess.opts.clone())
     };
@@ -460,12 +460,12 @@ pub async fn save_replay() -> anyhow::Result<String> {
         })
         .collect();
     segs.sort();
-    // O último segmento ainda está sendo escrito; pega os anteriores.
+    // The last segment is still being written; take the earlier ones.
     if segs.len() > 1 {
         segs.pop();
     }
     if segs.is_empty() {
-        return Err(anyhow!("ainda nao ha nada no buffer"));
+        return Err(anyhow!("nothing in the buffer yet"));
     }
     let want = (opts.replay_seconds.max(10) / 5) as usize;
     let chosen: Vec<PathBuf> = segs

@@ -1,27 +1,27 @@
-//! Motor de regras declarativo: "URL do canal X -> pasta Y, qualidade Z".
+//! Declarative rules engine: "channel X's URL -> folder Y, quality Z".
 //!
-//! Escrito uma vez pelo usuario e avaliado no enqueue, para parar de repetir as
-//! mesmas cinco escolhas em todo download do mesmo canal.
+//! Written once by the user and evaluated at enqueue, so they stop repeating the
+//! same five choices on every download from the same channel.
 //!
-//! Deliberadamente **nao** e linguagem de script. E uma lista de regras com
-//! combos, porque um editor de expressao vira superficie de suporte propria e o
-//! ganho sobre "contem / e igual a" e pequeno para este caso.
+//! Deliberately **not** a scripting language. It is a list of rules with
+//! combos, because an expression editor becomes its own support surface and the
+//! gain over "contains / equals" is small for this case.
 //!
-//! Origem: Sieve, de clientes de e-mail.
+//! Origin: Sieve, from email clients.
 
 use serde::{Deserialize, Serialize};
 
-/// O que a regra olha. Primeira que casar vence, entao a ordem da lista e a
-/// prioridade — igual a filtro de e-mail, e pela mesma razao: previsibilidade
-/// vale mais que expressividade.
+/// What the rule looks at. First match wins, so the list order is the
+/// priority — like an email filter, and for the same reason: predictability
+/// is worth more than expressiveness.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Condition {
-    /// Host exatamente igual, ignorando `www.` e caixa.
+    /// Host exactly equal, ignoring `www.` and case.
     HostIs { value: String },
-    /// Substring em qualquer lugar da URL, sem caixa.
+    /// Substring anywhere in the URL, case-insensitive.
     UrlContains { value: String },
-    /// Plataforma resolvida pelo registry (`youtube`, `bilibili`, ...).
+    /// Platform resolved by the registry (`youtube`, `bilibili`, ...).
     PlatformIs { value: String },
 }
 
@@ -38,8 +38,8 @@ impl Condition {
     }
 }
 
-/// O que a regra faz. Campo ausente significa "nao mexe", nao "usa o default" —
-/// a distincao importa para poder ter regra que so muda a pasta.
+/// What the rule does. A missing field means "do not touch", not "use the
+/// default" — the distinction matters so a rule can change only the folder.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct Actions {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -67,10 +67,11 @@ fn default_enabled() -> bool {
     true
 }
 
-/// Host de uma URL, minusculo e sem `www.`.
+/// Host of a URL, lowercase and without `www.`.
 ///
-/// Parsing manual em vez da crate `url`: aceita entrada malformada sem erro, o
-/// que e o que se quer aqui — regra que nao casa e melhor que enqueue abortado.
+/// Manual parsing instead of the `url` crate: it accepts malformed input without
+/// error, which is what is wanted here — a rule that does not match is better
+/// than an aborted enqueue.
 pub fn host_of(url: &str) -> Option<String> {
     let after_scheme = url.split("://").nth(1).unwrap_or(url);
     let host = after_scheme
@@ -86,7 +87,7 @@ pub fn host_of(url: &str) -> Option<String> {
     Some(host.trim_start_matches("www.").to_lowercase())
 }
 
-/// Primeira regra habilitada que casa.
+/// First enabled rule that matches.
 pub fn first_match<'a>(rules: &'a [Rule], url: &str, platform: Option<&str>) -> Option<&'a Rule> {
     rules
         .iter()
@@ -124,8 +125,8 @@ mod tests {
 
     #[test]
     fn a_primeira_regra_que_casa_vence() {
-        // A ordem e a prioridade. Sem isso, duas regras que casam viram
-        // comportamento imprevisivel e o usuario nao consegue depurar.
+        // Order is priority. Without it, two matching rules become unpredictable
+        // behaviour and the user cannot debug it.
         let rules = vec![
             rule(
                 "especifica",
@@ -218,8 +219,8 @@ mod tests {
 
     #[test]
     fn acoes_ausentes_significam_nao_mexer() {
-        // Distincao que importa: `None` nao pode virar "usa o default", senao
-        // uma regra que so troca a pasta zeraria a qualidade escolhida.
+        // A distinction that matters: `None` must not become "use the default",
+        // or a rule that only changes the folder would zero the chosen quality.
         let a = Actions {
             output_dir: Some("/x".into()),
             ..Default::default()
@@ -248,8 +249,8 @@ mod tests {
 
     #[test]
     fn regra_antiga_sem_enabled_carrega_habilitada() {
-        // Campo novo nao pode desligar em silencio as regras que o usuario ja
-        // tinha — e a mesma classe do bug que zerou o settings.json.
+        // A new field must not silently switch off the rules the user already
+        // had — it is the same class of bug that zeroed settings.json.
         let json = r#"{"name":"velha","when":{"kind":"host_is","value":"x.com"},"then":{}}"#;
         let r: Rule = serde_json::from_str(json).unwrap();
         assert!(r.enabled);

@@ -1,5 +1,5 @@
-//! Redimensionar imagens em lote com o FFmpeg já gerido (estudo 29,
-//! Image Resizer do PowerToys): largura fixa, porcentagem ou "caber em".
+//! Resize images in batch with the already-managed FFmpeg (study 29,
+//! PowerToys Image Resizer): fixed width, percentage, or "fit inside".
 
 use std::path::{Path, PathBuf};
 
@@ -14,7 +14,7 @@ pub struct ResizeOptions {
     pub value: u32,
     #[serde(default)]
     pub value2: u32,
-    /// "" mantém a extensão; "jpg" | "png" | "webp"
+    /// "" keeps the extension; "jpg" | "png" | "webp"
     #[serde(default)]
     pub format: String,
     #[serde(default = "default_quality")]
@@ -54,7 +54,7 @@ pub async fn run(opts: ResizeOptions, progress: super::ProgressFn) -> anyhow::Re
     let mut outputs = Vec::new();
     let mut failed = Vec::new();
     let total = opts.inputs.len() as u64;
-    // ffmpeg: -q:v 2 (melhor) … 31 (pior) para JPEG; mapeia 100..0 → 2..31
+    // ffmpeg: -q:v 2 (best) … 31 (worst) for JPEG; maps 100..0 → 2..31
     let qv = (2.0 + (100.0 - opts.quality.min(100) as f64) * 0.29).round() as u32;
     for (i, input) in opts.inputs.iter().enumerate() {
         super::report(
@@ -82,7 +82,7 @@ pub async fn run(opts: ResizeOptions, progress: super::ProgressFn) -> anyhow::Re
         let stem = inp
             .file_stem()
             .map(|s| s.to_string_lossy().to_string())
-            .unwrap_or_else(|| "imagem".into());
+            .unwrap_or_else(|| "image".into());
         let suffix = if opts.suffix.is_empty() {
             "-resized"
         } else {
@@ -109,7 +109,7 @@ pub async fn run(opts: ResizeOptions, progress: super::ProgressFn) -> anyhow::Re
                 );
                 failed.push(input.clone());
             }
-            Err(e) => return Err(anyhow!("ffmpeg nao iniciou: {}", e)),
+            Err(e) => return Err(anyhow!("ffmpeg failed to start: {}", e)),
         }
     }
     super::report(&progress, "resize", "done", total, Some(total), None);

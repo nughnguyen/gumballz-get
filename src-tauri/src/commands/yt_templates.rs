@@ -25,9 +25,9 @@ fn templates_path() -> PathBuf {
 }
 
 fn load() -> YtTemplateStore {
-    // `load()` é seguido de `save()` nos comandos de escrita, então devolver
-    // default em cima de um arquivo corrompido apagaria os templates.
-    crate::core::state_file::load_or_quarantine(&templates_path(), "templates do yt-dlp")
+    // `load()` is followed by `save()` in the write commands, so returning a
+    // default over a corrupted file would wipe the templates.
+    crate::core::state_file::load_or_quarantine(&templates_path(), "yt-dlp templates")
         .unwrap_or_default()
 }
 

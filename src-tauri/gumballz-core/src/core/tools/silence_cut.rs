@@ -1,18 +1,18 @@
-//! Cortar silêncio (dead air) de gravação de aula, podcast e vídeo de tela.
+//! Cut silence (dead air) from lecture recordings, podcasts and screen videos.
 //!
-//! `silenceremove` do FFmpeg é filtro de áudio: usar direto num vídeo
-//! dessincroniza a imagem. Aqui o silêncio é só **detectado** (`silencedetect`),
-//! invertido em trechos de fala e cortado com `trim`/`atrim` + `concat`, que
-//! corta as duas trilhas na mesma marca. Sobra um `padding` de cada lado para
-//! não decepar o ataque da palavra.
+//! FFmpeg's `silenceremove` is an audio filter: using it straight on a video
+//! desyncs the picture. Here silence is only **detected** (`silencedetect`),
+//! inverted into speech spans and cut with `trim`/`atrim` + `concat`, which
+//! cuts both tracks at the same mark. A `padding` is left on each side so as
+//! not to chop off the attack of a word.
 
 use std::path::{Path, PathBuf};
 
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 
-/// Filtro grande demais trava o FFmpeg (e a linha de comando do Windows).
-/// Acima disso os silêncios mais curtos são devolvidos ao vídeo.
+/// A filter too big stalls FFmpeg (and the Windows command line).
+/// Above this, the shortest silences are returned to the video.
 const MAX_SEGMENTS: usize = 150;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -30,16 +30,16 @@ impl Span {
 #[derive(Debug, Clone, Deserialize)]
 pub struct SilenceOptions {
     pub inputs: Vec<String>,
-    /// Limiar em dB abaixo do qual é silêncio (-30 é conversa normal).
+    /// Threshold in dB below which it is silence (-30 is normal conversation).
     #[serde(default = "default_threshold")]
     pub threshold_db: f64,
-    /// Silêncio mais curto que isso não vale corte, em segundos.
+    /// Silence shorter than this is not worth cutting, in seconds.
     #[serde(default = "default_min_silence")]
     pub min_silence: f64,
-    /// Quanto de silêncio fica de cada lado da fala, em segundos.
+    /// How much silence stays on each side of the speech, in seconds.
     #[serde(default = "default_padding")]
     pub padding: f64,
-    /// Só medir e relatar, sem escrever arquivo novo.
+    /// Only measure and report, without writing a new file.
     #[serde(default)]
     pub dry_run: bool,
     #[serde(default)]
@@ -66,7 +66,7 @@ pub struct SilenceItem {
     pub duration_after: f64,
     pub seconds_removed: f64,
     pub cuts: usize,
-    /// Silêncios que ficaram no vídeo por causa do limite de segmentos.
+    /// Silences that stayed in the video because of the segment limit.
     pub skipped_short: usize,
     pub ok: bool,
     pub error: Option<String>,
@@ -77,10 +77,10 @@ pub struct SilenceResult {
     pub items: Vec<SilenceItem>,
 }
 
-/// Lê `silence_start` / `silence_end` do stderr do FFmpeg.
+/// Reads `silence_start` / `silence_end` from FFmpeg's stderr.
 ///
-/// Um `silence_start` sem par significa que o arquivo termina em silêncio: com
-/// a duração total em mãos, o par fecha no fim do arquivo.
+/// A `silence_start` without a pair means the file ends in silence: with
+/// the total duration in hand, the pair closes at the end of the file.
 pub fn parse_spans(stderr: &str, total: f64) -> Vec<Span> {
     let mut spans = Vec::new();
     let mut open: Option<f64> = None;
@@ -112,10 +112,10 @@ fn field_after(line: &str, key: &str) -> Option<f64> {
         .ok()
 }
 
-/// Devolve os silêncios em ordem de duração, cortando os mais curtos até
-/// caber no limite de segmentos. O segundo valor é quantos ficaram de fora.
+/// Returns the silences in duration order, cutting the shortest until they
+/// fit the segment limit. The second value is how many were left out.
 pub fn cap_spans(mut spans: Vec<Span>, max_segments: usize) -> (Vec<Span>, usize) {
-    // Cada silêncio no meio gera no máximo um segmento a mais de fala.
+    // Each silence in the middle yields at most one extra speech segment.
     if spans.len() < max_segments {
         return (spans, 0);
     }
@@ -127,16 +127,16 @@ pub fn cap_spans(mut spans: Vec<Span>, max_segments: usize) -> (Vec<Span>, usize
     (spans, dropped)
 }
 
-/// Inverte os silêncios em trechos de fala, devolvendo o padding às pontas.
+/// Inverts the silences into speech spans, giving the padding back to the ends.
 pub fn keep_ranges(spans: &[Span], total: f64, padding: f64) -> Vec<Span> {
     let mut keeps: Vec<Span> = Vec::new();
     let mut cursor = 0.0f64;
     for s in spans {
         let cut_start = (s.start + padding).min(total);
         let cut_end = (s.end - padding).max(cut_start);
-        // Só vira trecho se houver fala entre o cursor e este silêncio; um
-        // silêncio que começa no cursor (arquivo que abre em silêncio, ou dois
-        // silêncios colados) só renderia o próprio padding.
+        // It only becomes a span if there is speech between the cursor and this silence; a
+        // silence that starts at the cursor (a file that opens in silence, or two
+        // silences stuck together) would only yield its own padding.
         if s.start > cursor {
             keeps.push(Span {
                 start: cursor,
@@ -151,12 +151,12 @@ pub fn keep_ranges(spans: &[Span], total: f64, padding: f64) -> Vec<Span> {
             end: total,
         });
     }
-    // Trecho microscópico só engorda o filtro sem virar som audível.
+    // A microscopic span only fattens the filter without becoming audible sound.
     keeps.retain(|k| k.duration() >= 0.05);
     keeps
 }
 
-/// Monta o `filter_complex` que corta e emenda as duas trilhas.
+/// Builds the `filter_complex` that cuts and joins the two tracks.
 pub fn build_filter(keeps: &[Span], has_audio: bool) -> String {
     let mut parts = Vec::new();
     for (i, k) in keeps.iter().enumerate() {
@@ -212,7 +212,7 @@ async fn detect(
         ])
         .output()
         .await
-        .map_err(|e| anyhow!("ffmpeg nao iniciou: {}", e))?;
+        .map_err(|e| anyhow!("ffmpeg did not start: {}", e))?;
     Ok(String::from_utf8_lossy(&out.stderr).to_string())
 }
 
@@ -221,11 +221,11 @@ async fn cut_one(ffmpeg: &Path, opts: &SilenceOptions, input: &str) -> anyhow::R
     let probe = crate::core::ffmpeg::probe(inp).await?;
     let total = probe.duration_seconds;
     if total <= 0.0 {
-        return Err(anyhow!("não consegui medir a duração"));
+        return Err(anyhow!("could not measure the duration"));
     }
     let has_audio = probe.streams.iter().any(|s| s.codec_type == "audio");
     if !has_audio {
-        return Err(anyhow!("o arquivo não tem trilha de áudio"));
+        return Err(anyhow!("the file has no audio track"));
     }
 
     let stderr = detect(ffmpeg, inp, opts.threshold_db, opts.min_silence).await?;
@@ -259,9 +259,9 @@ async fn cut_one(ffmpeg: &Path, opts: &SilenceOptions, input: &str) -> anyhow::R
     let stem = inp
         .file_stem()
         .map(|s| s.to_string_lossy().to_string())
-        .unwrap_or_else(|| "gravacao".into());
+        .unwrap_or_else(|| "recording".into());
     let suffix = if opts.suffix.is_empty() {
-        "-sem-silencio"
+        "-no-silence"
     } else {
         opts.suffix.as_str()
     };
@@ -291,7 +291,7 @@ async fn cut_one(ffmpeg: &Path, opts: &SilenceOptions, input: &str) -> anyhow::R
         .arg(&output)
         .output()
         .await
-        .map_err(|e| anyhow!("ffmpeg nao iniciou: {}", e))?;
+        .map_err(|e| anyhow!("ffmpeg did not start: {}", e))?;
     if !out.status.success() {
         return Err(anyhow!("{}", String::from_utf8_lossy(&out.stderr).trim()));
     }
@@ -379,7 +379,7 @@ mod tests {
                 end: 42.0
             }]
         );
-        // Sem saber a duração não dá para fechar o par.
+        // Without knowing the duration the pair cannot be closed.
         assert!(parse_spans(log, 0.0).is_empty());
     }
 
@@ -388,8 +388,8 @@ mod tests {
         let spans = parse_spans(LOG, 12.0);
         let keeps = keep_ranges(&spans, 12.0, 0.1);
         assert_eq!(keeps.len(), 3);
-        assert!((keeps[0].end - 2.6).abs() < 1e-9, "padding do começo");
-        assert!((keeps[1].start - 4.9).abs() < 1e-9, "padding do fim");
+        assert!((keeps[0].end - 2.6).abs() < 1e-9, "padding at the start");
+        assert!((keeps[1].start - 4.9).abs() < 1e-9, "end padding");
         assert!((keeps[2].end - 12.0).abs() < 1e-9);
         let kept: f64 = keeps.iter().map(|k| k.duration()).sum();
         assert!(kept < 12.0 && kept > 8.0, "sobrou {}", kept);
@@ -429,7 +429,7 @@ mod tests {
         let (kept, dropped) = cap_spans(spans, 4);
         assert_eq!(dropped, 7);
         assert_eq!(kept.len(), 3);
-        // Sobraram os três mais longos, de volta em ordem de tempo.
+        // The three longest remain, back in time order.
         assert!(kept[0].start < kept[1].start && kept[1].start < kept[2].start);
         assert!(kept.iter().all(|s| s.duration() >= 8.0));
     }
@@ -463,8 +463,8 @@ mod tests {
         assert!(f.contains("[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa]"));
     }
 
-    /// Gera um clipe com um buraco de silêncio conhecido (3 s a 6 s) e
-    /// confere que o corte acha e remove exatamente aquilo.
+    /// Generates a clip with a known silence hole (3 s to 6 s) and
+    /// checks that the cut finds and removes exactly that.
     /// `cargo test -p gumballz-core --lib -- --ignored live_silence`
     #[tokio::test]
     #[ignore]
@@ -501,7 +501,7 @@ mod tests {
             .output()
             .await
             .unwrap();
-        assert!(gen.status.success(), "não gerei o clipe de teste");
+        assert!(gen.status.success(), "did not generate the test clip");
 
         let opts = SilenceOptions {
             inputs: vec![src.to_string_lossy().to_string()],
@@ -517,7 +517,7 @@ mod tests {
             .unwrap();
         let item = &res.items[0];
         assert!(item.ok, "falhou: {:?}", item.error);
-        assert_eq!(item.cuts, 1, "era para achar um silêncio só");
+        assert_eq!(item.cuts, 1, "it was supposed to find just one silence");
         assert!(
             (item.seconds_removed - 2.8).abs() < 0.4,
             "removeu {} s, esperado ~2,8",
@@ -530,17 +530,17 @@ mod tests {
             .unwrap();
         assert!(
             (probe.duration_seconds - item.duration_after).abs() < 0.5,
-            "duração do arquivo ({}) não bate com o relatado ({})",
+            "file duration ({}) does not match the reported one ({})",
             probe.duration_seconds,
             item.duration_after
         );
         assert!(
             probe.streams.iter().any(|s| s.codec_type == "audio"),
-            "perdeu o áudio"
+            "lost the audio"
         );
         assert!(
             probe.streams.iter().any(|s| s.codec_type == "video"),
-            "perdeu o vídeo"
+            "lost the video"
         );
         eprintln!(
             "{:.2}s → {:.2}s ({} corte, {:.2}s fora)",

@@ -1,19 +1,19 @@
-//! TikTok (categoria `tiktok`). Três ferramentas que dividem o mesmo alicerce:
-//! leitura de link, freio de requisições, pote de cookies do bucket
-//! `tiktok.com` e a chamada do yt-dlp já gerido pelo app.
+//! TikTok (`tiktok` category). Three tools sharing the same foundation:
+//! link reading, request throttling, the `tiktok.com` bucket cookie jar
+//! and the call to the app-managed yt-dlp.
 //!
-//! - `download.rs`: vídeo sem marca d'água, em lote (lista colada, `.txt` ou
-//!   perfil inteiro), pulando o que já existe no destino.
-//! - `sound.rs`: só o áudio — o "som" do vídeo — com a atribuição gravada nas
-//!   tags do arquivo e num sidecar de texto.
-//! - `favorites.rs`: índice (CSV/JSON) dos favoritos e da mídia do perfil,
-//!   com download opcional.
+//! - `download.rs`: video without watermark, in batch (pasted list, `.txt` or
+//!   whole profile), skipping what already exists in the destination.
+//! - `sound.rs`: just the audio — the video's "sound" — with the attribution written in the
+//!   file's tags and in a text sidecar.
+//! - `favorites.rs`: index (CSV/JSON) of favorites and profile media,
+//!   with optional download.
 //!
-//! Sobre a marca d'água: o yt-dlp entrega o TikTok com um formato chamado
-//! `download` (o `download_addr`, o arquivo que o próprio app oferece para
-//! salvar — esse **tem** marca) e vários formatos vindos do `play_addr`
-//! (`h264_720p_…`, `bytevc1_1080p_…`) que **não** têm. Por isso o seletor
-//! padrão exclui o formato `download` em vez de confiar na ordem.
+//! On the watermark: yt-dlp delivers TikTok with a format called
+//! `download` (the `download_addr`, the file the app itself offers to
+//! save — that one **has** the watermark) and several formats from `play_addr`
+//! (`h264_720p_…`, `bytevc1_1080p_…`) that **do not** have it. That is why the default
+//! selector excludes the `download` format instead of trusting the order.
 
 pub mod download;
 pub mod favorites;
@@ -28,27 +28,27 @@ use anyhow::{anyhow, Result};
 
 use crate::core::tools::{report, ProgressFn};
 
-/// Bucket de cookies do gerenciador. Igual ao `PlatformKind::Tiktok`.
+/// Manager's cookie bucket. Same as `PlatformKind::Tiktok`.
 pub const DOMAIN: &str = "tiktok.com";
 
-/// Marcador que o yt-dlp imprime com o caminho final de cada arquivo.
+/// Marker yt-dlp prints with the final path of each file.
 pub const MARK: &str = "GUMBALLZ_FILEPATH:";
 
 // ───────────────────────── leitura de link ─────────────────────────
 
-/// O que um link do TikTok aponta.
+/// What a TikTok link points to.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Target {
-    /// `/@usuario/video/<id>` e `/@usuario/photo/<id>`.
+    /// `/@user/video/<id>` and `/@user/photo/<id>`.
     Video { user: Option<String>, id: String },
-    /// `vm.tiktok.com/<código>`, `vt.tiktok.com/<código>` e `/t/<código>`:
-    /// só um GET (ou o próprio yt-dlp) diz para onde vai.
+    /// `vm.tiktok.com/<code>`, `vt.tiktok.com/<code>` and `/t/<code>`:
+    /// only a GET (or yt-dlp itself) says where it goes.
     Short { url: String },
-    /// Perfil: `/@usuario`.
+    /// Profile: `/@user`.
     User { name: String },
-    /// Coleção salva: `/@usuario/collection/<slug>-<id>`.
+    /// Saved collection: `/@user/collection/<slug>-<id>`.
     Collection { url: String },
-    /// Página de um som: `/music/<slug>-<id>`.
+    /// A sound's page: `/music/<slug>-<id>`.
     Music { url: String },
 }
 
@@ -56,7 +56,7 @@ fn is_tiktok_host(host: &str) -> bool {
     host == "tiktok.com" || host.ends_with(".tiktok.com")
 }
 
-/// Deixa a entrada com esquema para o `url::Url` conseguir ler.
+/// Gives the input a scheme so `url::Url` can read it.
 fn with_scheme(input: &str) -> String {
     let s = input.trim();
     if s.starts_with("http://") || s.starts_with("https://") {
@@ -71,20 +71,19 @@ fn with_scheme(input: &str) -> String {
     format!("https://{}", s)
 }
 
-/// O id de um vídeo é um inteiro longo (Snowflake do ByteDance).
+/// A video's id is a long integer (ByteDance Snowflake).
 fn is_video_id(s: &str) -> bool {
     s.len() >= 15 && s.len() <= 25 && s.chars().all(|c| c.is_ascii_digit())
 }
 
-/// Lê qualquer forma de link do TikTok: permalink, link curto de
-/// compartilhamento, perfil, coleção, som — ou só o id do vídeo. A query de
-/// rastreio (`?is_from_webapp=1&sender_device=pc&…`) é ignorada.
+/// Reads any form of TikTok link: permalink, short share link, profile, collection, sound — or just the video id. The tracking
+/// query (`?is_from_webapp=1&sender_device=pc&…`) is ignored.
 pub fn parse_target(input: &str) -> Option<Target> {
     let raw = input.trim();
     if raw.is_empty() {
         return None;
     }
-    // Só o id, colado da barra de endereço.
+    // Just the id, pasted from the address bar.
     if !raw.contains('/') && !raw.contains('.') && is_video_id(raw) {
         return Some(Target::Video {
             user: None,
@@ -114,7 +113,7 @@ pub fn parse_target(input: &str) -> Option<Target> {
         .unwrap_or_default();
     let at = |i: usize| segs.get(i).map(|s| s.as_str()).unwrap_or_default();
 
-    // Links curtos: o host manda, o caminho é só o código.
+    // Short links: the host rules, the path is just the code.
     if host == "vm.tiktok.com" || host == "vt.tiktok.com" {
         if at(0).is_empty() {
             return None;
@@ -163,7 +162,7 @@ pub fn parse_target(input: &str) -> Option<Target> {
     None
 }
 
-/// O id do vídeo, quando o link já o carrega.
+/// The video's id, when the link already carries it.
 pub fn video_id(input: &str) -> Option<String> {
     match parse_target(input)? {
         Target::Video { id, .. } => Some(id),
@@ -171,7 +170,7 @@ pub fn video_id(input: &str) -> Option<String> {
     }
 }
 
-/// A URL limpa (sem query de rastreio) que vai para o yt-dlp.
+/// The clean URL (without a tracking query) that goes to yt-dlp.
 pub fn canonical_url(t: &Target) -> String {
     match t {
         Target::Video { user, id } => match user {
@@ -185,10 +184,10 @@ pub fn canonical_url(t: &Target) -> String {
     }
 }
 
-/// Normaliza uma lista colada (uma URL por linha, vírgula ou espaço) em links
-/// de **vídeo** do TikTok, sem repetir o mesmo vídeo duas vezes. Perfil,
-/// coleção e som não entram: eles têm campo próprio, porque expandi-los custa
-/// rede.
+/// Normalizes a pasted list (one URL per line, comma or space) into TikTok
+/// **video** links, without repeating the same video twice. Profile,
+/// collection and sound do not enter: they have their own field, because expanding them costs
+/// network.
 pub fn expand_inputs(text: &str) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     let mut seen: Vec<String> = Vec::new();
@@ -204,7 +203,7 @@ pub fn expand_inputs(text: &str) -> Vec<String> {
             continue;
         }
         let url = canonical_url(&target);
-        // A chave de repetição é o id quando existe; senão a própria URL.
+        // The dedup key is the id when there is one; otherwise the URL itself.
         let key = match &target {
             Target::Video { id, .. } => id.clone(),
             _ => url.clone(),
@@ -220,7 +219,7 @@ pub fn expand_inputs(text: &str) -> Vec<String> {
 
 // ───────────────────────── nome de arquivo ─────────────────────────
 
-/// `usuario-<id>` quando dá, só o id quando o link não diz o autor.
+/// `user-<id>` when possible, just the id when the link does not say the author.
 pub fn base_name(user: Option<&str>, id: &str) -> String {
     match user.map(|u| u.trim()).filter(|u| !u.is_empty()) {
         Some(u) => crate::core::tools::sanitize_name(&format!("{}-{}", u, id)),
@@ -228,8 +227,8 @@ pub fn base_name(user: Option<&str>, id: &str) -> String {
     }
 }
 
-/// Se já existe no destino um arquivo com esse nome-base (qualquer extensão).
-/// É o que sustenta o "pular o que já baixei" do modo em lote.
+/// Whether a file with this base name already exists in the destination (any extension).
+/// It is what sustains the "skip what I already downloaded" of batch mode.
 pub fn has_stem(dest: &Path, stem: &str) -> bool {
     let Ok(entries) = std::fs::read_dir(dest) else {
         return false;
@@ -241,7 +240,7 @@ pub fn has_stem(dest: &Path, stem: &str) -> bool {
             return true;
         }
         if let Some(rest) = name.strip_prefix(stem) {
-            // `.part` e `.ytdl` são sobra de download interrompido: não contam.
+            // `.part` and `.ytdl` are leftovers of an interrupted download: they do not count.
             if rest.starts_with('.') && !rest.ends_with(".part") && !rest.ends_with(".ytdl") {
                 return true;
             }
@@ -252,7 +251,7 @@ pub fn has_stem(dest: &Path, stem: &str) -> bool {
 
 // ───────────────────────── som ─────────────────────────
 
-/// Slug de título para a URL do som: minúsculas, só letras, números e hífen.
+/// Title slug for the sound URL: lowercase, only letters, numbers and hyphen.
 pub fn slugify(s: &str) -> String {
     let mut out = String::new();
     let mut dash = false;
@@ -286,7 +285,7 @@ pub fn sound_url(title: &str, id: &str) -> Option<String> {
     ))
 }
 
-/// O objeto `music` embutido na página do vídeo.
+/// The `music` object embedded in the video page.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Music {
     pub id: String,
@@ -297,7 +296,7 @@ pub struct Music {
     pub play_url: String,
 }
 
-/// Recorta o primeiro objeto JSON equilibrado a partir de uma posição.
+/// Cuts the first balanced JSON object from a position.
 fn balanced_object(hay: &str, from: usize) -> Option<&str> {
     let bytes = hay.as_bytes();
     if bytes.get(from) != Some(&b'{') {
@@ -332,9 +331,9 @@ fn balanced_object(hay: &str, from: usize) -> Option<&str> {
     None
 }
 
-/// Lê `"music":{…}` de dentro do HTML da página do vídeo. É esse objeto que
-/// carrega o id do som — sem ele não dá para montar o link de atribuição,
-/// porque o yt-dlp só devolve o nome (`track`) e o autor (`artist`).
+/// Reads `"music":{…}` from inside the video page's HTML. That object is what
+/// carries the sound id — without it the attribution link cannot be built,
+/// because yt-dlp only returns the name (`track`) and the author (`artist`).
 pub fn parse_music(html: &str) -> Option<Music> {
     let key = "\"music\":{";
     let at = html.find(key)? + key.len() - 1;
@@ -362,17 +361,17 @@ pub fn parse_music(html: &str) -> Option<Music> {
 
 // ───────────────────────── cookies ─────────────────────────
 
-/// Só o que é do bucket `tiktok.com`. Cookie de outro domínio no mesmo
-/// arquivo (o gerenciador grava um arquivo por conta, mas nada impede que o
-/// usuário aponte um arquivo qualquer) não entra.
+/// Only what is in the `tiktok.com` bucket. A cookie from another domain in the same
+/// file (the manager writes one file per account, but nothing stops the
+/// user from pointing at any file) does not enter.
 pub fn is_tiktok_cookie_domain(domain: &str) -> bool {
     let d = domain.trim_start_matches('.').to_ascii_lowercase();
     d == DOMAIN || d.ends_with(".tiktok.com")
 }
 
-/// Filtra os cookies do bucket `tiktok.com` de um arquivo Netscape e monta o
-/// pote do cliente. Reusa o parser da sessão do Instagram — é o mesmo formato
-/// que o gerenciador de cookies grava para todo mundo.
+/// Filters the `tiktok.com` bucket cookies from a Netscape file and builds the
+/// client jar. It reuses the Instagram session's parser — it is the same format
+/// the cookie manager writes for everyone.
 pub fn jar_from_netscape(content: &str) -> (Arc<reqwest::cookie::Jar>, usize) {
     let jar = reqwest::cookie::Jar::default();
     let mut n = 0;
@@ -395,8 +394,8 @@ pub fn jar_from_netscape(content: &str) -> (Arc<reqwest::cookie::Jar>, usize) {
     (Arc::new(jar), n)
 }
 
-/// Reescreve o arquivo Netscape ficando só com o bucket `tiktok.com`, no
-/// formato que o yt-dlp lê. Sai como texto para o teste conferir sem disco.
+/// Rewrites the Netscape file keeping only the `tiktok.com` bucket, in the
+/// format yt-dlp reads. It comes out as text so the test can check without disk.
 pub fn netscape_for_ytdlp(content: &str) -> String {
     let mut out = String::from("# Netscape HTTP Cookie File\n");
     for raw in content.lines() {
@@ -415,8 +414,8 @@ pub fn netscape_for_ytdlp(content: &str) -> String {
     out
 }
 
-/// Grava o arquivo de cookies temporário que o yt-dlp recebe em `--cookies`.
-/// Devolve `None` quando não sobrou cookie nenhum do TikTok.
+/// Writes the temporary cookie file that yt-dlp receives in `--cookies`.
+/// Returns `None` when no TikTok cookie is left.
 pub fn write_cookie_file(content: &str) -> Option<PathBuf> {
     let text = netscape_for_ytdlp(content);
     if text.lines().filter(|l| !l.starts_with('#')).count() == 0 {
@@ -429,7 +428,7 @@ pub fn write_cookie_file(content: &str) -> Option<PathBuf> {
     Some(path)
 }
 
-/// Apaga o arquivo de cookies temporário assim que o processo termina.
+/// Deletes the temporary cookie file as soon as the process ends.
 pub struct TempCookies(Option<PathBuf>);
 
 impl TempCookies {
@@ -452,8 +451,8 @@ impl Drop for TempCookies {
     }
 }
 
-/// Cliente com o pote de cookies do TikTok e cabeçalhos de navegador. O site
-/// devolve uma casca vazia para quem não parece navegador.
+/// Client with the TikTok cookie jar and browser headers. The site
+/// returns an empty shell to whoever does not look like a browser.
 pub fn cookie_client(session: Option<&str>) -> Result<(reqwest::Client, bool)> {
     use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, ACCEPT_LANGUAGE, USER_AGENT};
     let mut headers = HeaderMap::new();
@@ -487,9 +486,9 @@ pub fn cookie_client(session: Option<&str>) -> Result<(reqwest::Client, bool)> {
 
 // ───────────────────────── paciência ─────────────────────────
 
-/// Freio entre requisições, no espírito do `Fetcher` do Reddit: uma de cada
-/// vez, com espera mínima entre elas. O TikTok responde com uma casca vazia
-/// (ou nada) quando a gente insiste rápido demais.
+/// Throttle between requests, in the spirit of Reddit's `Fetcher`: one at a
+/// time, with a minimum wait between them. TikTok answers with an empty shell
+/// (or nothing) when we insist too fast.
 pub struct Pacer {
     delay: Duration,
     last: tokio::sync::Mutex<Option<Instant>>,
@@ -524,35 +523,35 @@ impl Pacer {
 
 // ───────────────────────── yt-dlp ─────────────────────────
 
-/// Seletor de formato.
+/// Format selector.
 ///
-/// O formato `download` do extrator de TikTok é o `download_addr`: o arquivo
-/// que o app oferece para salvar, e é justamente ele que vem com a marca
-/// d'água. Todo o resto (`h264_720p_…`, `bytevc1_1080p_…`) sai do `play_addr`
-/// e é limpo. Por isso o padrão é **excluir** `download` em vez de escolher um
-/// nome fixo de formato — se um dia o extrator renomear os limpos, a exclusão
-/// continua valendo, e o `/bv*+ba/b` no fim é a rede de segurança.
+/// The TikTok extractor's `download` format is the `download_addr`: the file
+/// the app offers to save, and it is precisely the one that comes with the
+/// watermark. Everything else (`h264_720p_…`, `bytevc1_1080p_…`) comes from `play_addr`
+/// and is clean. That is why the default is to **exclude** `download` instead of picking a
+/// fixed format name — if one day the extractor renames the clean ones, the exclusion
+/// still holds, and the `/bv*+ba/b` at the end is the safety net.
 pub fn format_selector(watermark: bool, quality: &str) -> String {
     if watermark {
         return "download/b".to_string();
     }
     match quality {
-        // h264 para quem precisa de compatibilidade (o 1080p do TikTok é h265).
+        // h264 for whoever needs compatibility (TikTok's 1080p is h265).
         "h264" => "bv*[vcodec^=avc][format_id!*=download]+ba/b[vcodec^=avc][format_id!*=download]/bv*[format_id!*=download]+ba/b[format_id!*=download]/bv*+ba/b".to_string(),
         _ => "bv*[format_id!*=download]+ba[format_id!*=download]/b[format_id!*=download]/bv*+ba/b".to_string(),
     }
 }
 
-/// O que se quer do yt-dlp: o vídeo (com o seletor de formato) ou só o som
-/// (com a extensão do áudio).
+/// What is wanted from yt-dlp: the video (with the format selector) or just the sound
+/// (with the audio extension).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode<'a> {
     Video { selector: &'a str },
     Audio { format: &'a str },
 }
 
-/// Argumentos do yt-dlp para um vídeo. Separado para o teste conferir sem
-/// precisar do binário.
+/// yt-dlp arguments for a video. Separate so the test can check without
+/// needing the binary.
 pub fn ytdlp_args(
     url: &str,
     dest: &Path,
@@ -579,7 +578,7 @@ pub fn ytdlp_args(
     ];
     match mode {
         Mode::Audio { format } => {
-            // O formato `audio` do extrator é o som do vídeo em mp3.
+            // The extractor's `audio` format is the video's sound as mp3.
             args.push("-f".to_string());
             args.push("ba[format_id=audio]/ba/b".to_string());
             args.push("-x".to_string());
@@ -608,8 +607,8 @@ pub fn ytdlp_args(
     args
 }
 
-/// Argumentos da listagem: metadados de um perfil/coleção inteiros numa só
-/// chamada, sem baixar nada.
+/// Listing arguments: metadata of a whole profile/collection in a single
+/// call, without downloading anything.
 pub fn ytdlp_list_args(url: &str, limit: u32, cookies: Option<&Path>) -> Vec<String> {
     let mut args: Vec<String> = vec![
         "--ignore-config".to_string(),
@@ -631,7 +630,7 @@ pub fn ytdlp_list_args(url: &str, limit: u32, cookies: Option<&Path>) -> Vec<Str
     args
 }
 
-/// Percentual de uma linha `[download]  12.3% of ...`.
+/// Percentage of a `[download]  12.3% of ...` line.
 pub fn parse_progress(line: &str) -> Option<f64> {
     let l = line.trim();
     if !l.starts_with("[download]") {
@@ -641,7 +640,7 @@ pub fn parse_progress(line: &str) -> Option<f64> {
     pct.trim_end_matches('%').parse::<f64>().ok()
 }
 
-/// Última linha útil de erro do yt-dlp, para virar "motivo" no resumo.
+/// Last useful yt-dlp error line, to become the "reason" in the summary.
 pub fn short_reason(tail: &str) -> String {
     let line = tail
         .lines()
@@ -659,7 +658,7 @@ pub fn short_reason(tail: &str) -> String {
     };
     let mut s: String = line.chars().take(220).collect();
     if s.is_empty() {
-        s = "o yt-dlp não baixou nada".to_string();
+        s = "yt-dlp downloaded nothing".to_string();
     }
     s
 }
@@ -667,10 +666,10 @@ pub fn short_reason(tail: &str) -> String {
 async fn ytdlp_binary() -> Result<PathBuf> {
     crate::core::ytdlp::ensure_ytdlp()
         .await
-        .map_err(|e| anyhow!("o yt-dlp não está disponível: {}", e))
+        .map_err(|e| anyhow!("yt-dlp is not available: {}", e))
 }
 
-/// Roda o yt-dlp e devolve (arquivos criados, últimas linhas de erro).
+/// Runs yt-dlp and returns (files created, last error lines).
 pub async fn run_ytdlp(
     args: &[String],
     id: &str,
@@ -685,7 +684,7 @@ pub async fn run_ytdlp(
         .stderr(std::process::Stdio::piped());
     let mut child = cmd
         .spawn()
-        .map_err(|e| anyhow!("não foi possível iniciar o yt-dlp: {}", e))?;
+        .map_err(|e| anyhow!("could not start yt-dlp: {}", e))?;
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
     let p = progress.clone();
@@ -734,7 +733,7 @@ pub async fn run_ytdlp(
     Ok((files, tail))
 }
 
-/// Roda o yt-dlp só para ler JSON (metadados ou listagem).
+/// Runs yt-dlp only to read JSON (metadata or listing).
 pub async fn ytdlp_json(args: &[String]) -> Result<serde_json::Value> {
     let bin = ytdlp_binary().await?;
     let mut cmd = crate::core::ytdlp::ytdlp_command(&bin);
@@ -745,7 +744,7 @@ pub async fn ytdlp_json(args: &[String]) -> Result<serde_json::Value> {
     let out = cmd
         .output()
         .await
-        .map_err(|e| anyhow!("não foi possível iniciar o yt-dlp: {}", e))?;
+        .map_err(|e| anyhow!("could not start yt-dlp: {}", e))?;
     let text = String::from_utf8_lossy(&out.stdout);
     let line = text
         .lines()
@@ -756,7 +755,7 @@ pub async fn ytdlp_json(args: &[String]) -> Result<serde_json::Value> {
         let tail = String::from_utf8_lossy(&out.stderr).to_string();
         return Err(anyhow!("{}", short_reason(&tail)));
     }
-    serde_json::from_str(line).map_err(|e| anyhow!("o JSON do yt-dlp não foi lido: {}", e))
+    serde_json::from_str(line).map_err(|e| anyhow!("the yt-dlp JSON was not read: {}", e))
 }
 
 // ───────────────────────── formatação ─────────────────────────
@@ -767,7 +766,7 @@ pub fn fmt_utc(ts: i64) -> String {
         .unwrap_or_default()
 }
 
-/// Escapa um campo de CSV do jeito que a planilha espera.
+/// Escapes a CSV field the way the spreadsheet expects.
 pub fn csv_escape(s: &str) -> String {
     if s.contains([',', '"', '\n', '\r']) {
         format!("\"{}\"", s.replace('"', "\"\""))
@@ -945,7 +944,7 @@ mod tests {
             .unwrap_or_default();
         assert!(
             f.contains("format_id!*=download"),
-            "seletor sem a exclusão da marca: {}",
+            "selector without the brand exclusion: {}",
             f
         );
         assert_eq!(
@@ -1016,7 +1015,7 @@ mod tests {
             short_reason("algo\nERROR: [TikTok] 123: Video not available"),
             "123: Video not available"
         );
-        assert_eq!(short_reason(""), "o yt-dlp não baixou nada");
+        assert_eq!(short_reason(""), "yt-dlp downloaded nothing");
     }
 
     // ── som ──
@@ -1071,7 +1070,7 @@ mod tests {
             .instagram.com\tTRUE\t/\tTRUE\t9999999999\tsessionid\tNAO\n\
             .tiktokfake.com\tTRUE\t/\tTRUE\t9999999999\tx\tNAO\n";
         let (_, n) = jar_from_netscape(content);
-        assert_eq!(n, 3, "só os três do tiktok.com podem entrar");
+        assert_eq!(n, 3, "only the three from tiktok.com can get in");
 
         let filtrado = netscape_for_ytdlp(content);
         assert!(filtrado.contains("sessionid\tSEGREDO"));
@@ -1079,10 +1078,10 @@ mod tests {
         assert!(filtrado.contains("ttwid"));
         assert!(!filtrado.contains("instagram"));
         assert!(!filtrado.contains("tiktokfake"));
-        // O `#HttpOnly_` continua na frente da linha (é assim que o formato
-        // marca o cookie, e o yt-dlp lê): a conta é de linhas de cookie, não
-        // de linhas sem `#`.
-        assert_eq!(filtrado.lines().count(), 4, "cabeçalho mais três cookies");
+        // The `#HttpOnly_` stays at the front of the line (that is how the format
+        // marks the cookie, and yt-dlp reads it): the count is of cookie lines, not
+        // of lines without `#`.
+        assert_eq!(filtrado.lines().count(), 4, "header plus three cookies");
         assert!(filtrado.starts_with("# Netscape HTTP Cookie File\n"));
     }
 
@@ -1118,7 +1117,7 @@ mod tests {
         assert!(std::fs::write(dir.join("a-1.mp4.part"), b"x").is_ok());
         assert!(
             !has_stem(&dir, "a-1"),
-            "arquivo .part não conta como pronto"
+            ".part file does not count as done"
         );
         assert!(std::fs::write(dir.join("a-1.mp4"), b"x").is_ok());
         assert!(has_stem(&dir, "a-1"));

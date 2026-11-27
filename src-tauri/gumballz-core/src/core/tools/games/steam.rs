@@ -1,13 +1,13 @@
-//! Biblioteca Steam local, sem rede: o `appmanifest_<appid>.acf` e o
-//! `libraryfolders.vdf` são texto no formato KeyValues da Valve. Ler os dois
-//! resolve appid → nome do jogo e descobre em quais discos a biblioteca está.
+//! Local Steam library, no network: the `appmanifest_<appid>.acf` and the
+//! `libraryfolders.vdf` are text in Valve's KeyValues format. Reading both
+//! resolves appid → game name and finds which disks the library is on.
 
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
-/// KeyValues da Valve: ou um texto, ou uma lista de pares (a ordem importa e
-/// chaves repetidas existem, então não é um mapa).
+/// Valve KeyValues: either a text, or a list of pairs (order matters and
+/// repeated keys exist, so it is not a map).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Vdf {
     Str(String),
@@ -29,8 +29,8 @@ impl Vdf {
         }
     }
 
-    /// As chaves do formato variam de maiúscula entre versões do cliente
-    /// (`SizeOnDisk`, `sizeondisk`), então a busca ignora caixa.
+    /// The format's keys vary in case between client versions
+    /// (`SizeOnDisk`, `sizeondisk`), so the search ignores case.
     pub fn get(&self, key: &str) -> Option<&Vdf> {
         self.entries()
             .iter()
@@ -96,7 +96,7 @@ fn tokenize(text: &str) -> Vec<Token> {
             out.push(Token::Str(s));
             continue;
         }
-        // Token solto (sem aspas) — o formato aceita, alguns arquivos usam.
+        // A bare token (no quotes) — the format accepts it, some files use it.
         let mut s = String::new();
         while i < chars.len()
             && !chars[i].is_whitespace()
@@ -114,7 +114,7 @@ fn tokenize(text: &str) -> Vec<Token> {
 
 fn parse_map(tokens: &[Token], pos: &mut usize, depth: u32) -> Vdf {
     let mut entries: Vec<(String, Vdf)> = Vec::new();
-    // Um arquivo corrompido não pode virar recursão infinita.
+    // A corrupted file must not turn into infinite recursion.
     if depth > 32 {
         return Vdf::Map(entries);
     }
@@ -125,7 +125,7 @@ fn parse_map(tokens: &[Token], pos: &mut usize, depth: u32) -> Vdf {
                 break;
             }
             Token::Open => {
-                // Bloco sem chave: ignora a abertura e segue.
+                // Block without a key: skip the opening and move on.
                 *pos += 1;
                 let _ = parse_map(tokens, pos, depth + 1);
             }
@@ -151,7 +151,7 @@ fn parse_map(tokens: &[Token], pos: &mut usize, depth: u32) -> Vdf {
     Vdf::Map(entries)
 }
 
-/// Raiz do arquivo. O `.acf` tem um único bloco no topo (`AppState`).
+/// File root. The `.acf` has a single top block (`AppState`).
 pub fn parse_vdf(text: &str) -> Vdf {
     let tokens = tokenize(text);
     let mut pos = 0usize;
@@ -164,11 +164,11 @@ pub struct SteamApp {
     pub name: String,
     pub install_dir: String,
     pub size_on_disk: u64,
-    /// Pasta `steamapps` onde o manifesto foi lido.
+    /// The `steamapps` folder where the manifest was read.
     pub library: String,
 }
 
-/// Lê um `appmanifest_<appid>.acf`. Sem appid ou sem nome, não serve.
+/// Reads an `appmanifest_<appid>.acf`. Without an appid or a name, it is no good.
 pub fn parse_app_manifest(text: &str) -> Option<SteamApp> {
     let root = parse_vdf(text);
     let state = root.get("AppState").unwrap_or(&root);
@@ -189,8 +189,8 @@ pub fn parse_app_manifest(text: &str) -> Option<SteamApp> {
     })
 }
 
-/// Caminhos de biblioteca declarados no `libraryfolders.vdf`. O formato velho
-/// guardava `"1" "D:\\Jogos"`; o novo guarda um bloco com `"path"`.
+/// Library paths declared in `libraryfolders.vdf`. The old format stored
+/// `"1" "D:\\Games"`; the new one stores a block with `"path"`.
 pub fn parse_library_folders(text: &str) -> Vec<String> {
     let root = parse_vdf(text);
     let list = root.get("libraryfolders").unwrap_or(&root);
@@ -211,7 +211,7 @@ pub fn parse_library_folders(text: &str) -> Vec<String> {
     out
 }
 
-/// Onde o cliente Steam costuma estar instalado, por sistema.
+/// Where the Steam client is usually installed, per system.
 pub fn steam_roots() -> Vec<PathBuf> {
     let mut roots: Vec<PathBuf> = Vec::new();
     if let Some(home) = dirs::home_dir() {
@@ -243,8 +243,8 @@ pub fn steam_roots() -> Vec<PathBuf> {
     roots
 }
 
-/// Todas as pastas `steamapps` visíveis: as das raízes e as que o
-/// `libraryfolders.vdf` aponta em outros discos. `extra` entra sempre.
+/// All visible `steamapps` folders: the ones at the roots and the ones
+/// `libraryfolders.vdf` points to on other disks. `extra` always goes in.
 pub fn steam_libraries(extra: &[String]) -> Vec<PathBuf> {
     fn push(p: PathBuf, libs: &mut Vec<PathBuf>) {
         let dir = if p.file_name().map(|n| n.eq_ignore_ascii_case("steamapps")) == Some(true) {
@@ -334,7 +334,7 @@ pub fn name_for_app(apps: &[SteamApp], app_id: u32) -> Option<String> {
         .map(|a| a.name.clone())
 }
 
-/// Appid a partir de um nome digitado. Casa exato primeiro, depois "contém".
+/// Appid from a typed name. Exact match first, then "contains".
 pub fn app_for_name(apps: &[SteamApp], query: &str) -> Option<SteamApp> {
     let q = query.trim().to_lowercase();
     if q.is_empty() {
@@ -348,7 +348,7 @@ pub fn app_for_name(apps: &[SteamApp], query: &str) -> Option<SteamApp> {
         .cloned()
 }
 
-/// Appid escrito de qualquer jeito: número, URL da loja, `steam://`.
+/// Appid written any way: number, store URL, `steam://`.
 pub fn parse_app_id(input: &str) -> Option<u32> {
     let s = input.trim();
     if s.is_empty() {
@@ -373,7 +373,7 @@ pub fn parse_app_id(input: &str) -> Option<u32> {
     None
 }
 
-/// Caminho do `appmanifest` de um appid dentro de uma biblioteca.
+/// Path of an appid's `appmanifest` inside a library.
 pub fn manifest_path(library: &Path, app_id: u32) -> PathBuf {
     library.join(format!("appmanifest_{}.acf", app_id))
 }
@@ -408,7 +408,7 @@ mod tests {
 
     #[test]
     fn acf_gives_appid_name_and_size() {
-        let app = parse_app_manifest(ACF).expect("manifesto válido");
+        let app = parse_app_manifest(ACF).expect("valid manifest");
         assert_eq!(app.app_id, 570);
         assert_eq!(app.name, "Dota 2");
         assert_eq!(app.install_dir, "dota 2 beta");
@@ -429,7 +429,7 @@ mod tests {
     #[test]
     fn acf_ignores_comments_and_odd_casing() {
         let text = "// comentario\n\"AppState\"\n{\n\t\"AppID\" \"620\"\n\t\"Name\" \"Portal 2\"\n\t\"sizeondisk\" \"100\"\n}\n";
-        let app = parse_app_manifest(text).expect("manifesto válido");
+        let app = parse_app_manifest(text).expect("valid manifest");
         assert_eq!(app.app_id, 620);
         assert_eq!(app.name, "Portal 2");
         assert_eq!(app.size_on_disk, 100);
@@ -439,9 +439,9 @@ mod tests {
     fn acf_refuses_garbage() {
         assert!(parse_app_manifest("").is_none());
         assert!(parse_app_manifest("nao sou um manifesto").is_none());
-        // Sem nome não dá para montar pasta.
+        // Without a name there is no folder to build.
         assert!(parse_app_manifest("\"AppState\"{\"appid\" \"1\"}").is_none());
-        // Sem appid também não.
+        // Without an appid either.
         assert!(parse_app_manifest("\"AppState\"{\"name\" \"X\"}").is_none());
     }
 

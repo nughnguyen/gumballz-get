@@ -1,16 +1,16 @@
-//! Leitura de arquivo de estado do usuário sem perda silenciosa.
+//! Reading a user state file without silent loss.
 //!
-//! O padrão que este módulo substitui é
-//! `read_to_string().ok().and_then(parse).unwrap_or_default()`: quando o
-//! arquivo existe mas não desserializa, o chamador recebe "vazio", e a próxima
-//! gravação sobrescreve o original. O usuário perde tudo sem ver uma linha de
-//! log. Foi assim que o `settings.json` zerou preferências, e o mesmo formato
-//! estava replicado no registro de cookies, nos templates do YouTube e nas
-//! settings de plugin.
+//! The pattern this module replaces is
+//! `read_to_string().ok().and_then(parse).unwrap_or_default()`: when the file
+//! exists but does not deserialize, the caller gets "empty", and the next write
+//! overwrites the original. The user loses everything without seeing a single
+//! line of log. That is how `settings.json` zeroed preferences, and the same
+//! pattern was replicated in the cookie registry, the YouTube templates and the
+//! plugin settings.
 //!
-//! Aqui o arquivo ilegível é **posto em quarentena** antes de qualquer default
-//! ser devolvido: ele é renomeado para `<nome>.corrupt-<epoch_ms>`, o que
-//! impede a gravação seguinte de destruí-lo e deixa uma cópia recuperável.
+//! Here the unreadable file is **quarantined** before any default is returned:
+//! it is renamed to `<name>.corrupt-<epoch_ms>`, which stops the next write from
+//! destroying it and leaves a recoverable copy.
 
 use std::path::{Path, PathBuf};
 
@@ -21,8 +21,8 @@ fn now_ms() -> u128 {
         .unwrap_or(0)
 }
 
-/// Caminho de quarentena para `path`. Público para os testes e para quem
-/// precisar apontar o usuário ao arquivo preservado.
+/// Quarantine path for `path`. Public for the tests and for whoever needs to
+/// point the user at the preserved file.
 pub fn quarantine_path(path: &Path, stamp_ms: u128) -> PathBuf {
     let name = path
         .file_name()
@@ -31,16 +31,16 @@ pub fn quarantine_path(path: &Path, stamp_ms: u128) -> PathBuf {
     path.with_file_name(format!("{}.corrupt-{}", name, stamp_ms))
 }
 
-/// Renomeia o arquivo ilegível para o caminho de quarentena. Devolve o destino
-/// quando conseguiu; `None` quando nem isso foi possível (aí o log é o que
-/// resta, e o chamador segue com o default).
+/// Renames the unreadable file to the quarantine path. Returns the destination
+/// when it worked; `None` when even that was not possible (then the log is all
+/// that is left, and the caller carries on with the default).
 pub fn quarantine(path: &Path, label: &str) -> Option<PathBuf> {
     let dest = quarantine_path(path, now_ms());
     match std::fs::rename(path, &dest) {
         Ok(()) => {
             tracing::error!(
-                "[state] {} ilegível em {} — preservado como {}. O app seguiu com os valores padrão; \
-                 o arquivo original NÃO foi sobrescrito.",
+                "[state] {} unreadable at {} — preserved as {}. The app carried on with the default values; \
+                 the original file was NOT overwritten.",
                 label,
                 path.display(),
                 dest.display()
@@ -49,8 +49,8 @@ pub fn quarantine(path: &Path, label: &str) -> Option<PathBuf> {
         }
         Err(e) => {
             tracing::error!(
-                "[state] {} ilegível em {} e não foi possível preservá-lo ({}). \
-                 O app seguiu com os valores padrão.",
+                "[state] {} unreadable at {} and could not be preserved ({}). \
+                 The app carried on with the default values.",
                 label,
                 path.display(),
                 e
@@ -60,14 +60,13 @@ pub fn quarantine(path: &Path, label: &str) -> Option<PathBuf> {
     }
 }
 
-/// Lê e desserializa um arquivo de estado.
+/// Reads and deserializes a state file.
 ///
-/// - arquivo ausente → `None`, sem ruído (é o caso normal na primeira execução)
-/// - arquivo ilegível ou corrompido → quarentena + log de erro + `None`
+/// - missing file → `None`, no noise (it is the normal case on first run)
+/// - unreadable or corrupted file → quarantine + error log + `None`
 ///
-/// Nunca devolve default silenciosamente: o `None` aqui sempre significa
-/// "não havia estado utilizável", e o motivo está no log quando não for a
-/// primeira execução.
+/// Never returns a default silently: the `None` here always means "there was
+/// no usable state", and the reason is in the log when it is not the first run.
 pub fn load_or_quarantine<T: serde::de::DeserializeOwned>(path: &Path, label: &str) -> Option<T> {
     if !path.exists() {
         return None;
@@ -75,22 +74,22 @@ pub fn load_or_quarantine<T: serde::de::DeserializeOwned>(path: &Path, label: &s
     let content = match std::fs::read_to_string(path) {
         Ok(c) => c,
         Err(e) => {
-            tracing::error!("[state] não foi possível ler {}: {}", path.display(), e);
+            tracing::error!("[state] could not read {}: {}", path.display(), e);
             return None;
         }
     };
-    // Arquivo vazio (queda no meio de uma gravação não atômica) conta como
-    // ausente, não como corrompido — não há o que preservar.
+    // An empty file (a crash in the middle of a non-atomic write) counts as
+    // missing, not as corrupted — there is nothing to preserve.
     if content.trim().is_empty() {
-        tracing::warn!("[state] {} vazio em {}", label, path.display());
+        tracing::warn!("[state] {} empty at {}", label, path.display());
         return None;
     }
     match serde_json::from_str::<T>(&content) {
         Ok(value) => Some(value),
         Err(e) => {
-            // O erro do serde nomeia o campo e a posição, nunca o conteúdo —
-            // seguro de logar mesmo para arquivo de cookie.
-            tracing::error!("[state] {} não desserializa: {}", label, e);
+            // The serde error names the field and the position, never the content —
+            // safe to log even for a cookie file.
+            tracing::error!("[state] {} does not deserialize: {}", label, e);
             quarantine(path, label);
             None
         }
@@ -140,8 +139,8 @@ mod tests {
 
     #[test]
     fn arquivo_corrompido_vai_para_quarentena_e_o_original_some_do_lugar() {
-        // O ponto do teste: depois disso, um save() do chamador escreve num
-        // caminho limpo e NÃO destrói o conteúdo que o usuário tinha.
+        // The point of the test: after this, a caller's save() writes to a clean
+        // path and does NOT destroy the content the user had.
         let dir = tmp_dir("corrompido");
         let path = dir.join("estado.json");
         std::fs::write(&path, "{ isto nao e json").unwrap();
@@ -150,7 +149,7 @@ mod tests {
         assert!(lido.is_none());
         assert!(
             !path.exists(),
-            "o arquivo corrompido precisa sair do caminho de gravação"
+            "the corrupted file has to leave the write path"
         );
 
         let preservados: Vec<_> = std::fs::read_dir(&dir)
@@ -162,13 +161,13 @@ mod tests {
         assert_eq!(
             preservados.len(),
             1,
-            "esperava exatamente uma quarentena, achei {preservados:?}"
+            "expected exactly one quarantine, found {preservados:?}"
         );
 
         let conteudo = std::fs::read_to_string(dir.join(&preservados[0])).unwrap();
         assert_eq!(
             conteudo, "{ isto nao e json",
-            "a quarentena precisa ser byte a byte"
+            "the quarantine has to be byte-for-byte"
         );
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -180,14 +179,14 @@ mod tests {
         std::fs::write(&path, "   \n").unwrap();
         let lido: Option<Estado> = load_or_quarantine(&path, "estado");
         assert!(lido.is_none());
-        assert!(path.exists(), "arquivo vazio nao tem o que preservar");
+        assert!(path.exists(), "an empty file has nothing to preserve");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn json_valido_de_forma_errada_tambem_e_quarentena() {
-        // Regressao: `serde_json::from_str::<T>` falhando por schema (e nao por
-        // sintaxe) caia no mesmo `unwrap_or_default()` e zerava o estado.
+        // Regression: `serde_json::from_str::<T>` failing on schema (not on
+        // syntax) fell into the same `unwrap_or_default()` and zeroed the state.
         let dir = tmp_dir("schema");
         let path = dir.join("estado.json");
         std::fs::write(&path, r#"{"contas": "nao e uma lista"}"#).unwrap();

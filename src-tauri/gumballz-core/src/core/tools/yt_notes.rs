@@ -1,11 +1,11 @@
-//! Transcrição virando artigo: as linhas da legenda são costuradas em
-//! parágrafos e saem como Markdown legível.
+//! Transcript turning into an article: the subtitle lines are stitched into
+//! paragraphs and come out as readable Markdown.
 //!
-//! Legenda não é texto: é uma fila de pedaços de duas linhas cortados pela
-//! largura da tela, e a legenda automática do YouTube ainda repete a linha
-//! anterior a cada quadro novo. Por isso nada aqui costura por quebra de
-//! linha — a costura olha pausa entre falas e pontuação, e a repetição da
-//! legenda rolante é desfeita antes.
+//! A subtitle is not text: it is a queue of two-line chunks cut by
+//! screen width, and YouTube's automatic subtitles still repeat the previous
+//! line on every new frame. That is why nothing here stitches by line
+//! break — the stitching looks at pauses between speech and punctuation, and the
+//! scrolling-subtitle repetition is undone first.
 
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
@@ -14,8 +14,8 @@ use super::subtitle::Cue;
 
 // ── Limpeza e deduplicação ─────────────────────────────────────────────
 
-/// Tira marcação de karaokê do VTT (`<c>`, `<00:00:01.500>`), entidades e
-/// espaço repetido.
+/// Strips VTT karaoke markup (`<c>`, `<00:00:01.500>`), entities and
+/// repeated spaces.
 pub fn clean_line(line: &str) -> String {
     let mut plain = String::with_capacity(line.len());
     let mut depth = 0usize;
@@ -48,8 +48,8 @@ pub fn clean_line(line: &str) -> String {
     decoded.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-/// Desfaz a legenda rolante: a mesma frase volta a cada bloco, ora inteira,
-/// ora como prefixo do bloco seguinte. Sobra só o que é novo.
+/// Undoes the scrolling subtitle: the same sentence comes back in every block, sometimes whole,
+/// sometimes as a prefix of the next block. Only what is new remains.
 pub fn dedup_cues(cues: &[Cue]) -> Vec<Cue> {
     let mut out: Vec<Cue> = Vec::new();
     let mut prev_lines: Vec<String> = Vec::new();
@@ -94,13 +94,13 @@ pub fn dedup_cues(cues: &[Cue]) -> Vec<Cue> {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct StitchOptions {
-    /// Pausa (em segundos) que já vale um parágrafo novo.
+    /// Pause (in seconds) that already counts as a new paragraph.
     #[serde(default = "default_gap")]
     pub gap_seconds: f64,
-    /// A partir daqui o parágrafo fecha na primeira frase que terminar.
+    /// From here the paragraph closes at the first sentence that ends.
     #[serde(default = "default_soft")]
     pub soft_chars: usize,
-    /// Limite duro: fecha mesmo sem ponto final.
+    /// Hard limit: closes even without a final period.
     #[serde(default = "default_hard")]
     pub hard_chars: usize,
 }
@@ -132,8 +132,8 @@ pub struct Paragraph {
     pub text: String,
 }
 
-/// Fim de frase: ponto, exclamação, interrogação ou reticências, aceitando
-/// aspas e parênteses fechando depois.
+/// End of sentence: period, exclamation, question mark or ellipsis, accepting
+/// quotes and closing parentheses after them.
 pub fn ends_sentence(text: &str) -> bool {
     let trimmed = text.trim_end_matches([' ', '"', '\'', ')', ']', '”', '’', '»']);
     matches!(
@@ -160,8 +160,8 @@ pub fn stitch(cues: &[Cue], opts: &StitchOptions) -> Vec<Paragraph> {
     stitch_at(cues, &[], opts)
 }
 
-/// Igual a `stitch`, mas `boundaries` (em ms, ordenados) também forçam
-/// parágrafo novo — é assim que capítulo não fica no meio de um bloco.
+/// Same as `stitch`, but `boundaries` (in ms, sorted) also force a
+/// new paragraph — that is how a chapter does not land in the middle of a block.
 pub fn stitch_at(cues: &[Cue], boundaries: &[i64], opts: &StitchOptions) -> Vec<Paragraph> {
     let cues = dedup_cues(cues);
     let gap_ms = (opts.gap_seconds.max(0.0) * 1000.0).round() as i64;
@@ -216,7 +216,7 @@ pub struct Chapter {
     pub title: String,
 }
 
-/// `1:02:03` quando passa da hora, `4:05` quando não passa.
+/// `1:02:03` when it passes the hour, `4:05` when it does not.
 pub fn fmt_stamp(ms: i64) -> String {
     let total = (ms.max(0) / 1000) as u64;
     let (h, m, s) = (total / 3600, (total / 60) % 60, total % 60);
@@ -227,7 +227,7 @@ pub fn fmt_stamp(ms: i64) -> String {
     }
 }
 
-/// Link do YouTube com o segundo exato. Sem URL, devolve `None`.
+/// YouTube link with the exact second. Without a URL, returns `None`.
 pub fn stamp_url(base: &str, ms: i64) -> Option<String> {
     let base = base.trim();
     if base.is_empty() {
@@ -309,7 +309,7 @@ pub fn to_markdown(doc: &NotesDoc) -> String {
         out.push_str(&p.text);
         out.push_str("\n\n");
     }
-    // Capítulo depois do último parágrafo (vídeo que termina em vinheta).
+    // Chapter after the last paragraph (a video that ends in an intro).
     for ch in doc.chapters.iter().skip(next) {
         out.push_str(&format!("## {}\n\n", ch.title));
     }
@@ -384,18 +384,18 @@ pub fn parse_video_meta(json: &str) -> anyhow::Result<VideoMeta> {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Options {
-    /// Link do vídeo. Vazio quando a fonte é um arquivo local.
+    /// Video link. Empty when the source is a local file.
     #[serde(default)]
     pub url: String,
-    /// Legenda já baixada (SRT/VTT/ASS). Tem prioridade sobre a rede.
+    /// Subtitle already downloaded (SRT/VTT/ASS). Takes priority over the network.
     #[serde(default)]
     pub subtitle_path: String,
-    /// Mídia local para transcrever com o Whisper.
+    /// Local media to transcribe with Whisper.
     #[serde(default)]
     pub media_path: String,
     #[serde(default = "default_langs")]
     pub sub_langs: String,
-    /// Cair no Whisper quando o vídeo não tiver legenda nenhuma.
+    /// Fall back to Whisper when the video has no subtitles at all.
     #[serde(default)]
     pub allow_whisper: bool,
     #[serde(default = "default_model")]
@@ -404,7 +404,7 @@ pub struct Options {
     pub timestamps: bool,
     #[serde(default = "default_true")]
     pub use_chapters: bool,
-    /// Arquivo .md de saída; vazio = não escreve, só devolve o texto.
+    /// Output .md file; empty = do not write, just return the text.
     #[serde(default)]
     pub output_path: String,
     #[serde(default)]
@@ -463,7 +463,7 @@ pub async fn run(opts: Options, progress: super::ProgressFn) -> anyhow::Result<N
     if !opts.subtitle_path.trim().is_empty() {
         super::report(&progress, ID, "progress", 1, Some(4), None);
         let text = std::fs::read_to_string(opts.subtitle_path.trim())
-            .map_err(|e| anyhow!("não consegui ler a legenda: {}", e))?;
+            .map_err(|e| anyhow!("could not read the subtitles: {}", e))?;
         cues = super::subtitle::parse(&text)?;
         source = "legenda-local".to_string();
         if !opts.url.trim().is_empty() {
@@ -493,7 +493,7 @@ pub async fn run(opts: Options, progress: super::ProgressFn) -> anyhow::Result<N
             }
             Ok(None) => {
                 return Err(anyhow!(
-                    "esse vídeo não tem legenda; ligue o Whisper para transcrever"
+                    "this video has no subtitles; turn on Whisper to transcribe"
                 ))
             }
             Err(e) => return Err(e),
@@ -513,12 +513,12 @@ pub async fn run(opts: Options, progress: super::ProgressFn) -> anyhow::Result<N
         source = "whisper".to_string();
     } else {
         return Err(anyhow!(
-            "informe um link, uma legenda ou um arquivo de mídia"
+            "provide a link, subtitles, or a media file"
         ));
     }
 
     if cues.is_empty() {
-        return Err(anyhow!("a transcrição saiu vazia"));
+        return Err(anyhow!("the transcript came out empty"));
     }
     super::report(&progress, ID, "progress", 4, Some(4), None);
     let chapters = if opts.use_chapters {
@@ -605,11 +605,11 @@ async fn fetch_meta(opts: &Options) -> anyhow::Result<VideoMeta> {
     parse_video_meta(&out)
 }
 
-/// Baixa a legenda (manual ou automática) em VTT e devolve o conteúdo.
+/// Downloads the subtitle (manual or automatic) as VTT and returns the content.
 async fn fetch_subtitles(opts: &Options) -> anyhow::Result<Option<String>> {
     let dir = super::temp_dir().join(format!("yt-notes-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&dir)?;
-    let template = dir.join("legenda.%(ext)s");
+    let template = dir.join("subtitle.%(ext)s");
     let mut args = vec![
         "--skip-download".to_string(),
         "--no-warnings".to_string(),
@@ -665,13 +665,13 @@ async fn download_audio(opts: &Options) -> anyhow::Result<std::path::PathBuf> {
     args.push(opts.url.trim().to_string());
     super::yt_archive::run_ytdlp(&args).await?;
     if !out.exists() {
-        return Err(anyhow!("não consegui baixar o áudio para transcrever"));
+        return Err(anyhow!("could not download the audio to transcribe"));
     }
     Ok(out)
 }
 
-/// O Whisper devolve o `Cue` do `subtitle_merge` (ms sem sinal); aqui tudo
-/// trabalha com o `Cue` do módulo de legenda.
+/// Whisper returns the `Cue` from `subtitle_merge` (unsigned ms); here everything
+/// works with the `Cue` from the subtitle module.
 struct Transcript {
     cues: Vec<Cue>,
     language: String,
@@ -757,7 +757,7 @@ Já isto é outro assunto.
 
     #[test]
     fn rolling_captions_are_deduped() {
-        let cues = super::super::subtitle::parse(VTT_ROLANTE).expect("vtt válido");
+        let cues = super::super::subtitle::parse(VTT_ROLANTE).expect("valid vtt");
         let deduped = dedup_cues(&cues);
         let text: Vec<&str> = deduped.iter().map(|c| c.text.as_str()).collect();
         assert_eq!(
@@ -773,9 +773,9 @@ Já isto é outro assunto.
 
     #[test]
     fn stitching_joins_lines_and_breaks_on_the_pause() {
-        let cues = super::super::subtitle::parse(VTT_ROLANTE).expect("vtt válido");
+        let cues = super::super::subtitle::parse(VTT_ROLANTE).expect("valid vtt");
         let paras = stitch(&cues, &StitchOptions::default());
-        assert_eq!(paras.len(), 2, "a pausa de 5 s abre parágrafo novo");
+        assert_eq!(paras.len(), 2, "the 5 s pause opens a new paragraph");
         assert_eq!(
             paras[0].text,
             "o que a gente vai ver hoje é como cortar silêncio de uma gravação longa."
@@ -787,7 +787,7 @@ Já isto é outro assunto.
 
     #[test]
     fn srt_and_vtt_stitch_the_same_way() {
-        let cues = super::super::subtitle::parse(SRT_SIMPLES).expect("srt válido");
+        let cues = super::super::subtitle::parse(SRT_SIMPLES).expect("valid srt");
         let paras = stitch(&cues, &StitchOptions::default());
         assert_eq!(paras.len(), 2);
         assert_eq!(paras[0].text, "Primeira frase. Segunda frase, sem pausa.");
@@ -810,12 +810,12 @@ Já isto é outro assunto.
         let paras = stitch(&cues, &StitchOptions::default());
         assert!(
             paras.len() > 1,
-            "devia ter quebrado em mais de um parágrafo"
+            "should have broken into more than one paragraph"
         );
         for p in paras.iter().take(paras.len() - 1) {
             assert!(
                 ends_sentence(&p.text),
-                "parágrafo cortado no meio da frase: {}",
+                "paragraph cut in the middle of the sentence: {}",
                 p.text
             );
         }
@@ -836,23 +836,23 @@ Já isto é outro assunto.
             hard_chars: 200,
         };
         let paras = stitch(&cues, &opts);
-        assert!(paras.len() >= 5, "saíram {} parágrafos", paras.len());
+        assert!(paras.len() >= 5, "produced {} paragraphs", paras.len());
         assert!(paras.iter().all(|p| p.text.chars().count() < 260));
     }
 
     #[test]
     fn chapter_boundary_forces_a_new_paragraph() {
-        let cues = super::super::subtitle::parse(SRT_SIMPLES).expect("srt válido");
+        let cues = super::super::subtitle::parse(SRT_SIMPLES).expect("valid srt");
         let paras = stitch_at(&cues, &[2000], &StitchOptions::default());
-        assert_eq!(paras.len(), 3, "o capítulo em 2 s parte o primeiro bloco");
+        assert_eq!(paras.len(), 3, "the chapter at 2 s splits the first block");
         assert_eq!(paras[0].text, "Primeira frase.");
         assert_eq!(paras[1].text, "Segunda frase, sem pausa.");
     }
 
     #[test]
     fn an_identical_line_repeated_is_the_same_line() {
-        // Legenda automática repete o bloco inteiro; texto igual colado é
-        // repetição, não fala nova.
+        // Automatic subtitles repeat the whole block; identical text pasted on is
+        // repetition, not new speech.
         let cues: Vec<Cue> = (0..4)
             .map(|i| Cue {
                 start_ms: i * 1000,
@@ -935,7 +935,7 @@ Já isto é outro assunto.
     #[test]
     fn markdown_has_front_matter_headings_and_links() {
         let md = to_markdown(&doc_de_teste(true));
-        assert!(md.starts_with("---\n"), "sem front-matter:\n{}", md);
+        assert!(md.starts_with("---\n"), "no front-matter:\n{}", md);
         assert!(md.contains("title: \"Aula de \\\"corte\\\"\""), "{}", md);
         assert!(md.contains("channel: \"Canal\""));
         assert!(md.contains("duration: \"12:34\""));
@@ -975,18 +975,18 @@ Já isto é outro assunto.
                 {"start_time": 300.0, "title": "   "}
             ]
         }"#;
-        let m = parse_video_meta(json).expect("json válido");
+        let m = parse_video_meta(json).expect("valid json");
         assert_eq!(m.id, "abc12345678");
         assert_eq!(m.channel, "Canal do Fulano");
         assert_eq!(m.title, "Como cortar silêncio");
         assert!((m.duration_seconds - 754.2).abs() < 1e-9);
-        assert_eq!(m.chapters.len(), 2, "capítulo sem título não entra");
+        assert_eq!(m.chapters.len(), 2, "chapter without title does not enter");
         assert_eq!(m.chapters[1].start_ms, 120_500);
     }
 
     #[test]
     fn metadata_without_webpage_url_builds_one() {
-        let m = parse_video_meta(r#"{"id":"abc12345678","title":"x"}"#).expect("json válido");
+        let m = parse_video_meta(r#"{"id":"abc12345678","title":"x"}"#).expect("valid json");
         assert_eq!(m.url, "https://www.youtube.com/watch?v=abc12345678");
         assert!(m.chapters.is_empty());
     }
@@ -996,7 +996,7 @@ Já isto é outro assunto.
         assert!(stitch(&[], &StitchOptions::default()).is_empty());
     }
 
-    /// Precisa de rede e do yt-dlp.
+    /// Needs network and yt-dlp.
     /// `cargo test -p gumballz-core --lib -- --ignored live_yt_notes`
     #[tokio::test]
     #[ignore]
@@ -1018,8 +1018,8 @@ Já isto é outro assunto.
         };
         let r = run(opts, super::super::noop_progress())
             .await
-            .expect("o vídeo devia render notas");
+            .expect("the video should have produced notes");
         assert!(r.markdown.contains("---"));
-        eprintln!("{} palavras, {} parágrafos", r.words, r.paragraphs);
+        eprintln!("{} words, {} paragraphs", r.words, r.paragraphs);
     }
 }

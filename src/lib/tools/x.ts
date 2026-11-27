@@ -97,8 +97,8 @@ export async function session(): Promise<XSession> {
 type AuthCookie = { name: string; value: string; domain: string; path: string; httpOnly?: boolean; secure?: boolean };
 
 /**
- * Abre a janela de login do X e guarda os cookies no bucket `x.com`, o mesmo
- * que o download de posts já usa.
+ * Opens the X login window and stores the cookies in the `x.com` bucket, the same
+ * one post downloads already use.
  */
 export async function loginToX(): Promise<boolean> {
   const result = await invoke<{ cookies: AuthCookie[]; finalUrl: string }>("open_auth_webview", {

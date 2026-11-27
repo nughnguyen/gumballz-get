@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Ponte com o VoiceStudio (lote 2): clonar voz, criar voz por descrição e isolar a voz (Demucs). */
+  /** Bridge to VoiceStudio (batch 2): clone a voice, create a voice from a description, and isolate a voice (Demucs). */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

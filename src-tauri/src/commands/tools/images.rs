@@ -47,7 +47,7 @@ pub async fn tool_ocr_run(
         .map_err(err)
 }
 
-// ── Metadados (img-exif) ───────────────────────────────────────────────
+// ── Metadata (img-exif) ───────────────────────────────────────────────
 
 #[tauri::command]
 pub async fn tool_exif_read(inputs: Vec<String>) -> Result<Vec<exif::ExifReport>, String> {
@@ -67,7 +67,7 @@ pub async fn tool_exif_strip(
         .map_err(err)
 }
 
-// ── Pacote de ícones (img-icon) ────────────────────────────────────────
+// ── Icon pack (img-icon) ────────────────────────────────────────
 
 #[tauri::command]
 pub async fn tool_icon_pack(
@@ -81,7 +81,7 @@ pub async fn tool_icon_pack(
         .map_err(err)
 }
 
-// ── Fotos duplicadas (img-dedupe) ──────────────────────────────────────
+// ── Duplicate photos (img-dedupe) ──────────────────────────────────────
 
 #[tauri::command]
 pub async fn tool_img_dupes(
@@ -94,7 +94,7 @@ pub async fn tool_img_dupes(
         .map_err(err)
 }
 
-// ── Comprimir para um tamanho (img-compress) ───────────────────────────
+// ── Compress to a size (img-compress) ───────────────────────────
 
 #[tauri::command]
 pub async fn tool_img_compress(
@@ -107,7 +107,7 @@ pub async fn tool_img_compress(
         .map_err(err)
 }
 
-// ── Costurar prints (img-stitch) ───────────────────────────────────────
+// ── Stitch screenshots (img-stitch) ───────────────────────────────────────
 
 #[tauri::command]
 pub async fn tool_img_stitch(
@@ -121,7 +121,7 @@ pub async fn tool_img_stitch(
         .map_err(err)
 }
 
-// ── Spritesheet e lote (img-sprite) ────────────────────────────────────
+// ── Spritesheet and batch (img-sprite) ────────────────────────────────────
 
 #[tauri::command]
 pub async fn tool_img_sprite(
@@ -135,7 +135,7 @@ pub async fn tool_img_sprite(
         .map_err(err)
 }
 
-// ── ONNX: runtime e modelos geridos (infra-onnx) ───────────────────────
+// ── ONNX: runtime and managed models (infra-onnx) ───────────────────────
 
 #[tauri::command]
 pub fn tool_onnx_status(family: Option<String>) -> onnx::OnnxStatus {
@@ -154,8 +154,8 @@ pub async fn tool_onnx_runtime_install(
         .map_err(err)
 }
 
-/// Instala a partir de um `libonnxruntime` que o usuário já tem no disco —
-/// único caminho em sistemas sem build oficial (macOS Intel).
+/// Installs from a `libonnxruntime` the user already has on disk — the only
+/// path on systems without an official build (Intel macOS).
 #[tauri::command]
 pub async fn tool_onnx_runtime_install_local(path: String) -> Result<String, String> {
     tokio::task::spawn_blocking(move || {
@@ -192,7 +192,7 @@ pub async fn tool_onnx_model_remove(id: String) -> Result<(), String> {
         .map_err(err)
 }
 
-// ── Remover fundo (img-bg) ─────────────────────────────────────────────
+// ── Remove background (img-bg) ─────────────────────────────────────────────
 
 #[tauri::command]
 pub async fn tool_img_bg(

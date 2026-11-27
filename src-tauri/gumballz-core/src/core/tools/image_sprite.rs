@@ -1,9 +1,9 @@
-//! Spritesheet: fatiar, juntar e redimensionar em lote por regra.
+//! Spritesheet: slice, join and batch-resize by rule.
 //!
-//! Três trabalhos que sempre andam juntos em pasta de arte de jogo e de
-//! ícone: quebrar uma folha em quadros, montar a folha de volta (com o
-//! atlas JSON ao lado) e passar a régua numa pasta inteira. Tudo com o
-//! crate `image`, sem processo externo.
+//! Three jobs that always go together in a game and icon art folder:
+//! breaking a sheet into frames, building the sheet back (with the
+//! JSON atlas beside it) and measuring a whole folder. All with the
+//! `image` crate, no external process.
 
 use std::path::{Path, PathBuf};
 
@@ -19,61 +19,61 @@ const IMAGE_EXTS: &[&str] = &["png", "jpg", "jpeg", "webp", "bmp", "gif", "tif",
 pub struct SpriteOptions {
     /// "slice" | "pack" | "batch".
     pub mode: String,
-    /// Arquivos escolhidos na mão. No modo `slice` só o primeiro vale.
+    /// Files picked by hand. In `slice` mode only the first counts.
     #[serde(default)]
     pub inputs: Vec<String>,
-    /// Pasta inteira, alternativa a `inputs` nos modos `pack` e `batch`.
+    /// Whole folder, an alternative to `inputs` in `pack` and `batch` modes.
     #[serde(default)]
     pub input_dir: String,
     #[serde(default)]
     pub output_dir: String,
-    /// Prefixo dos quadros / nome da folha.
+    /// Frame prefix / sheet name.
     #[serde(default)]
     pub name: String,
 
-    // ── fatiar ──────────────────────────────────────────────────────────
+    // ── slice ──────────────────────────────────────────────────────────
     #[serde(default)]
     pub cols: u32,
     #[serde(default)]
     pub rows: u32,
-    /// Tamanho da célula; quando é 0, sai de `cols`/`rows`.
+    /// Cell size; when 0, it comes from `cols`/`rows`.
     #[serde(default)]
     pub cell_w: u32,
     #[serde(default)]
     pub cell_h: u32,
-    /// Borda da folha e espaço entre células.
+    /// Sheet border and space between cells.
     #[serde(default)]
     pub margin: u32,
     #[serde(default)]
     pub spacing: u32,
-    /// Recorta o transparente de cada quadro.
+    /// Trims the transparency of each frame.
     #[serde(default)]
     pub trim: bool,
 
-    // ── juntar ──────────────────────────────────────────────────────────
-    /// Colunas da folha; 0 = grade quase quadrada.
+    // ── join ──────────────────────────────────────────────────────────
+    /// Sheet columns; 0 = almost-square grid.
     #[serde(default)]
     pub pack_cols: u32,
-    /// Borda e espaço entre quadros na folha montada.
+    /// Border and space between frames on the built sheet.
     #[serde(default)]
     pub padding: u32,
-    /// Grava o JSON de atlas ao lado da folha.
+    /// Writes the atlas JSON beside the sheet.
     #[serde(default = "default_true")]
     pub atlas: bool,
 
-    // ── lote ────────────────────────────────────────────────────────────
+    // ── batch ────────────────────────────────────────────────────────────
     /// "width" | "height" | "fit" | "scale".
     #[serde(default = "default_rule")]
     pub rule: String,
-    /// Px da regra, ou porcentagem quando `rule` é "scale".
+    /// Rule px, or percentage when `rule` is "scale".
     #[serde(default)]
     pub value: u32,
-    /// Altura da caixa quando `rule` é "fit" (`value` é a largura).
+    /// Box height when `rule` is "fit" (`value` is the width).
     #[serde(default)]
     pub box_h: u32,
     #[serde(default)]
     pub suffix: String,
-    /// "png" (padrão) ou "jpeg".
+    /// "png" (default) or "jpeg".
     #[serde(default = "default_format")]
     pub format: String,
     #[serde(default = "default_quality")]
@@ -105,7 +105,7 @@ pub struct SpriteFrame {
 #[derive(Debug, Clone, Serialize)]
 pub struct SpriteResult {
     pub mode: String,
-    /// Arquivos gravados (quadros no `slice`, imagens no `batch`).
+    /// Files written (frames in `slice`, images in `batch`).
     pub outputs: Vec<String>,
     pub frames: Vec<SpriteFrame>,
     pub sheet: Option<String>,
@@ -116,7 +116,7 @@ pub struct SpriteResult {
     pub skipped: u32,
 }
 
-/// Retângulo de uma célula da grade.
+/// Rectangle of one grid cell.
 pub type Cell = (u32, u32, u32, u32);
 
 #[derive(Debug, Clone, Copy)]
@@ -129,8 +129,8 @@ pub struct Grid {
     pub spacing: u32,
 }
 
-/// Células de uma folha, seja pela grade (colunas × linhas) ou pelo tamanho
-/// da célula. Célula que passa da borda da folha é descartada.
+/// Cells of a sheet, either by grid (columns × rows) or by cell size.
+/// A cell past the sheet edge is dropped.
 pub fn grid_cells(sheet_w: u32, sheet_h: u32, g: &Grid) -> Vec<Cell> {
     let usable_w = sheet_w.saturating_sub(g.margin * 2);
     let usable_h = sheet_h.saturating_sub(g.margin * 2);
@@ -162,8 +162,8 @@ pub fn grid_cells(sheet_w: u32, sheet_h: u32, g: &Grid) -> Vec<Cell> {
     out
 }
 
-/// Menor retângulo que contém pixel visível. `None` quando o quadro é todo
-/// transparente — quadro vazio de spritesheet é comum e não é erro.
+/// Smallest rectangle containing a visible pixel. `None` when the frame is all
+/// transparent — an empty spritesheet frame is common and not an error.
 pub fn trim_bounds(img: &RgbaImage) -> Option<Cell> {
     let (mut x0, mut y0) = (u32::MAX, u32::MAX);
     let (mut x1, mut y1) = (0u32, 0u32);
@@ -183,7 +183,7 @@ pub fn trim_bounds(img: &RgbaImage) -> Option<Cell> {
     }
 }
 
-/// Colunas de uma folha "quase quadrada": a raiz arredondada para cima.
+/// Columns of an "almost square" sheet: the square root rounded up.
 pub fn near_square_cols(n: u32) -> u32 {
     if n == 0 {
         return 1;
@@ -195,8 +195,8 @@ pub fn near_square_cols(n: u32) -> u32 {
     c
 }
 
-/// Posição de cada quadro na folha montada. A célula é do tamanho do maior
-/// quadro, então fatiar a folha de volta pela grade devolve o que entrou.
+/// Position of each frame on the built sheet. The cell is the size of the largest
+/// frame, so slicing the sheet back by grid returns what went in.
 pub fn pack_layout(sizes: &[(u32, u32)], cols: u32, padding: u32) -> (u32, u32, Vec<(u32, u32)>) {
     if sizes.is_empty() {
         return (1, 1, Vec::new());
@@ -222,7 +222,7 @@ pub fn pack_layout(sizes: &[(u32, u32)], cols: u32, padding: u32) -> (u32, u32, 
     )
 }
 
-/// Tamanho novo pela regra, sempre com a proporção preservada.
+/// New size by rule, always with the aspect ratio preserved.
 pub fn resize_by_rule(w: u32, h: u32, rule: &str, value: u32, box_h: u32) -> (u32, u32) {
     if w == 0 || h == 0 {
         return (w.max(1), h.max(1));
@@ -256,8 +256,8 @@ fn is_image(p: &Path) -> bool {
         .unwrap_or(false)
 }
 
-/// Arquivos da entrada: a lista escolhida na mão ou a pasta, em ordem de nome
-/// (a numeração do quadro tem que ser previsível).
+/// Input files: the hand-picked list or the folder, in name order
+/// (the frame numbering has to be predictable).
 fn gather(opts: &SpriteOptions) -> Vec<PathBuf> {
     let mut files: Vec<PathBuf> = opts.inputs.iter().map(PathBuf::from).collect();
     if !opts.input_dir.trim().is_empty() {
@@ -297,7 +297,7 @@ fn write_image(img: &RgbaImage, path: &Path, format: &str, quality: u8) -> anyho
         let mut buf = std::io::Cursor::new(Vec::new());
         DynamicImage::ImageRgba8(img.clone())
             .write_to(&mut buf, image::ImageFormat::Png)
-            .map_err(|e| anyhow!("não gravei o PNG: {}", e))?;
+            .map_err(|e| anyhow!("could not save the PNG: {}", e))?;
         buf.into_inner()
     };
     if let Some(parent) = path.parent() {
@@ -309,8 +309,8 @@ fn write_image(img: &RgbaImage, path: &Path, format: &str, quality: u8) -> anyho
     Ok(data.len() as u64)
 }
 
-/// JSON de atlas no formato de mapa (o mesmo shape que o TexturePacker usa no
-/// preset "JSON (Hash)"), que é o que engine e bundler já sabem ler.
+/// Atlas JSON in map format (the same shape TexturePacker uses in the
+/// "JSON (Hash)" preset), which is what engines and bundlers already know how to read.
 pub fn atlas_json(frames: &[SpriteFrame], sheet: &str, w: u32, h: u32) -> String {
     let mut map = serde_json::Map::new();
     for f in frames {
@@ -341,9 +341,9 @@ fn slice(opts: &SpriteOptions, progress: &ProgressFn) -> anyhow::Result<SpriteRe
     let files = gather(opts);
     let input = files
         .first()
-        .ok_or_else(|| anyhow!("escolha o spritesheet"))?;
+        .ok_or_else(|| anyhow!("choose the spritesheet"))?;
     let sheet = image::open(input)
-        .map_err(|e| anyhow!("não abri {}: {}", input.display(), e))?
+        .map_err(|e| anyhow!("could not open {}: {}", input.display(), e))?
         .to_rgba8();
     let grid = Grid {
         cols: opts.cols,
@@ -355,7 +355,7 @@ fn slice(opts: &SpriteOptions, progress: &ProgressFn) -> anyhow::Result<SpriteRe
     };
     let cells = grid_cells(sheet.width(), sheet.height(), &grid);
     if cells.is_empty() {
-        return Err(anyhow!("a grade não cabe nessa folha"));
+        return Err(anyhow!("the grid does not fit on this sheet"));
     }
 
     let stem = if opts.name.trim().is_empty() {
@@ -400,7 +400,7 @@ fn slice(opts: &SpriteOptions, progress: &ProgressFn) -> anyhow::Result<SpriteRe
                     fh = th;
                 }
                 None => {
-                    // Quadro vazio: não vira arquivo, mas conta no relatório.
+                    // Empty frame: does not become a file, but counts in the report.
                     skipped += 1;
                     continue;
                 }
@@ -436,7 +436,7 @@ fn slice(opts: &SpriteOptions, progress: &ProgressFn) -> anyhow::Result<SpriteRe
 fn pack(opts: &SpriteOptions, progress: &ProgressFn) -> anyhow::Result<SpriteResult> {
     let files = gather(opts);
     if files.is_empty() {
-        return Err(anyhow!("escolha os quadros"));
+        return Err(anyhow!("choose the frames"));
     }
     let total = files.len() as u64;
     let mut images: Vec<(String, RgbaImage)> = Vec::new();
@@ -465,7 +465,7 @@ fn pack(opts: &SpriteOptions, progress: &ProgressFn) -> anyhow::Result<SpriteRes
         }
     }
     if images.is_empty() {
-        return Err(anyhow!("nenhum quadro pôde ser aberto"));
+        return Err(anyhow!("no frame could be opened"));
     }
 
     let sizes: Vec<(u32, u32)> = images.iter().map(|(_, i)| i.dimensions()).collect();
@@ -500,8 +500,8 @@ fn pack(opts: &SpriteOptions, progress: &ProgressFn) -> anyhow::Result<SpriteRes
             .map(|p| p.to_path_buf())
             .unwrap_or_default(),
     );
-    // A folha é sempre PNG: JPEG não guarda transparência e o atlas ficaria
-    // apontando para quadros com fundo preto.
+    // The sheet is always PNG: JPEG does not keep transparency and the atlas would
+    // point at frames with a black background.
     let sheet_path = dir.join(format!("{}.png", stem));
     write_image(&sheet, &sheet_path, "png", 100)?;
     let mut outputs = vec![sheet_path.to_string_lossy().to_string()];
@@ -537,7 +537,7 @@ fn pack(opts: &SpriteOptions, progress: &ProgressFn) -> anyhow::Result<SpriteRes
 fn batch(opts: &SpriteOptions, progress: &ProgressFn) -> anyhow::Result<SpriteResult> {
     let files = gather(opts);
     if files.is_empty() {
-        return Err(anyhow!("escolha as imagens ou a pasta"));
+        return Err(anyhow!("choose the images or the folder"));
     }
     let total = files.len() as u64;
     let mut outputs = Vec::new();
@@ -613,7 +613,7 @@ pub fn run(opts: &SpriteOptions, progress: &ProgressFn) -> anyhow::Result<Sprite
         "slice" => slice(opts, progress),
         "pack" => pack(opts, progress),
         "batch" => batch(opts, progress),
-        other => Err(anyhow!("modo desconhecido: {}", other)),
+        other => Err(anyhow!("unknown mode: {}", other)),
     }
 }
 
@@ -625,8 +625,8 @@ mod tests {
         RgbaImage::from_pixel(w, h, image::Rgba(c))
     }
 
-    /// Quadro com um pixel diferente em cada canto, para o round-trip pegar
-    /// qualquer deslocamento de um px.
+    /// Frame with a different pixel in each corner, so the round-trip catches
+    /// any 1 px shift.
     fn frame(i: u32) -> RgbaImage {
         let mut img = solid(16, 16, [(i * 20) as u8, 40, 200 - (i * 7) as u8, 255]);
         img.put_pixel(0, 0, image::Rgba([255, 255, 255, 255]));
@@ -685,14 +685,14 @@ mod tests {
     fn cell_size_and_grid_agree_on_the_same_sheet() {
         let by_grid = grid_cells(74, 38, &grid(4, 2, 0, 0, 2, 2));
         let by_cell = grid_cells(74, 38, &grid(0, 0, 16, 16, 2, 2));
-        assert_eq!(by_grid, by_cell, "as duas formas descrevem a mesma grade");
+        assert_eq!(by_grid, by_cell, "the two forms describe the same grid");
         assert_eq!(by_cell[0], (2, 2, 16, 16));
         assert_eq!(by_cell[1], (20, 2, 16, 16));
     }
 
     #[test]
     fn cells_that_do_not_fit_are_dropped() {
-        // 50 px de folha só cabem três células de 16 com 2 de espaço.
+        // A 50 px sheet only fits three 16 px cells with 2 px of space.
         let cells = grid_cells(50, 16, &grid(0, 0, 16, 16, 0, 2));
         assert_eq!(cells.len(), 2);
         assert!(cells.iter().all(|(x, _, w, _)| x + w <= 50));
@@ -729,7 +729,7 @@ mod tests {
             assert_eq!(
                 img.get_pixel(3, 3),
                 &image::Rgba([(i * 30) as u8, 10, 90, 255]),
-                "quadro {} veio da célula errada",
+                "frame {} came from the wrong cell",
                 i
             );
         }
@@ -760,7 +760,7 @@ mod tests {
         assert_eq!((packed.frames[0].x, packed.frames[0].y), (2, 2));
         assert_eq!((packed.frames[5].x, packed.frames[5].y), (20, 20));
         let atlas = std::fs::read_to_string(packed.atlas.as_ref().unwrap()).unwrap();
-        assert!(atlas.contains("\"frames\""), "faltou o mapa de quadros");
+        assert!(atlas.contains("\"frames\""), "missing the frame map");
         assert!(atlas.contains("q5.png"));
 
         let out = dir.join("de-volta");
@@ -773,13 +773,13 @@ mod tests {
         s.name = "q".into();
         s.output_dir = out.to_string_lossy().to_string();
         let sliced = run(&s, &crate::core::tools::noop_progress()).unwrap();
-        assert_eq!(sliced.count, 8, "voltaram menos quadros do que entraram");
+        assert_eq!(sliced.count, 8, "fewer frames came back than went in");
         for i in 0..8u32 {
             let back = image::open(&sliced.outputs[i as usize]).unwrap().to_rgba8();
             assert_eq!(
                 back.as_raw(),
                 frame(i).as_raw(),
-                "o quadro {} não voltou igual",
+                "frame {} did not come back the same",
                 i
             );
         }
@@ -796,14 +796,14 @@ mod tests {
         assert_eq!(
             near_square_cols(0),
             1,
-            "lista vazia não pode dar zero coluna"
+            "empty list cannot give zero columns"
         );
     }
 
     #[test]
     fn the_cell_is_the_biggest_frame() {
         let (w, h, pos) = pack_layout(&[(10, 20), (30, 5), (8, 8)], 2, 0);
-        assert_eq!((w, h), (60, 40), "célula 30x20, grade 2x2");
+        assert_eq!((w, h), (60, 40), "cell 30x20, grid 2x2");
         assert_eq!(pos, vec![(0, 0), (30, 0), (0, 20)]);
     }
 
@@ -816,7 +816,7 @@ mod tests {
         assert_eq!(
             trim_bounds(&solid(4, 4, [0, 0, 0, 0])),
             None,
-            "quadro vazio não tem caixa"
+            "empty frame has no box"
         );
     }
 
@@ -830,7 +830,7 @@ mod tests {
         assert_eq!(
             resize_by_rule(3, 1, "scale", 1, 0),
             (1, 1),
-            "nunca chega a zero px"
+            "never reaches zero px"
         );
     }
 
@@ -853,7 +853,7 @@ mod tests {
         o.value = 100;
         o.suffix = "@100".into();
         let res = run(&o, &crate::core::tools::noop_progress()).unwrap();
-        assert_eq!(res.count, 3, "o txt não podia entrar");
+        assert_eq!(res.count, 3, "the txt must not have gotten in");
         for out in &res.outputs {
             let img = image::open(out).unwrap().to_rgba8();
             assert_eq!(img.dimensions(), (100, 50));

@@ -1,5 +1,5 @@
-//! Google Docs/Slides/Sheets públicos (estudo 51): o export oficial
-//! `…/d/{id}/export?format=` dispensa API e OAuth para links compartilhados.
+//! Public Google Docs/Slides/Sheets (study 51): the official export
+//! `…/d/{id}/export?format=` needs no API or OAuth for shared links.
 
 use std::path::PathBuf;
 
@@ -84,11 +84,11 @@ pub async fn download(
     progress: super::ProgressFn,
 ) -> anyhow::Result<String> {
     let info = parse(url).ok_or_else(|| {
-        anyhow!("cole um link de docs.google.com (Documentos, Apresentações ou Planilhas)")
+        anyhow!("paste a docs.google.com link (Documents, Presentations or Spreadsheets)")
     })?;
     if !info.formats.iter().any(|f| f == format) {
         return Err(anyhow!(
-            "formato {} nao disponivel para {}",
+            "format {} not available for {}",
             format,
             info.kind
         ));
@@ -121,7 +121,7 @@ pub async fn download(
 
     if status.as_u16() == 401 || status.as_u16() == 403 {
         return Err(anyhow!(
-            "o arquivo nao e publico; abra no navegador e use Arquivo > Fazer download"
+            "the file is not public; open it in the browser and use File > Download"
         ));
     }
     if !status.is_success() {

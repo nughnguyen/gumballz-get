@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Letterboxd: baixa o ZIP do export oficial com a sessão e normaliza tudo. */
+  /** Letterboxd: downloads the official export ZIP with the session and normalizes everything. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

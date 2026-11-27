@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Quem deixou de me seguir: snapshots locais e a diferença entre dois. */
+  /** Who unfollowed me: local snapshots and the diff between two. */
   import { invoke } from "@tauri-apps/api/core";
   import { t } from "$lib/i18n";
   import { showToast } from "$lib/stores/toast-store.svelte";

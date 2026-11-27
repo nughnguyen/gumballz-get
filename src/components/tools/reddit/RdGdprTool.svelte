@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Lê o export oficial de dados do Reddit (pilha de CSV). Tudo local, sem rede. */
+  /** Reads the official Reddit data export (a pile of CSVs). All local, no network. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

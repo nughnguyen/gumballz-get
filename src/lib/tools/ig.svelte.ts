@@ -1,7 +1,7 @@
 /**
- * Tipos e utilidades da categoria Instagram (espelham
- * `gumballz-core/src/core/tools/instagram/`). A conta escolhida fica em
- * localStorage para todas as tools da categoria usarem a mesma sessão.
+ * Types and utilities for the Instagram category (mirroring
+ * `gumballz-core/src/core/tools/instagram/`). The chosen account lives in
+ * localStorage so all tools in the category share the same session.
  */
 import { invoke } from "@tauri-apps/api/core";
 import { saveAs } from "$lib/tools/rt";
@@ -157,7 +157,7 @@ export type ScheduledPost = {
   created_at: number;
 };
 
-/** Conta escolhida para toda a categoria (slug do bucket instagram.com). */
+/** Chosen account for the whole category (slug of the instagram.com bucket). */
 function readSlug(): string | null {
   try {
     return localStorage.getItem("ig.account");
@@ -230,7 +230,7 @@ export function defaultDownloadOptions(): DownloadOptions {
   return { caption_txt: false, metadata_json: false, audio_only: "", skip_existing: true, per_user_folder: false };
 }
 
-/** Salva uma lista como CSV escolhendo o arquivo. */
+/** Saves a list as CSV, picking the file. */
 export async function exportCsv(name: string, header: string[], rows: string[][]): Promise<string | null> {
   const path = await saveAs(`${name}.csv`, [{ name: "CSV", extensions: ["csv"] }]);
   if (!path) return null;

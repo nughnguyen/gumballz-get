@@ -1,13 +1,13 @@
-//! Modelos ONNX geridos: catálogo, download conferido e sessão de inferência.
+//! Managed ONNX models: catalog, verified download and inference session.
 //!
-//! `core/onnxrt.rs` cuida da **runtime** (a lib nativa). Aqui cuidamos dos
-//! **modelos**: cada um é um `.onnx` baixado uma vez, guardado em
-//! `<app_data>/tools/models/onnx/` e conferido por sha256. Nenhuma tool baixa
-//! modelo por conta própria — quem precisa chama `ensure_model` e recebe o
-//! caminho, e `session_for` devolve a sessão pronta.
+//! `core/onnxrt.rs` looks after the **runtime** (the native lib). Here we look after the
+//! **models**: each one is a `.onnx` downloaded once, kept in
+//! `<app_data>/tools/models/onnx/` and verified by sha256. No tool downloads a
+//! model on its own — whoever needs one calls `ensure_model` and gets the
+//! path, and `session_for` returns the ready session.
 //!
-//! Os sha256 e tamanhos do catálogo foram conferidos baixando cada arquivo em
-//! 2026-09-09 (os md5 batem com os que o rembg declara para os mesmos assets).
+//! The catalog sha256s and sizes were verified by downloading each file on
+//! 2026-09-09 (the md5s match the ones rembg declares for the same assets).
 
 use std::io::Read;
 use std::path::PathBuf;
@@ -17,8 +17,8 @@ use serde::Serialize;
 
 use super::ProgressFn;
 
-/// Um modelo do catálogo. `family` agrupa modelos que servem à mesma tool
-/// (`"rembg"` = remoção de fundo), para a UI filtrar sem saber de detalhe.
+/// A model in the catalog. `family` groups models that serve the same tool
+/// (`"rembg"` = background removal), so the UI can filter without knowing details.
 #[derive(Debug, Clone, Copy)]
 pub struct ModelSpec {
     pub id: &'static str,
@@ -29,14 +29,14 @@ pub struct ModelSpec {
     pub bytes: u64,
     pub license: &'static str,
     pub source: &'static str,
-    /// Recomendado dentro da família.
+    /// Recommended within the family.
     pub recommended: bool,
 }
 
 const CATALOG: &[ModelSpec] = &[
     ModelSpec {
         id: "u2netp",
-        name: "U²-Net leve",
+        name: "U²-Net Light",
         family: "rembg",
         url: "https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2netp.onnx",
         sha256: "309c8469258dda742793dce0ebea8e6dd393174f89934733ecc8b14c76f4ddd8",
@@ -92,7 +92,7 @@ pub fn family(name: &str) -> Vec<&'static ModelSpec> {
     CATALOG.iter().filter(|m| m.family == name).collect()
 }
 
-/// Modelo recomendado de uma família, para a UI não precisar chutar.
+/// Recommended model of a family, so the UI does not have to guess.
 pub fn default_of(family_name: &str) -> Option<&'static ModelSpec> {
     let list = family(family_name);
     list.iter()
@@ -157,8 +157,8 @@ pub struct OnnxStatus {
     pub models_dir: Option<String>,
 }
 
-/// Estado da runtime e dos modelos. Sem argumento devolve o catálogo inteiro;
-/// com `family` devolve só a família pedida.
+/// Runtime and model state. With no argument it returns the whole catalog;
+/// with `family` it returns only the requested family.
 pub fn status(family_filter: Option<&str>) -> OnnxStatus {
     let models = CATALOG
         .iter()
@@ -175,7 +175,7 @@ pub fn status(family_filter: Option<&str>) -> OnnxStatus {
 fn sha256_of(path: &std::path::Path) -> anyhow::Result<String> {
     use sha2::{Digest, Sha256};
     let mut file = std::fs::File::open(path)
-        .with_context(|| format!("abrindo {} para conferir o sha256", path.display()))?;
+        .with_context(|| format!("opening {} to check the sha256", path.display()))?;
     let mut hasher = Sha256::new();
     let mut buf = vec![0u8; 1 << 20];
     loop {
@@ -188,17 +188,17 @@ fn sha256_of(path: &std::path::Path) -> anyhow::Result<String> {
     Ok(hex::encode(hasher.finalize()))
 }
 
-/// Garante o modelo no disco. Se já está lá com o tamanho certo, não baixa de
-/// novo. O sha256 é conferido no arquivo recém-baixado, antes de virar oficial.
+/// Guarantees the model is on disk. If it is already there with the right size, it does not download
+/// again. The sha256 is checked on the freshly downloaded file, before it becomes official.
 pub async fn ensure_model(id: &str, progress: &ProgressFn) -> anyhow::Result<PathBuf> {
-    let spec = find(id).ok_or_else(|| anyhow!("modelo desconhecido: {id}"))?;
-    let dest = model_path(id).ok_or_else(|| anyhow!("não achei o diretório de dados do app"))?;
+    let spec = find(id).ok_or_else(|| anyhow!("unknown model: {id}"))?;
+    let dest = model_path(id).ok_or_else(|| anyhow!("could not find the app data directory"))?;
     if is_downloaded(id) {
         return Ok(dest);
     }
     let dir = dest
         .parent()
-        .ok_or_else(|| anyhow!("caminho de modelo sem pasta"))?
+        .ok_or_else(|| anyhow!("model path without a folder"))?
         .to_path_buf();
     std::fs::create_dir_all(&dir).with_context(|| format!("criando {}", dir.display()))?;
 
@@ -225,18 +225,18 @@ pub async fn ensure_model(id: &str, progress: &ProgressFn) -> anyhow::Result<Pat
         if got != expected {
             let _ = std::fs::remove_file(&tmp2);
             return Err(anyhow!(
-                "o modelo baixado não confere: esperava sha256 {expected}, veio {got}"
+                "the downloaded model does not match: expected sha256 {expected}, got {got}"
             ));
         }
         if dest2.exists() {
             let _ = std::fs::remove_file(&dest2);
         }
         std::fs::rename(&tmp2, &dest2)
-            .with_context(|| format!("movendo para {}", dest2.display()))?;
+            .with_context(|| format!("moving to {}", dest2.display()))?;
         Ok(())
     })
     .await
-    .map_err(|e| anyhow!("tarefa de verificação falhou: {e}"))??;
+    .map_err(|e| anyhow!("verification task failed: {e}"))??;
 
     super::report(progress, &pid, "done", 1, Some(1), None);
     Ok(dest)
@@ -244,29 +244,29 @@ pub async fn ensure_model(id: &str, progress: &ProgressFn) -> anyhow::Result<Pat
 
 /// Apaga um modelo baixado.
 pub fn remove_model(id: &str) -> anyhow::Result<()> {
-    let path = model_path(id).ok_or_else(|| anyhow!("não achei o diretório de dados do app"))?;
+    let path = model_path(id).ok_or_else(|| anyhow!("could not find the app data directory"))?;
     if path.is_file() {
         std::fs::remove_file(&path).with_context(|| format!("apagando {}", path.display()))?;
     }
     Ok(())
 }
 
-/// Quantas threads dar ao ONNX Runtime. Deixa pelo menos um núcleo livre para
-/// a interface não travar em lote grande.
+/// How many threads to give the ONNX Runtime. Leaves at least one core free so
+/// the interface does not freeze on a large batch.
 fn intra_threads() -> usize {
     std::thread::available_parallelism()
         .map(|n| (n.get().saturating_sub(1)).max(1))
         .unwrap_or(1)
 }
 
-/// Sessão pronta para um modelo já baixado. Bloqueante: chame de dentro de um
-/// `spawn_blocking`. A runtime é inicializada aqui, então um erro de lib
-/// faltando sai com a mensagem acionável do `onnxrt`, não como panic.
+/// Ready session for an already-downloaded model. Blocking: call from inside a
+/// `spawn_blocking`. The runtime is initialized here, so a missing-lib error
+/// comes out with the actionable `onnxrt` message, not as a panic.
 pub fn session_for(id: &str) -> anyhow::Result<ort::session::Session> {
-    let path = model_path(id).ok_or_else(|| anyhow!("não achei o diretório de dados do app"))?;
+    let path = model_path(id).ok_or_else(|| anyhow!("could not find the app data directory"))?;
     if !path.is_file() {
         return Err(anyhow!(
-            "o modelo {id} ainda não foi baixado (esperado em {})",
+            "model {id} has not been downloaded yet (expected at {})",
             path.display()
         ));
     }
@@ -274,29 +274,29 @@ pub fn session_for(id: &str) -> anyhow::Result<ort::session::Session> {
     session_from_file(&path)
 }
 
-/// Sessão a partir de um arquivo qualquer — útil para modelo que o usuário
-/// aponta e para os testes.
+/// Session from any file — useful for a model the user points at
+/// and for the tests.
 pub fn session_from_file(path: &std::path::Path) -> anyhow::Result<ort::session::Session> {
     use ort::session::builder::GraphOptimizationLevel;
     let mut builder = ort::session::Session::builder()
-        .map_err(|e| anyhow!("não criei o builder de sessão ONNX: {e}"))?
-        // Builds mínimos do ONNX Runtime não têm otimização de grafo; nesse
-        // caso o `ort` devolve o próprio builder de volta, então seguimos.
+        .map_err(|e| anyhow!("could not create the ONNX session builder: {e}"))?
+        // Minimal ONNX Runtime builds have no graph optimization; in that
+        // case `ort` returns the builder itself, so we carry on.
         .with_optimization_level(GraphOptimizationLevel::Level3)
         .unwrap_or_else(|e| e.recover())
         .with_intra_threads(intra_threads())
         .unwrap_or_else(|e| e.recover());
     builder
         .commit_from_file(path)
-        .map_err(|e| anyhow!("não carreguei o modelo {}: {}", path.display(), e))
+        .map_err(|e| anyhow!("could not load model {}: {}", path.display(), e))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// Release de onde todo modelo desta rodada sai. Fica no teste porque é
-    /// invariante a conferir, não valor a montar URL em tempo de execução.
+    /// Release every model of this round comes from. Stays in the test because it is
+    /// an invariant to check, not a value for building URLs at runtime.
     const REMBG_BASE: &str = "https://github.com/danielgatis/rembg/releases/download/v0.0.0";
 
     #[test]
@@ -306,15 +306,15 @@ mod tests {
         ids.sort_unstable();
         let antes = ids.len();
         ids.dedup();
-        assert_eq!(antes, ids.len(), "id de modelo repetido");
+        assert_eq!(antes, ids.len(), "duplicate model id");
         for m in CATALOG {
-            assert_eq!(m.sha256.len(), 64, "sha256 de {} tem tamanho errado", m.id);
+            assert_eq!(m.sha256.len(), 64, "sha256 of {} has the wrong length", m.id);
             assert!(
                 m.sha256.chars().all(|c| c.is_ascii_hexdigit()),
-                "sha256 de {} não é hex",
+                "sha256 of {} is not hex",
                 m.id
             );
-            assert!(m.bytes > 1_000_000, "{} parece pequeno demais", m.id);
+            assert!(m.bytes > 1_000_000, "{} looks too small", m.id);
             assert!(!m.license.is_empty());
             assert!(m.source.starts_with("https://"));
         }
@@ -325,7 +325,7 @@ mod tests {
         for m in CATALOG {
             assert!(
                 m.url.starts_with(REMBG_BASE),
-                "{} aponta para fora do release conhecido: {}",
+                "{} points outside the known release: {}",
                 m.id,
                 m.url
             );
@@ -378,7 +378,7 @@ mod tests {
         assert!(e.contains("modelo-que-nao-existe"));
     }
 
-    /// Precisa de rede: baixa o modelo pequeno e confere o sha256 fixado.
+    /// Needs the network: downloads the small model and checks the pinned sha256.
     #[test]
     #[ignore = "rede: baixa o modelo u2netp e confere o sha256 do catalogo"]
     fn baixa_o_u2netp_e_o_sha256_bate() {

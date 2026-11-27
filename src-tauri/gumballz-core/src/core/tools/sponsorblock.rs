@@ -1,5 +1,5 @@
-//! SponsorBlock (estudo 43): segmentos por prefixo de hash, como a extensão
-//! faz para não mandar o ID do vídeo ao servidor.
+//! SponsorBlock (study 43): segments by hash prefix, as the extension
+//! does so it does not send the video ID to the server.
 
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
@@ -43,11 +43,11 @@ pub struct SponsorResult {
     pub video_id: String,
     pub segments: Vec<Segment>,
     pub skipped_seconds: f64,
-    /// Argumentos equivalentes do yt-dlp para baixar sem os trechos.
+    /// Equivalent yt-dlp arguments to download without the segments.
     pub ytdlp_args: String,
 }
 
-/// Aceita URL completa, `youtu.be/ID`, `shorts/ID` ou o próprio ID.
+/// Accepts a full URL, `youtu.be/ID`, `shorts/ID` or the ID itself.
 pub fn video_id(input: &str) -> Option<String> {
     let s = input.trim();
     if s.len() == 11
@@ -65,7 +65,7 @@ pub fn video_id(input: &str) -> Option<String> {
 
 pub async fn segments(input: &str, categories: &[String]) -> anyhow::Result<SponsorResult> {
     let id = video_id(input)
-        .ok_or_else(|| anyhow!("nao reconheci um video do YouTube em: {}", input))?;
+        .ok_or_else(|| anyhow!("did not recognise a YouTube video in: {}", input))?;
     let cats: Vec<&str> = if categories.is_empty() {
         CATEGORIES.to_vec()
     } else {
@@ -85,7 +85,7 @@ pub async fn segments(input: &str, categories: &[String]) -> anyhow::Result<Spon
     let resp = client.get(&url).send().await?;
     let mut segs: Vec<Segment> = Vec::new();
     if resp.status().as_u16() == 404 {
-        // sem segmentos para esse prefixo
+        // no segments for this prefix
     } else if resp.status().is_success() {
         let arr: Vec<serde_json::Value> = resp.json().await?;
         for v in arr {
@@ -133,21 +133,21 @@ pub async fn segments(input: &str, categories: &[String]) -> anyhow::Result<Spon
 
 // ── Envio de segmentos ─────────────────────────────────────────────────
 //
-// O SponsorBlockServer é AGPL: nada dele entra aqui. O que existe é a API
-// pública `POST /api/skipSegments`, a mesma que a extensão usa.
+// SponsorBlockServer is AGPL: none of it comes in here. What exists is the public
+// API `POST /api/skipSegments`, the same one the extension uses.
 //
-// O `userID` é uma chave privada aleatória guardada na máquina, e só. O
-// servidor deriva dela o identificador público — por isso ela nunca pode
-// nascer do nome, do e-mail ou do hardware de quem usa o app.
+// The `userID` is a random private key stored on the machine, and nothing else. The
+// server derives the public identifier from it — which is why it must never be
+// born from the name, the email or the hardware of whoever uses the app.
 
 pub const USER_AGENT_TAG: &str = concat!("GumballZ Get/", env!("CARGO_PKG_VERSION"));
 pub const USER_FILE: &str = "sponsorblock-user.txt";
-/// Um envio de uma vez só; acima disso o servidor devolve limite de taxa.
+/// One submission at a time; above that the server returns a rate limit.
 pub const MAX_SEGMENTS_PER_SUBMIT: usize = 10;
 pub const ACTION_TYPES: &[&str] = &["skip", "mute", "full", "poi", "chapter"];
 
-/// Chave privada nova: 256 bits de aleatório em hexadecimal. Não deriva de
-/// nada da máquina nem da conta.
+/// A new private key: 256 bits of randomness in hexadecimal. It derives from
+/// nothing on the machine or the account.
 pub fn generate_private_id() -> String {
     format!(
         "{}{}",
@@ -156,9 +156,9 @@ pub fn generate_private_id() -> String {
     )
 }
 
-/// SHA-256 da chave privada, só para a UI mostrar um identificador estável
-/// sem exibir a chave. O identificador público de verdade é derivado pelo
-/// servidor do SponsorBlock, não por aqui.
+/// SHA-256 of the private key, only so the UI can show a stable identifier
+/// without displaying the key. The real public identifier is derived by
+/// the SponsorBlock server, not by here.
 pub fn public_fingerprint(private: &str) -> String {
     let mut h = Sha256::new();
     h.update(private.as_bytes());
@@ -166,12 +166,12 @@ pub fn public_fingerprint(private: &str) -> String {
 }
 
 fn user_file() -> anyhow::Result<std::path::PathBuf> {
-    let dir = super::tools_dir().ok_or_else(|| anyhow!("não achei a pasta de dados do app"))?;
+    let dir = super::tools_dir().ok_or_else(|| anyhow!("could not find the app data folder"))?;
     std::fs::create_dir_all(&dir)?;
     Ok(dir.join(USER_FILE))
 }
 
-/// A chave privada da máquina, criada na primeira vez e reusada depois.
+/// The machine's private key, created the first time and reused afterwards.
 pub fn local_user_id() -> anyhow::Result<String> {
     let path = user_file()?;
     if let Ok(existing) = std::fs::read_to_string(&path) {
@@ -192,7 +192,7 @@ pub struct NewSegment {
     pub category: String,
     #[serde(default = "default_action")]
     pub action_type: String,
-    /// Só o capítulo usa: é o título que aparece na barra.
+    /// Only the chapter uses it: it is the title that appears on the bar.
     #[serde(default)]
     pub description: String,
 }
@@ -201,15 +201,15 @@ fn default_action() -> String {
     "skip".to_string()
 }
 
-/// Recusa o que o servidor recusaria, com a mensagem em português e antes de
-/// gastar um envio (o limite de taxa é por conta, não por tentativa válida).
+/// Refuses what the server would refuse, with the message in English and before
+/// spending a submission (the rate limit is per account, not per valid attempt).
 pub fn validate_segments(segments: &[NewSegment], duration: f64) -> anyhow::Result<()> {
     if segments.is_empty() {
-        return Err(anyhow!("marque pelo menos um trecho antes de enviar"));
+        return Err(anyhow!("mark at least one segment before submitting"));
     }
     if segments.len() > MAX_SEGMENTS_PER_SUBMIT {
         return Err(anyhow!(
-            "no máximo {} trechos por envio",
+            "at most {} segments per submission",
             MAX_SEGMENTS_PER_SUBMIT
         ));
     }
@@ -217,33 +217,33 @@ pub fn validate_segments(segments: &[NewSegment], duration: f64) -> anyhow::Resu
         let n = i + 1;
         if !CATEGORIES.contains(&s.category.as_str()) {
             return Err(anyhow!(
-                "trecho {}: categoria desconhecida ({})",
+                "segment {}: unknown category ({})",
                 n,
                 s.category
             ));
         }
         if !ACTION_TYPES.contains(&s.action_type.as_str()) {
             return Err(anyhow!(
-                "trecho {}: tipo de ação desconhecido ({})",
+                "segment {}: unknown action type ({})",
                 n,
                 s.action_type
             ));
         }
         if !s.start.is_finite() || !s.end.is_finite() || s.start < 0.0 || s.end < 0.0 {
-            return Err(anyhow!("trecho {}: tempo inválido", n));
+            return Err(anyhow!("segment {}: invalid time", n));
         }
         let pontual = s.action_type == "poi" || s.action_type == "full";
         if !pontual && s.end <= s.start {
-            return Err(anyhow!("trecho {}: o fim tem de vir depois do começo", n));
+            return Err(anyhow!("segment {}: the end must come after the start", n));
         }
         if s.action_type == "chapter" && s.description.trim().is_empty() {
-            return Err(anyhow!("trecho {}: capítulo precisa de um título", n));
+            return Err(anyhow!("segment {}: chapter needs a title", n));
         }
         if duration > 0.0 && s.end > duration + 1.0 {
-            return Err(anyhow!("trecho {}: passa do fim do vídeo", n));
+            return Err(anyhow!("segment {}: past the end of the video", n));
         }
     }
-    // Sobreposição só importa entre trechos que pulam pedaço.
+    // Overlap only matters between segments that skip a chunk.
     let mut cortes: Vec<&NewSegment> = segments
         .iter()
         .filter(|s| s.action_type == "skip" || s.action_type == "mute")
@@ -251,13 +251,13 @@ pub fn validate_segments(segments: &[NewSegment], duration: f64) -> anyhow::Resu
     cortes.sort_by(|a, b| a.start.total_cmp(&b.start));
     for par in cortes.windows(2) {
         if par[1].start < par[0].end {
-            return Err(anyhow!("dois trechos se sobrepõem em {:.1}s", par[1].start));
+            return Err(anyhow!("two segments overlap at {:.1}s", par[1].start));
         }
     }
     Ok(())
 }
 
-/// O corpo exato do `POST /api/skipSegments`.
+/// The exact body of `POST /api/skipSegments`.
 pub fn build_payload(
     video_id: &str,
     user_id: &str,
@@ -265,10 +265,10 @@ pub fn build_payload(
     segments: &[NewSegment],
 ) -> anyhow::Result<serde_json::Value> {
     if video_id.len() != 11 {
-        return Err(anyhow!("não reconheci o vídeo do YouTube"));
+        return Err(anyhow!("did not recognize the YouTube video"));
     }
     if user_id.trim().len() < 30 {
-        return Err(anyhow!("a chave local do SponsorBlock está corrompida"));
+        return Err(anyhow!("the local SponsorBlock key is corrupted"));
     }
     validate_segments(segments, duration)?;
     let segs: Vec<serde_json::Value> = segments
@@ -303,8 +303,8 @@ pub struct SubmitOptions {
     pub segments: Vec<NewSegment>,
     #[serde(default)]
     pub video_duration: f64,
-    /// A UI tem de marcar isto depois de o usuário confirmar: o envio é
-    /// público e muda o vídeo para todo mundo.
+    /// The UI must check this after the user confirms: the submission is
+    /// public and changes the video for everyone.
     #[serde(default)]
     pub confirmed: bool,
 }
@@ -318,7 +318,7 @@ pub struct SubmitResult {
     pub message: String,
 }
 
-/// Traduz o que o servidor devolve para algo que dá para ler na tela.
+/// Translates what the server returns into something readable on screen.
 pub fn submit_error(status: u16, body: &str) -> String {
     let corpo = body.trim();
     let curto = if corpo.len() > 200 {
@@ -327,10 +327,10 @@ pub fn submit_error(status: u16, body: &str) -> String {
         corpo
     };
     match status {
-        400 => format!("o SponsorBlock recusou o envio: {}", curto),
-        403 => format!("envio bloqueado pelo SponsorBlock: {}", curto),
-        409 => "esse trecho já tinha sido enviado".to_string(),
-        429 => "muitos envios seguidos; espere alguns minutos e tente de novo".to_string(),
+        400 => format!("SponsorBlock refused the submission: {}", curto),
+        403 => format!("submission blocked by SponsorBlock: {}", curto),
+        409 => "this segment had already been submitted".to_string(),
+        429 => "too many submissions in a row; wait a few minutes and try again".to_string(),
         _ => format!("SponsorBlock: HTTP {} {}", status, curto),
     }
 }
@@ -338,11 +338,11 @@ pub fn submit_error(status: u16, body: &str) -> String {
 pub async fn submit(opts: SubmitOptions) -> anyhow::Result<SubmitResult> {
     if !opts.confirmed {
         return Err(anyhow!(
-            "o envio é público e vale para todo mundo: confirme antes"
+            "the submission is public and applies to everyone: confirm first"
         ));
     }
     let id = video_id(&opts.url)
-        .ok_or_else(|| anyhow!("nao reconheci um video do YouTube em: {}", opts.url))?;
+        .ok_or_else(|| anyhow!("did not recognise a YouTube video in: {}", opts.url))?;
     let user = local_user_id()?;
     let body = build_payload(&id, &user, opts.video_duration, &opts.segments)?;
 
@@ -418,7 +418,7 @@ mod submit_tests {
         assert!(a
             .chars()
             .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
-        assert_ne!(a, b, "cada chave nasce sozinha");
+        assert_ne!(a, b, "each key is born on its own");
         let baixo = a.to_lowercase();
         for var in ["USER", "USERNAME", "LOGNAME", "HOME", "HOSTNAME"] {
             if let Ok(v) = std::env::var(var) {
@@ -426,7 +426,7 @@ mod submit_tests {
                 if v.len() >= 3 {
                     assert!(
                         !baixo.contains(&v),
-                        "a chave não pode carregar {} da máquina",
+                        "the key cannot load {} from the machine",
                         var
                     );
                 }
@@ -442,14 +442,14 @@ mod submit_tests {
         );
         let k = generate_private_id();
         assert_eq!(public_fingerprint(&k), public_fingerprint(&k));
-        assert_ne!(public_fingerprint(&k), k, "a impressão não devolve a chave");
+        assert_ne!(public_fingerprint(&k), k, "the fingerprint does not return the key");
     }
 
     #[test]
     fn the_payload_is_what_the_api_expects() {
         let chave = "0".repeat(64);
         let body = build_payload("dQw4w9WgXcQ", &chave, 212.0, &[seg(30.0, 45.5, "sponsor")])
-            .expect("payload válido");
+            .expect("valid payload");
         assert_eq!(body["videoID"], "dQw4w9WgXcQ");
         assert_eq!(body["userID"], chave.as_str());
         assert_eq!(body["videoDuration"], 212.0);
@@ -462,31 +462,31 @@ mod submit_tests {
         assert_eq!(s["segment"][1], 45.5);
         assert_eq!(s["category"], "sponsor");
         assert_eq!(s["actionType"], "skip");
-        assert!(s.get("description").is_none(), "descrição vazia não vai");
+        assert!(s.get("description").is_none(), "empty description does not go");
     }
 
     #[test]
     fn the_payload_carries_nothing_that_identifies_the_person() {
         let chave = "a".repeat(64);
         let body = build_payload("dQw4w9WgXcQ", &chave, 0.0, &[seg(1.0, 2.0, "intro")])
-            .expect("payload válido");
+            .expect("valid payload");
         let obj = body.as_object().expect("objeto");
         let mut chaves: Vec<&str> = obj.keys().map(|k| k.as_str()).collect();
         chaves.sort_unstable();
         assert_eq!(
             chaves,
             vec!["segments", "userAgent", "userID", "videoID"],
-            "nenhum campo além dos quatro do protocolo"
+            "no field beyond the four of the protocol"
         );
         assert!(
             body.get("videoDuration").is_none(),
-            "duração 0 não vai junto"
+            "duration 0 does not go along"
         );
         let texto = body.to_string();
         for var in ["USER", "USERNAME", "LOGNAME", "HOSTNAME"] {
             if let Ok(v) = std::env::var(var) {
                 if v.trim().len() >= 3 {
-                    assert!(!texto.contains(v.trim()), "o corpo vazou {}", var);
+                    assert!(!texto.contains(v.trim()), "the body leaked {}", var);
                 }
             }
         }
@@ -500,24 +500,24 @@ mod submit_tests {
         s.description = "Receita".into();
         assert!(validate_segments(&[s.clone()], 100.0).is_ok());
         let body =
-            build_payload("dQw4w9WgXcQ", &"1".repeat(64), 100.0, &[s]).expect("payload válido");
+            build_payload("dQw4w9WgXcQ", &"1".repeat(64), 100.0, &[s]).expect("valid payload");
         assert_eq!(body["segments"][0]["description"], "Receita");
     }
 
     #[test]
     fn bad_segments_are_refused_before_the_network() {
-        assert!(validate_segments(&[], 100.0).is_err(), "lista vazia");
+        assert!(validate_segments(&[], 100.0).is_err(), "empty list");
         assert!(
             validate_segments(&[seg(50.0, 20.0, "sponsor")], 100.0).is_err(),
-            "fim antes do começo"
+            "end before start"
         );
         assert!(
             validate_segments(&[seg(10.0, 20.0, "propaganda")], 100.0).is_err(),
-            "categoria inventada"
+            "made-up category"
         );
         assert!(
             validate_segments(&[seg(10.0, 500.0, "sponsor")], 100.0).is_err(),
-            "passa do fim do vídeo"
+            "past the end of the video"
         );
         assert!(
             validate_segments(
@@ -525,14 +525,14 @@ mod submit_tests {
                 100.0
             )
             .is_err(),
-            "sobreposição"
+            "overlap"
         );
         let muitos: Vec<NewSegment> = (0..MAX_SEGMENTS_PER_SUBMIT + 1)
             .map(|i| seg(i as f64 * 10.0, i as f64 * 10.0 + 5.0, "sponsor"))
             .collect();
         assert!(
             validate_segments(&muitos, 1000.0).is_err(),
-            "envio grande demais"
+            "submission too large"
         );
     }
 
@@ -552,14 +552,14 @@ mod submit_tests {
     #[test]
     fn server_errors_become_readable_messages() {
         assert!(submit_error(429, "").contains("espere"));
-        assert!(submit_error(409, "").contains("já tinha sido"));
+        assert!(submit_error(409, "").contains("had already been"));
         assert!(submit_error(403, "banned").contains("bloqueado"));
         assert!(submit_error(400, "Duplicate segment").contains("Duplicate segment"));
         assert!(submit_error(500, "boom").contains("500"));
         let enorme = "x".repeat(1000);
         assert!(
             submit_error(400, &enorme).len() < 300,
-            "mensagem não pode ser um muro"
+            "message cannot be a wall"
         );
     }
 
@@ -572,7 +572,7 @@ mod submit_tests {
             confirmed: false,
         })
         .await
-        .expect_err("sem confirmação não sai");
+        .expect_err("without confirmation it does not go out");
         assert!(e.to_string().contains("confirme"));
     }
 }

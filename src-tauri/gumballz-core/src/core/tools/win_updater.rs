@@ -1,7 +1,7 @@
-//! ⚠️ SOMENTE WINDOWS. Atualizar programas em massa (estudo 10, Kudu) com os
-//! gerenciadores que já estiverem na máquina: winget, Chocolatey e Scoop.
-//! Só lista e atualiza; não instala gerenciador nenhum. Fora do Windows tudo
-//! devolve vazio.
+//! ⚠️ WINDOWS ONLY. Bulk program updates (study 10, Kudu) with the
+//! managers already on the machine: winget, Chocolatey and Scoop.
+//! It only lists and updates; it installs no manager. Outside Windows everything
+//! returns empty.
 
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
@@ -33,12 +33,12 @@ async fn output(program: &str, args: &[&str]) -> anyhow::Result<String> {
         .args(args)
         .output()
         .await?;
-    // winget devolve códigos != 0 quando não há nada, então não falha por status.
+    // winget returns codes != 0 when there is nothing, so do not fail on status.
     Ok(String::from_utf8_lossy(&o.stdout).to_string())
 }
 
-/// Tabela do winget: as colunas são fixadas pela posição no cabeçalho
-/// ("Name  Id  Version  Available  Source"). A linha de traços delimita.
+/// Winget table: the columns are fixed by their position in the header
+/// ("Name  Id  Version  Available  Source"). The dashed line delimits them.
 pub fn parse_winget(text: &str) -> Vec<Outdated> {
     let lines: Vec<&str> = text.lines().collect();
     let Some(sep) = lines.iter().position(|l| l.trim_start().starts_with("---")) else {
@@ -83,7 +83,7 @@ pub fn parse_winget(text: &str) -> Vec<Outdated> {
     out
 }
 
-/// `choco outdated -r` → `nome|atual|disponivel|pinned`
+/// `choco outdated -r` → `name|current|available|pinned`
 pub fn parse_choco(text: &str) -> Vec<Outdated> {
     text.lines()
         .filter_map(|l| {

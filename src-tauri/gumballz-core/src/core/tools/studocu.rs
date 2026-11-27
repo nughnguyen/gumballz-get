@@ -363,13 +363,13 @@ pub async fn fetch_document_html(
     let status = resp.status();
     if status.as_u16() == 403 {
         anyhow::bail!(
-            "Studocu chặn truy cập (HTTP 403 — trang \"Access Blocked\"). \
-            Studocu chỉ cho trình duyệt thật tải trang này; hãy mở link bằng \
-            trình duyệt rồi thử lại sau."
+            "Studocu blocked access (HTTP 403 — \"Access Blocked\" page). \
+            Studocu only lets a real browser load this page; open the link in a \
+            browser and try again later."
         );
     }
     if !status.is_success() {
-        anyhow::bail!("Studocu trả về HTTP {}", status);
+        anyhow::bail!("Studocu returned HTTP {}", status);
     }
     Ok(resp.text().await?)
 }
@@ -406,13 +406,13 @@ async fn fetch_bytes(
 /// and re-encode it as JPEG, the only image format the PDF writer
 /// embeds. Returns the JPEG bytes plus the image size in pixels.
 fn image_to_jpeg(bytes: &[u8]) -> anyhow::Result<(Vec<u8>, u32, u32)> {
-    let img = image::load_from_memory(bytes).context("không đọc được ảnh trang")?;
+    let img = image::load_from_memory(bytes).context("could not read page image")?;
     let rgb = img.to_rgb8();
     let (width, height) = rgb.dimensions();
     let mut buf = Cursor::new(Vec::new());
     let mut enc = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buf, JPEG_QUALITY);
     enc.encode_image(&rgb)
-        .map_err(|e| anyhow!("không mã hoá được JPEG: {}", e))?;
+        .map_err(|e| anyhow!("could not encode JPEG: {}", e))?;
     Ok((buf.into_inner(), width, height))
 }
 
@@ -424,7 +424,7 @@ fn placeholder_jpeg() -> anyhow::Result<(Vec<u8>, u32, u32)> {
     let mut buf = Cursor::new(Vec::new());
     let mut enc = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buf, JPEG_QUALITY);
     enc.encode_image(&white)
-        .map_err(|e| anyhow!("không mã hoá được JPEG: {}", e))?;
+        .map_err(|e| anyhow!("could not encode JPEG: {}", e))?;
     Ok((buf.into_inner(), width, height))
 }
 
@@ -537,7 +537,7 @@ pub fn build_pdf(pages: &[StudocuPage]) -> anyhow::Result<Vec<u8>> {
         .map(|p| p.jpeg.clone().unwrap_or_default())
         .collect();
     if jpegs.iter().any(|j| j.is_empty()) {
-        return Err(anyhow!("thiếu ảnh trang để ghi PDF"));
+        return Err(anyhow!("missing page image to write PDF"));
     }
     super::jpeg_pdf::build_pdf(&jpegs)
 }
@@ -610,13 +610,13 @@ pub fn build_docx(pages: &[StudocuPage], title: &str) -> anyhow::Result<Vec<u8>>
         match page.status {
             StudocuPageStatus::Blurred => {
                 body.push_str(&docx_para(&format!(
-                    "[Trang {}: bản xem trước mờ — trang này bị khóa Premium, Studocu không gửi nội dung rõ]",
+                    "[Page {}: blurred preview — this page is Premium-locked, Studocu does not send clear content]",
                     page.num
                 )));
             }
             StudocuPageStatus::Missing => {
                 body.push_str(&docx_para(&format!(
-                    "[Trang {}: không tải được ảnh trang]",
+                    "[Page {}: could not download page image]",
                     page.num
                 )));
             }
@@ -721,10 +721,10 @@ pub fn build_docx(pages: &[StudocuPage], title: &str) -> anyhow::Result<Vec<u8>>
     }
     for (name, bytes) in files {
         zip.start_file(name, opts)
-            .context("ghi file vào docx")?;
-        zip.write_all(&bytes).context("ghi file vào docx")?;
+            .context("write file into docx")?;
+        zip.write_all(&bytes).context("write file into docx")?;
     }
-    let out = zip.finish().context("hoàn tất docx")?;
+    let out = zip.finish().context("finish docx")?;
     Ok(out.into_inner())
 }
 
@@ -745,11 +745,11 @@ pub async fn download_document(
     format: &str,
 ) -> anyhow::Result<StudocuDownloadOutcome> {
     let info = parse_studocu_url(url)
-        .ok_or_else(|| anyhow!("không phải link tài liệu Studocu (studocu.com / studocu.vn / studocu.id / studeersnel.nl)"))?;
+        .ok_or_else(|| anyhow!("not a Studocu document link (studocu.com / studocu.vn / studocu.id / studeersnel.nl)"))?;
     let client = super::client()?;
     let html = fetch_document_html(&client, &info.url).await?;
     let doc = extract_document(&html, &info.id)
-        .ok_or_else(|| anyhow!("Không đọc được thông tin tài liệu Studocu (trang bị chặn hoặc đã đổi cấu trúc)"))?;
+        .ok_or_else(|| anyhow!("Could not read Studocu document info (page blocked or structure changed)"))?;
     // Real network bytes so far: the document HTML itself. Page
     // fetches add to this; the compile phase transfers nothing, so the
     // total stays flat there and the speed honestly drops to zero.

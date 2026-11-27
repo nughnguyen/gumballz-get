@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** PDF → Markdown limpo (títulos, listas, tabelas) para jogar num LLM. */
+  /** PDF → clean Markdown (headings, lists, tables) to feed into an LLM. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

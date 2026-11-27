@@ -1,6 +1,6 @@
-//! Exportações: CSV para planilha/migração (Eagle, Notion, Are.na), JSON
-//! completo, galeria HTML offline (busca, agrupada por seção, sem "More
-//! ideas") e PDF com um pin por página.
+//! Exports: CSV for spreadsheets/migration (Eagle, Notion, Are.na), full JSON,
+//! offline HTML gallery (search, grouped by section, no "More
+//! ideas") and PDF with one pin per page.
 
 use std::collections::HashMap;
 
@@ -8,7 +8,7 @@ use std::path::Path;
 
 use super::api::Pin;
 
-/// Garante JPEG (PNG/WebP passam pelo ffmpeg), para o PDF.
+/// Guarantees JPEG (PNG/WebP go through ffmpeg), for the PDF.
 pub async fn to_jpeg(data: Vec<u8>, work: &Path, idx: usize) -> anyhow::Result<Vec<u8>> {
     super::super::slides::ensure_jpeg(data, work, idx).await
 }
@@ -115,7 +115,7 @@ fn esc(s: &str) -> String {
         .replace('"', "&quot;")
 }
 
-/// Caminho relativo à pasta da galeria (os arquivos ficam dentro dela).
+/// Path relative to the gallery folder (the files stay inside it).
 fn rel(root: &str, file: &str) -> String {
     let r = root.trim_end_matches(['/', '\\']);
     if let Some(rest) = file.strip_prefix(r) {
@@ -125,8 +125,8 @@ fn rel(root: &str, file: &str) -> String {
     }
 }
 
-/// Galeria HTML de arquivo único. `files` aponta para os arquivos locais;
-/// sem arquivo local a imagem vem do CDN (736x).
+/// Single-file HTML gallery. `files` points at the local files;
+/// without a local file the image comes from the CDN (736x).
 pub fn html_gallery(
     title: &str,
     subtitle: &str,
@@ -195,12 +195,12 @@ pub fn html_gallery(
         let badges = format!(
             "{}{}{}",
             if p.kind == "video" {
-                r#"<span class="b">vídeo</span>"#
+                r#"<span class="b">video</span>"#
             } else {
                 ""
             },
             if p.is_promoted {
-                r#"<span class="b warn">anúncio</span>"#
+                r#"<span class="b warn">ad</span>"#
             } else {
                 ""
             },
@@ -211,7 +211,7 @@ pub fn html_gallery(
             },
         );
         items.push_str(&format!(
-            r#"<figure data-sec="{sec}" data-text="{text}" data-kind="{kind}">{media}<figcaption><strong>{title}</strong><span class="meta">{saves} saves{link}</span>{badges}<a class="open" href="{url}" target="_blank" rel="noopener">abrir no Pinterest</a></figcaption></figure>
+            r#"<figure data-sec="{sec}" data-text="{text}" data-kind="{kind}">{media}<figcaption><strong>{title}</strong><span class="meta">{saves} saves{link}</span>{badges}<a class="open" href="{url}" target="_blank" rel="noopener">open on Pinterest</a></figcaption></figure>
 "#,
             sec = esc(&sec),
             text = esc(&text),
@@ -230,7 +230,7 @@ pub fn html_gallery(
             format!(
                 r#"<button data-sec="{0}">{1}</button>"#,
                 esc(s),
-                if s.is_empty() { "sem seção" } else { s }
+                if s.is_empty() { "no section" } else { s }
             )
         })
         .collect();
@@ -252,7 +252,7 @@ figcaption strong{{font-weight:600;line-height:1.25}}.meta{{color:var(--dim);fon
 a.open{{color:#e60023;text-decoration:none;font-size:12px}}a.open:hover{{text-decoration:underline}}
 .count{{color:var(--dim);font-size:13px}}
 </style></head><body>
-<header><h1>{title}</h1><span class="sub">{subtitle}</span><input type="search" id="q" placeholder="Buscar nos pins…"><span class="count" id="c"></span></header>
+<header><h1>{title}</h1><span class="sub">{subtitle}</span><input type="search" id="q" placeholder="Search pins…"><span class="count" id="c"></span></header>
 <div style="padding:10px 20px 0;display:flex;flex-wrap:wrap;gap:6px">{secs}</div>
 <main id="g">
 {items}</main>
@@ -304,7 +304,7 @@ mod tests {
         };
         let html = html_gallery("Board", "2 pins", &[a, b], &HashMap::new(), "/tmp/x");
         assert!(html.contains("<figure data-sec=\"Sala\""));
-        assert!(html.contains("sem seção"));
+        assert!(html.contains("no section"));
         assert!(html.contains("One"));
     }
 

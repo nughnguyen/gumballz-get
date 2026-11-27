@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Spritesheet: fatiar em quadros, montar a folha com atlas, ou passar a régua numa pasta. */
+  /** Spritesheet: slice into frames, build the sheet with an atlas, or audit a folder. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

@@ -26,7 +26,7 @@ pub enum DanmakuFormat {
 }
 
 impl DanmakuFormat {
-    /// Nome vindo do front (ou de uma configuração), sem diferenciar caixa.
+    /// Name coming from the frontend (or a config), case-insensitive.
     pub fn from_name(name: &str) -> Option<Self> {
         match name.trim().to_lowercase().as_str() {
             "xml" => Some(DanmakuFormat::Xml),

@@ -1,6 +1,6 @@
-//! Exportacao de posts e usuarios (estudo 67): JSON, CSV, Markdown, HTML e
-//! texto. Os mesmos formatos do twitter-web-exporter, escritos a mao para
-//! nao trazer crate de CSV.
+//! Export of posts and users (study 67): JSON, CSV, Markdown, HTML and
+//! text. The same formats as twitter-web-exporter, written by hand to
+//! avoid pulling in a CSV crate.
 
 use super::{XPost, XUser};
 
@@ -119,7 +119,7 @@ pub fn posts_markdown(title: &str, posts: &[XPost]) -> String {
             match m.kind.as_str() {
                 "photo" => out.push_str(&format!(
                     "![{}]({})\n\n",
-                    if m.alt.is_empty() { "imagem" } else { &m.alt },
+                    if m.alt.is_empty() { "image" } else { &m.alt },
                     m.url
                 )),
                 _ => out.push_str(&format!("[{}]({})\n\n", m.kind, m.url)),
@@ -221,7 +221,7 @@ pub fn posts_html(title: &str, posts: &[XPost]) -> String {
     )
 }
 
-/// Escreve `posts` em `dest` no formato pedido e devolve o caminho.
+/// Writes `posts` to `dest` in the requested format and returns the path.
 pub fn write_posts(
     posts: &[XPost],
     format: &str,
@@ -234,7 +234,7 @@ pub fn write_posts(
         "md" | "markdown" => posts_markdown(title, posts),
         "html" => posts_html(title, posts),
         "txt" | "text" => posts_text(posts),
-        other => anyhow::bail!("formato desconhecido: {}", other),
+        other => anyhow::bail!("unknown format: {}", other),
     };
     if let Some(parent) = dest.parent() {
         std::fs::create_dir_all(parent)?;
@@ -259,7 +259,7 @@ pub fn write_users(
                 .join("\n")
                 + "\n"
         }
-        other => anyhow::bail!("formato desconhecido: {}", other),
+        other => anyhow::bail!("unknown format: {}", other),
     };
     if let Some(parent) = dest.parent() {
         std::fs::create_dir_all(parent)?;

@@ -1,10 +1,10 @@
-//! Apagar de verdade: sobrescreve o conteúdo antes de remover, para o arquivo
-//! não sair inteiro num programa de recuperação.
+//! Delete for real: overwrites the content before removing, so the file
+//! does not come out whole in a recovery program.
 //!
-//! **Aviso honesto:** em SSD, APFS, Btrfs e qualquer sistema com cópia-em-
-//! escrita ou wear leveling, sobrescrever o arquivo não garante que o bloco
-//! físico antigo sumiu. Em disco rígido com sistema de arquivos comum, garante.
-//! Para SSD, o que apaga de verdade é criptografia de disco inteiro.
+//! **Honest warning:** on SSD, APFS, Btrfs and any system with copy-on-
+//! write or wear leveling, overwriting the file does not guarantee the old
+//! physical block is gone. On a hard disk with a plain filesystem, it does.
+//! For SSD, what really deletes is full-disk encryption.
 
 use std::io::{Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
@@ -14,17 +14,17 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Deserialize)]
 pub struct ShredOptions {
     pub paths: Vec<String>,
-    /// Quantas passagens de sobrescrita (1 basta em disco moderno).
+    /// How many overwrite passes (1 is enough on a modern disk).
     #[serde(default = "default_passes")]
     pub passes: u32,
-    /// Renomeia para um nome aleatório antes de apagar, para o nome não ficar
-    /// no diário do sistema de arquivos.
+    /// Renames to a random name before deleting, so the name does not stay
+    /// in the filesystem journal.
     #[serde(default = "default_true")]
     pub rename: bool,
-    /// Entra em pasta e apaga o conteúdo dela também.
+    /// Enters a folder and deletes its contents too.
     #[serde(default)]
     pub recursive: bool,
-    /// Só listar o que seria apagado.
+    /// Only list what would be deleted.
     #[serde(default)]
     pub dry_run: bool,
 }
@@ -49,11 +49,11 @@ pub struct ShredItem {
 pub struct ShredResult {
     pub items: Vec<ShredItem>,
     pub bytes_total: u64,
-    /// Verdadeiro quando o alvo está num volume onde sobrescrever não garante nada.
+    /// True when the target is on a volume where overwriting guarantees nothing.
     pub copy_on_write_warning: bool,
 }
 
-/// Sistemas de arquivos onde sobrescrever o arquivo não sobrescreve o bloco.
+/// Filesystems where overwriting the file does not overwrite the block.
 pub fn is_copy_on_write(fs_name: &str) -> bool {
     let f = fs_name.to_lowercase();
     ["apfs", "btrfs", "zfs", "refs", "bcachefs"]
@@ -69,9 +69,9 @@ fn random_name(len: usize) -> String {
         .collect()
 }
 
-/// Sobrescreve o arquivo inteiro `passes` vezes e devolve quantos bytes foram
-/// cobertos. A última passagem é de zeros: sobra menos rastro de "isto foi
-/// sobrescrito de propósito" do que ruído aleatório.
+/// Overwrites the whole file `passes` times and returns how many bytes were
+/// covered. The last pass is zeros: it leaves less of a trace of "this was
+/// overwritten on purpose" than random noise.
 pub fn overwrite(path: &Path, passes: u32) -> std::io::Result<u64> {
     use rand::RngExt;
     let len = std::fs::metadata(path)?.len();
@@ -167,7 +167,7 @@ pub fn run(opts: &ShredOptions, progress: &super::ProgressFn) -> ShredResult {
         );
         items.push(shred_file(f, opts));
     }
-    // Pastas vazias sobrando depois do conteúdo ir embora.
+    // Empty folders left over after the contents are gone.
     if opts.recursive && !opts.dry_run {
         for p in &opts.paths {
             let path = Path::new(p);
@@ -202,10 +202,10 @@ mod tests {
         let n = overwrite(&p, 2).unwrap();
         assert_eq!(n, 20);
         let after = std::fs::read(&p).unwrap();
-        assert_eq!(after.len(), 20, "o tamanho tem que ser preservado");
+        assert_eq!(after.len(), 20, "the size must be preserved");
         assert!(
             after.iter().all(|b| *b == 0),
-            "a última passagem é de zeros"
+            "the last pass is zeros"
         );
         assert!(!after.starts_with(b"senha"));
         let _ = std::fs::remove_file(&p);
@@ -232,7 +232,7 @@ mod tests {
         };
         let res = run(&opts, &crate::core::tools::noop_progress());
         assert!(res.items[0].ok, "{:?}", res.items[0].error);
-        assert!(!p.exists(), "o arquivo continua lá");
+        assert!(!p.exists(), "the file is still there");
         assert_eq!(res.bytes_total, 17);
     }
 
@@ -261,7 +261,7 @@ mod tests {
         std::fs::write(dir.join("dentro/b.txt"), b"b").unwrap();
         let mut flat = Vec::new();
         collect(&dir, false, &mut flat);
-        assert!(flat.is_empty(), "sem recursivo, pasta não vira lista");
+        assert!(flat.is_empty(), "without recursion, a folder does not become a list");
         let mut deep = Vec::new();
         collect(&dir, true, &mut deep);
         assert_eq!(deep.len(), 2);

@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Autoclicker (estudo 14, Blur AutoClicker): CPS exato, faixa aleatória, limites, posição fixa e atalho global. */
+  /** Autoclicker (study 14, Blur AutoClicker): exact CPS, random range, limits, fixed position and global hotkey. */
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
   import { onDestroy, onMount } from "svelte";

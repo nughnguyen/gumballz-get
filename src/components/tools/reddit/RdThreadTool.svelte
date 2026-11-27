@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Backup de uma thread do Reddit: post + comentários em Markdown, HTML e JSON. */
+  /** Backup of a Reddit thread: post + comments in Markdown, HTML and JSON. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

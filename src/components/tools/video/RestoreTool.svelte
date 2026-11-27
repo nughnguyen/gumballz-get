@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Restaurar (cintilação/ruído/banding) e estabilizar. `mode` escolhe a cara. */
+  /** Restore (flicker/noise/banding) and stabilize. `mode` picks the look. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

@@ -1,12 +1,12 @@
-//! `tumblr-blog-backup`: espelho offline de um blog do Tumblr.
+//! `tumblr-blog-backup`: offline mirror of a Tumblr blog.
 //!
-//! Modelo de dados na linha do TumblThreeApp/TumblThree (MIT): o post tem um
-//! `trail`, que é a cadeia de reblog do mais antigo (raiz) para o mais novo.
-//! Renderizar essa cadeia como citação aninhada é o que faz o backup parecer
-//! o Tumblr e não uma lista de imagens soltas.
+//! Data model in the line of TumblThreeApp/TumblThree (MIT): the post has a
+//! `trail`, which is the reblog chain from the oldest (root) to the newest.
+//! Rendering that chain as a nested quote is what makes the backup look like
+//! Tumblr and not a list of loose images.
 //!
-//! A saída é HTML local navegável: índice paginado, uma página por post e uma
-//! por tag, com os links de mídia reescritos para os arquivos baixados.
+//! The output is navigable local HTML: paginated index, one page per post and one
+//! per tag, with the media links rewritten to the downloaded files.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -26,7 +26,7 @@ pub const TOOL_ID: &str = "tumblr-blog-backup";
 pub struct Options {
     /// Nome do blog (`meublog`) ou a URL dele.
     pub blog: String,
-    /// Pasta raiz do espelho (uma subpasta por blog é criada dentro).
+    /// Mirror root folder (one subfolder per blog is created inside).
     pub out_dir: String,
     #[serde(default = "yes")]
     pub download_media: bool,
@@ -102,40 +102,40 @@ pub fn blog_url(input: &str) -> String {
 
 // ───────────────────────── sanitização ─────────────────────────
 
-/// Tags que executam ou puxam recurso de fora; nenhuma delas tem razão de
-/// existir num espelho local.
+/// Tags that execute or pull in an outside resource; none of them has any reason to
+/// exist in a local mirror.
 const DANGER: &[&str] = &[
     "script", "style", "iframe", "object", "embed", "form", "link", "meta",
 ];
 
 static BLOCKS: Lazy<Regex> = Lazy::new(|| {
-    // A crate `regex` não tem retrovisor, então a alternância é montada com o
-    // par de tags escrito por extenso.
+    // The `regex` crate has no lookbehind, so the alternation is built with the
+    // tag pair written out in full.
     let alt = DANGER
         .iter()
         .map(|t| format!(r"<\s*{0}\b[^>]*>.*?<\s*/\s*{0}\s*>", t))
         .collect::<Vec<_>>()
         .join("|");
-    Regex::new(&format!("(?is){}", alt)).expect("regex de blocos perigosos")
+    Regex::new(&format!("(?is){}", alt)).expect("dangerous blocks regex")
 });
 static VOIDS: Lazy<Regex> = Lazy::new(|| {
     Regex::new(&format!(r"(?is)<\s*/?\s*(?:{})\b[^>]*>", DANGER.join("|")))
-        .expect("regex de tags perigosas soltas")
+        .expect("loose dangerous tags regex")
 });
 static HANDLERS: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r#"(?is)\s+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)"#)
-        .expect("regex de handler inline")
+        .expect("inline handler regex")
 });
 static JS_URL: Lazy<Regex> = Lazy::new(|| {
     Regex::new(
         r#"(?is)(href|src|action)\s*=\s*(?:"|')?\s*(?:javascript|data|vbscript):[^"'>\s]*(?:"|')?"#,
     )
-    .expect("regex de URL de script")
+    .expect("script URL regex")
 });
 
-/// O corpo do post é HTML que veio do Tumblr; escapar tudo mataria o espelho.
-/// Então some com o que executa (script, iframe, `onerror=`, `javascript:`) e
-/// deixa o resto passar. Texto curto (título, tag, blog) usa `esc`, não isto.
+/// The post body is HTML that came from Tumblr; escaping everything would kill the mirror.
+/// So remove what executes (script, iframe, `onerror=`, `javascript:`) and
+/// let the rest through. Short text (title, tag, blog) uses `esc`, not this.
 pub fn sanitize_html(input: &str) -> String {
     let step = BLOCKS.replace_all(input, "");
     let step = VOIDS.replace_all(&step, "");
@@ -176,8 +176,8 @@ fn trail_of(meta: &serde_json::Value) -> Vec<TrailItem> {
         .collect()
 }
 
-/// O corpo depende do tipo do post: foto tem `caption`, texto tem `body`,
-/// citação tem `text` + `source`, pergunta tem `question` + `answer`.
+/// The body depends on the post type: photo has `caption`, text has `body`,
+/// quote has `text` + `source`, question has `question` + `answer`.
 fn body_of(e: &Entry) -> String {
     let mut parts: Vec<String> = Vec::new();
     let mut push = |path: &str, wrap: Option<&str>| {
@@ -200,8 +200,8 @@ fn body_of(e: &Entry) -> String {
     parts.join("\n")
 }
 
-/// Uma linha por post: as várias mídias de um mesmo post entram juntas, e a
-/// ordem do dump (o Tumblr entrega do mais novo para o mais velho) é mantida.
+/// One line per post: the several media of the same post go in together, and the
+/// dump order (Tumblr delivers newest first) is kept.
 pub fn parse_posts(entries: &[Entry]) -> Vec<Post> {
     let mut order: Vec<String> = Vec::new();
     let mut posts: HashMap<String, Post> = HashMap::new();
@@ -244,13 +244,13 @@ pub fn parse_posts(entries: &[Entry]) -> Vec<Post> {
 
 // ───────────────────────── render ─────────────────────────
 
-/// Cadeia de reblog como citação aninhada: a raiz fica no nível mais fundo e
-/// o item atual, do lado de fora — igual ao Tumblr.
+/// Reblog chain as a nested quote: the root stays at the deepest level and
+/// the current item, on the outside — just like Tumblr.
 pub fn render_trail(items: &[TrailItem], depth: &str, media: &HashMap<String, String>) -> String {
     let mut inner = String::new();
     for item in items {
         let name = if item.blog.is_empty() {
-            "anônimo".to_string()
+            "anonymous".to_string()
         } else {
             item.blog.clone()
         };
@@ -279,8 +279,8 @@ pub fn render_trail(items: &[TrailItem], depth: &str, media: &HashMap<String, St
     inner
 }
 
-/// Troca as URLs remotas pelos arquivos locais já baixados. `map` guarda o
-/// caminho relativo à raiz do espelho; `depth` é o prefixo da página atual.
+/// Swaps the remote URLs for the already-downloaded local files. `map` keeps the
+/// path relative to the mirror root; `depth` is the current page's prefix.
 pub fn rewrite_media(html: &str, map: &HashMap<String, String>, depth: &str) -> String {
     let mut out = html.to_string();
     for (url, local) in map {
@@ -394,7 +394,7 @@ fn article(
     } else {
         let s = post.summary.trim();
         if s.is_empty() {
-            r#"<span class="empty">sem resumo</span>"#.to_string()
+            r#"<span class="empty">no summary</span>"#.to_string()
         } else {
             format!("<p>{}</p>", esc(s))
         }
@@ -415,7 +415,7 @@ fn article(
     )
 }
 
-/// Nome de arquivo por página: a 1 é o `index.html`.
+/// File name per page: page 1 is `index.html`.
 pub fn page_name(page: usize) -> String {
     if page <= 1 {
         "index.html".to_string()
@@ -439,7 +439,7 @@ fn pager(page: usize, pages: usize, depth: &str) -> String {
     }
     let prev = if page > 1 {
         format!(
-            r#"<a href="{}{}">← anteriores</a>"#,
+            r#"<a href="{}{}">← previous</a>"#,
             depth,
             page_name(page - 1)
         )
@@ -448,7 +448,7 @@ fn pager(page: usize, pages: usize, depth: &str) -> String {
     };
     let next = if page < pages {
         format!(
-            r#"<a href="{}{}">próximas →</a>"#,
+            r#"<a href="{}{}">next →</a>"#,
             depth,
             page_name(page + 1)
         )
@@ -461,8 +461,8 @@ fn pager(page: usize, pages: usize, depth: &str) -> String {
     )
 }
 
-/// Tag → nome de arquivo, resolvendo colisão (`arte` e `Arte!` viram slugs
-/// iguais) com sufixo numérico.
+/// Tag → file name, resolving collisions (`arte` and `Arte!` become equal slugs)
+/// with a numeric suffix.
 pub fn slug_map(tags: &[String]) -> HashMap<String, String> {
     let mut used: HashMap<String, usize> = HashMap::new();
     let mut out: HashMap<String, String> = HashMap::new();
@@ -512,7 +512,7 @@ fn media_map(posts: &[Post], index: &LocalIndex, root: &Path) -> HashMap<String,
 pub async fn run(opts: &Options, progress: &super::super::ProgressFn) -> Result<BackupResult> {
     let url = blog_url(&opts.blog);
     if url.is_empty() {
-        anyhow::bail!("informe o blog");
+        anyhow::bail!("tell us the blog");
     }
     let cookies = match opts.session_netscape.as_deref() {
         Some(s) => gdl::write_cookies(s, &["tumblr.com"])?,
@@ -579,7 +579,7 @@ pub async fn run(opts: &Options, progress: &super::super::ProgressFn) -> Result<
     let all_tags: Vec<String> = posts.iter().flat_map(|p| p.tags.clone()).collect();
     let slugs = slug_map(&all_tags);
 
-    // Índice paginado.
+    // Paginated index.
     let per_page = opts.per_page.max(1);
     let pages = page_count(posts.len(), per_page);
     for page in 1..=pages {
@@ -591,14 +591,14 @@ pub async fn run(opts: &Options, progress: &super::super::ProgressFn) -> Result<
         body.push_str(&pager(page, pages, ""));
         let html = shell(
             &blog_name,
-            &format!("{} posts · espelho local", posts.len()),
+            &format!("{} posts · local mirror", posts.len()),
             "",
             &body,
         );
         std::fs::write(root.join(page_name(page)), html)?;
     }
 
-    // Uma página por post.
+    // One page per post.
     for (i, post) in posts.iter().enumerate() {
         if i % 25 == 0 {
             super::super::report(
@@ -616,7 +616,7 @@ pub async fn run(opts: &Options, progress: &super::super::ProgressFn) -> Result<
         std::fs::write(root.join("posts").join(name), html)?;
     }
 
-    // Uma página por tag, mais o índice de tags.
+    // One page per tag, plus the tag index.
     let mut by_tag: HashMap<String, Vec<&Post>> = HashMap::new();
     for post in &posts {
         for tag in &post.tags {
@@ -701,7 +701,7 @@ mod tests {
     ]"#;
 
     fn posts() -> Vec<Post> {
-        let entries = gdl::parse_dump(DUMP).expect("dump válido");
+        let entries = gdl::parse_dump(DUMP).expect("valid dump");
         parse_posts(&entries)
     }
 
@@ -724,14 +724,14 @@ mod tests {
         assert_eq!(
             html.matches("<blockquote").count(),
             3,
-            "um nível por elo da cadeia"
+            "one level per link in the chain"
         );
-        let raiz = html.find("começou aqui").expect("raiz presente");
-        let meio = html.find("passou por aqui").expect("meio presente");
-        let fim = html.find("e cheguei").expect("atual presente");
-        assert!(raiz < meio && meio < fim, "raiz é o nível mais interno");
+        let raiz = html.find("começou aqui").expect("root present");
+        let meio = html.find("passou por aqui").expect("middle present");
+        let fim = html.find("e cheguei").expect("current present");
+        assert!(raiz < meio && meio < fim, "root is the innermost level");
         assert!(html.contains(r#"data-root="1""#));
-        // O elo mais externo é o item atual.
+        // The outermost link is the current item.
         assert!(html.starts_with("<blockquote"));
         assert!(html.ends_with("</blockquote>"));
     }
@@ -746,7 +746,7 @@ mod tests {
         let sujo = r#"<p>oi</p><script>alert(1)</script><img src="x.jpg" onerror="roubar()">
 <iframe src="https://mal.com"></iframe><a href="javascript:alert(2)">clique</a>"#;
         let limpo = sanitize_html(sujo);
-        assert!(limpo.contains("<p>oi</p>"), "o post continua lá");
+        assert!(limpo.contains("<p>oi</p>"), "the post is still there");
         assert!(limpo.contains(r#"<img src="x.jpg""#));
         assert!(!limpo.contains("alert(1)"));
         assert!(!limpo.to_lowercase().contains("<script"));
@@ -774,7 +774,7 @@ mod tests {
         assert_eq!(
             rewrite_media(r#"<img src="https://outro/x.jpg">"#, &map, ""),
             r#"<img src="https://outro/x.jpg">"#,
-            "o que não baixou continua apontando para a web"
+            "what did not download keeps pointing to the web"
         );
     }
 
@@ -792,7 +792,7 @@ mod tests {
         assert_eq!(page_count(0, 50), 1);
         assert_eq!(page_count(50, 50), 1);
         assert_eq!(page_count(51, 50), 2);
-        assert_eq!(page_count(10, 0), 10, "per_page zero não divide por zero");
+        assert_eq!(page_count(10, 0), 10, "per_page zero does not divide by zero");
         assert_eq!(page_name(1), "index.html");
         assert_eq!(page_name(3), "page-3.html");
     }

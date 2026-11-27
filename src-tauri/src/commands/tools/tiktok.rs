@@ -1,9 +1,9 @@
-//! Comandos da categoria TikTok: vídeo sem marca d'água em lote, o som com
-//! atribuição e o índice dos favoritos/da mídia do perfil.
+//! Commands of the TikTok category: batch watermark-free video, the sound with
+//! attribution and the index of favorites / profile media.
 //!
-//! O vídeo e o som são conteúdo público — a sessão só entra como reforço,
-//! para conta privada e para o site não tratar a gente como robô. Os
-//! favoritos, esses, não existem sem a sessão do usuário.
+//! Video and sound are public content — the session only comes in as reinforcement,
+//! for private accounts and so the site does not treat us like a bot. Favorites,
+//! on the other hand, do not exist without the user's session.
 
 use gumballz_core::core::tools::tiktok::{download, favorites, sound};
 
@@ -11,7 +11,7 @@ use super::{err, progress};
 
 const DOMAIN: &str = "tiktok.com";
 
-/// Cookies da conta escolhida no gerenciador (None = `_default`).
+/// Cookies of the account chosen in the manager (None = `_default`).
 fn session_of(slug: Option<&str>) -> Option<String> {
     let slug = slug.unwrap_or("_default");
     let content = crate::cookies::storage::read_account_file(DOMAIN, slug).ok()?;

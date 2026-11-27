@@ -18,9 +18,9 @@
 
 <script lang="ts">
   /**
-   * Grade de itens (post, reel, story, highlight) com seleção, opções de
-   * download e barra de progresso. Reutilizada por todas as tools que
-   * terminam em "baixar".
+   * Item grid (post, reel, story, highlight) with selection, download
+   * options and a progress bar. Reused by every tool that
+   * ends in "download".
    */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount, untrack } from "svelte";

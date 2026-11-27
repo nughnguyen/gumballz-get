@@ -1,20 +1,20 @@
-//! Vimeo: dois caminhos que o yt-dlp já sabe fazer, mas que a UI do GumballZ Get
-//! ainda não expunha direito.
+//! Vimeo: two paths yt-dlp already knows how to do, but which GumballZ Get's UI
+//! did not yet expose properly.
 //!
-//! 1. **Acesso privado / unlisted** — o link com hash (`vimeo.com/<id>/<hash>`)
-//!    já basta por si; o vídeo com senha precisa de `--video-password`. Aqui a
-//!    senha é do usuário, que já tem o link e a senha legitimamente: nada de
-//!    tentativa e erro, nada de lista de senhas, nada de repetição automática.
-//!    Uma senha errada volta como erro e para.
-//! 2. **Backup de showcase / álbum / canal** — o `VimeoAlbumIE` do yt-dlp
-//!    enumera a coleção; aqui a enumeração vem do `--flat-playlist -J` e o
-//!    laço de download é nosso, para dar progresso por item, resumo por item e
-//!    retomada. O motor de download compartilhado (`get_media_info`) hoje
-//!    assume vídeo único, então o fan-out de playlist mora neste módulo.
+//! 1. **Private / unlisted access** — the link with a hash (`vimeo.com/<id>/<hash>`)
+//!    is enough by itself; the password-protected video needs `--video-password`. Here the
+//!    password is the user's, who already has the link and the password legitimately: no
+//!    trial and error, no password list, no automatic repetition.
+//!    A wrong password comes back as an error and stops.
+//! 2. **Showcase / album / channel backup** — yt-dlp's `VimeoAlbumIE`
+//!    enumerates the collection; here the enumeration comes from `--flat-playlist -J` and the
+//!    download loop is ours, to give per-item progress, per-item summary and
+//!    resume. The shared download engine (`get_media_info`) today
+//!    assumes a single video, so the playlist fan-out lives in this module.
 //!
-//! Senha nunca aparece em log, em mensagem de erro nem no comando exibido: o
-//! argv passa por `shell_words::redact` antes de virar texto e a saída do
-//! yt-dlp passa por `scrub` antes de virar mensagem.
+//! A password never appears in a log, in an error message or in the displayed command: the
+//! argv goes through `shell_words::redact` before becoming text and yt-dlp's
+//! output goes through `scrub` before becoming a message.
 
 use std::path::{Path, PathBuf};
 
@@ -26,20 +26,20 @@ use super::{report, sanitize_name, ProgressFn};
 const ID_PRIVATE: &str = "vm-private";
 const ID_SHOWCASE: &str = "vm-showcase";
 
-/// Marcadores do `--print` do yt-dlp: é assim que sabemos o arquivo final e o
-/// título sem ter que adivinhar a extensão.
+/// Markers of yt-dlp's `--print`: that is how we know the final file and the
+/// title without having to guess the extension.
 const MARK_FILE: &str = "GUMBALLZ_FILEPATH:";
 const MARK_META: &str = "GUMBALLZ_META:";
 
-/// Extensões que contam como "já baixado" na hora de retomar.
+/// Extensions that count as "already downloaded" when resuming.
 const MEDIA_EXTS: &[&str] = &[
     "mp4", "mkv", "webm", "mov", "m4v", "flv", "avi", "mp3", "m4a", "opus", "wav", "aac",
 ];
 
 // ───────────────────────── alvo (as formas de URL) ─────────────────────────
 
-/// O que um link do Vimeo aponta. `Video` cobre o privado/unlisted (o `hash`
-/// é o segredo que vem no próprio link); os outros são coleções.
+/// What a Vimeo link points to. `Video` covers private/unlisted (the `hash`
+/// is the secret that comes in the link itself); the others are collections.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Target {
     Video { id: String, hash: Option<String> },
@@ -50,7 +50,7 @@ pub enum Target {
 }
 
 impl Target {
-    /// Rótulo estável para a UI e para o resultado.
+    /// Stable label for the UI and for the result.
     pub fn kind(&self) -> &'static str {
         match self {
             Target::Video { .. } => "video",
@@ -61,13 +61,13 @@ impl Target {
         }
     }
 
-    /// Coleção (tem vários vídeos dentro) ou vídeo solto.
+    /// Collection (has several videos inside) or a loose video.
     pub fn is_collection(&self) -> bool {
         !matches!(self, Target::Video { .. })
     }
 
-    /// URL canônica para entregar ao yt-dlp. O hash do unlisted continua no
-    /// caminho, que é como o extractor espera recebê-lo.
+    /// Canonical URL to hand to yt-dlp. The unlisted hash stays in the
+    /// path, which is how the extractor expects to receive it.
     pub fn canonical_url(&self) -> String {
         match self {
             Target::Video { id, hash: Some(h) } => format!("https://vimeo.com/{id}/{h}"),
@@ -84,8 +84,8 @@ fn is_numeric(s: &str) -> bool {
     !s.is_empty() && s.chars().all(|c| c.is_ascii_digit())
 }
 
-/// Hash de unlisted: minúsculas e dígitos, curto. Serve para separar
-/// `vimeo.com/123/abc123` de `vimeo.com/123/settings`.
+/// Unlisted hash: lowercase and digits, short. It serves to separate
+/// `vimeo.com/123/abc123` from `vimeo.com/123/settings`.
 fn looks_like_hash(s: &str) -> bool {
     !s.is_empty()
         && s.len() <= 16
@@ -93,14 +93,14 @@ fn looks_like_hash(s: &str) -> bool {
         && s.chars().any(|c| c.is_ascii_digit())
 }
 
-/// Reconhece as formas de link que interessam. Devolve `None` para o que não
-/// é Vimeo ou para caminho que a gente não sabe tratar.
+/// Recognizes the link forms that matter. Returns `None` for what is not
+/// Vimeo or for a path we do not know how to handle.
 pub fn parse_target(input: &str) -> Option<Target> {
     let raw = input.trim();
     if raw.is_empty() {
         return None;
     }
-    // Só um número colado: é um id de vídeo.
+    // Just a pasted number: it is a video id.
     if is_numeric(raw) {
         return Some(Target::Video {
             id: raw.to_string(),
@@ -136,8 +136,8 @@ pub fn parse_target(input: &str) -> Option<Target> {
         });
     }
 
-    // /showcase/<id>/video/<vid> e /album/<id>/video/<vid> são itens de dentro
-    // da coleção, não a coleção.
+    // /showcase/<id>/video/<vid> and /album/<id>/video/<vid> are items inside
+    // the collection, not the collection.
     let inner_video = |segs: &[String]| -> Option<String> {
         if segs.get(2).map(|s| s.as_str()) != Some("video") {
             return None;
@@ -200,18 +200,18 @@ fn def_true() -> bool {
     true
 }
 
-/// Enumerar uma coleção. A senha aqui é a **do showcase** (a que o Vimeo pede
-/// para abrir a coleção), que não é a mesma do vídeo.
+/// Enumerate a collection. The password here is the **showcase's** (the one Vimeo asks
+/// to open the collection), which is not the same as the video's.
 #[derive(Debug, Clone, Deserialize)]
 pub struct ListOptions {
     pub url: String,
     #[serde(default)]
     pub showcase_password: Option<String>,
-    /// Conta do gerenciador de cookies (None = `_default`).
+    /// Cookie-manager account (None = `_default`).
     #[serde(default)]
     pub account_slug: Option<String>,
-    /// Conteúdo Netscape do bucket `vimeo.com`. Quem preenche é o comando
-    /// Tauri, nunca o front — daí o `skip`.
+    /// Netscape content of the `vimeo.com` bucket. The Tauri command fills it,
+    /// never the frontend — hence the `skip`.
     #[serde(skip)]
     pub session_netscape: Option<String>,
 }
@@ -239,12 +239,12 @@ pub struct Listing {
     pub title: String,
     pub entries: Vec<Entry>,
     pub used_session: bool,
-    /// Comando rodado, já redigido — é o que a tela pode mostrar.
+    /// Command that ran, already redacted — it is what the screen can show.
     pub command: String,
 }
 
-/// Backup em lote. `showcase_password` abre a coleção; `video_password` abre
-/// cada item (quando o dono protegeu os vídeos, e não só o showcase).
+/// Batch backup. `showcase_password` opens the collection; `video_password` opens
+/// each item (when the owner protected the videos, not just the showcase).
 #[derive(Debug, Clone, Deserialize)]
 pub struct BackupOptions {
     pub url: String,
@@ -255,13 +255,13 @@ pub struct BackupOptions {
     pub video_password: Option<String>,
     #[serde(default)]
     pub audio_only: bool,
-    /// Pula o que já está no destino, íntegro. É a retomada.
+    /// Skips what is already in the destination, intact. That is the resume.
     #[serde(default = "def_true")]
     pub skip_existing: bool,
-    /// Grava o `.info.json` do yt-dlp ao lado de cada arquivo.
+    /// Writes yt-dlp's `.info.json` next to each file.
     #[serde(default)]
     pub write_info: bool,
-    /// Só estes ids (vazio = a coleção inteira).
+    /// Only these ids (empty = the whole collection).
     #[serde(default)]
     pub only_ids: Vec<String>,
     #[serde(default)]
@@ -270,15 +270,15 @@ pub struct BackupOptions {
     pub session_netscape: Option<String>,
 }
 
-/// Uma tentativa de item: `ok`, `skipped` ou `failed`.
+/// One item attempt: `ok`, `skipped` or `failed`.
 #[derive(Debug, Clone, Serialize)]
 pub struct ItemResult {
     pub id: String,
     pub title: String,
     pub status: String,
     pub file: Option<String>,
-    /// Código estável (`password_required`, `wrong_password`, …) ou o texto do
-    /// yt-dlp já limpo de segredo.
+    /// Stable code (`password_required`, `wrong_password`, …) or yt-dlp's text
+    /// already cleaned of secrets.
     pub reason: Option<String>,
 }
 
@@ -296,12 +296,12 @@ pub struct BackupResult {
     pub command: String,
 }
 
-/// Um vídeo só, privado ou unlisted.
+/// A single video, private or unlisted.
 #[derive(Debug, Clone, Deserialize)]
 pub struct PrivateOptions {
     pub url: String,
     pub dest: String,
-    /// Senha do vídeo, quando o dono pôs uma. O usuário já a tem.
+    /// Video password, when the owner set one. The user already has it.
     #[serde(default)]
     pub video_password: Option<String>,
     #[serde(default)]
@@ -330,10 +330,10 @@ pub struct PrivateResult {
 
 // ───────────────────────── segredo: redigir e limpar ─────────────────────────
 
-/// Texto do comando para mostrar e para logar. `shell_words::redact` já
-/// esconde `--video-password`, senha, proxy e cabeçalho; aqui acrescentamos o
-/// caminho do arquivo de cookies, que é sessão do usuário e não interessa a
-/// ninguém que leia o log.
+/// Command text to show and to log. `shell_words::redact` already
+/// hides `--video-password`, password, proxy and header; here we add the
+/// cookie file's path, which is the user's session and of no interest to
+/// anyone reading the log.
 pub fn safe_command_line(program: &str, args: &[String]) -> String {
     let redacted = crate::core::shell_words::redact(args);
     let mut parts = Vec::with_capacity(redacted.len() + 1);
@@ -361,8 +361,8 @@ pub fn safe_command_line(program: &str, args: &[String]) -> String {
     crate::core::shell_words::join(&parts)
 }
 
-/// Tira do texto qualquer ocorrência literal dos segredos. Rede de segurança
-/// para a saída do yt-dlp, que a gente não controla.
+/// Removes from the text any literal occurrence of the secrets. Safety net
+/// for yt-dlp's output, which we do not control.
 pub fn scrub(text: &str, secrets: &[&str]) -> String {
     let mut out = text.to_string();
     for s in secrets.iter().filter(|s| !s.trim().is_empty()) {
@@ -371,8 +371,8 @@ pub fn scrub(text: &str, secrets: &[&str]) -> String {
     out
 }
 
-/// Traduz o erro do yt-dlp para um código estável, quando dá. `None` quando o
-/// texto não bate com nada conhecido (aí a UI mostra o texto cru já limpo).
+/// Translates yt-dlp's error into a stable code, when possible. `None` when the
+/// text matches nothing known (then the UI shows the raw text, already cleaned).
 pub fn error_code(tail: &str) -> Option<&'static str> {
     let t = tail.to_lowercase();
     if t.contains("wrong video password") || t.contains("invalid password") {
@@ -402,9 +402,9 @@ pub fn error_code(tail: &str) -> Option<&'static str> {
 
 // ───────────────────────── cookies da sessão ─────────────────────────
 
-/// Deixa só o que é de `vimeo.com` no arquivo Netscape. O bucket já vem
-/// separado por domínio, mas o arquivo pode ter vindo de uma captura ampla e
-/// não há motivo para mandar cookie de terceiro para o yt-dlp.
+/// Keeps only what is `vimeo.com` in the Netscape file. The bucket already comes
+/// separated by domain, but the file may have come from a broad capture and
+/// there is no reason to send a third-party cookie to yt-dlp.
 pub fn filter_netscape(content: &str) -> (String, usize) {
     let mut out = String::from("# Netscape HTTP Cookie File\n");
     let mut n = 0;
@@ -435,7 +435,7 @@ pub fn filter_netscape(content: &str) -> (String, usize) {
     (out, n)
 }
 
-/// Arquivo temporário de cookies que se apaga sozinho.
+/// Temporary cookie file that deletes itself.
 struct CookieFile {
     path: PathBuf,
 }
@@ -472,8 +472,8 @@ fn cookie_file(session: Option<&str>) -> Option<CookieFile> {
 
 // ───────────────────────── argumentos do yt-dlp ─────────────────────────
 
-/// Argumentos da enumeração (`--flat-playlist -J`). O `-J` já implica
-/// simulação: nada é baixado aqui.
+/// Enumeration arguments (`--flat-playlist -J`). The `-J` already implies
+/// simulation: nothing is downloaded here.
 pub fn list_args(
     url: &str,
     showcase_password: Option<&str>,
@@ -500,11 +500,11 @@ pub fn list_args(
     args
 }
 
-/// Tudo que muda de um item para o outro no comando de download.
+/// Everything that changes from one item to the next in the download command.
 pub struct DownloadPlan<'a> {
     pub url: &'a str,
     pub dest: &'a Path,
-    /// Nome-base do arquivo, sem extensão.
+    /// Base name of the file, without extension.
     pub base: &'a str,
     pub audio_only: bool,
     pub write_info: bool,
@@ -513,8 +513,8 @@ pub struct DownloadPlan<'a> {
     pub ffmpeg: Option<&'a Path>,
 }
 
-/// Argumentos de um download. `--no-playlist` porque cada item já vem
-/// resolvido pela enumeração.
+/// Arguments of a download. `--no-playlist` because each item already comes
+/// resolved by the enumeration.
 pub fn download_args(plan: &DownloadPlan) -> Vec<String> {
     let template = plan.dest.join(format!("{}.%(ext)s", plan.base));
     let mut args: Vec<String> = vec![
@@ -563,7 +563,7 @@ pub fn download_args(plan: &DownloadPlan) -> Vec<String> {
     args
 }
 
-/// Percentual de uma linha `[download]  12.3% of ...`.
+/// Percentage of a `[download]  12.3% of ...` line.
 pub fn parse_progress(line: &str) -> Option<f64> {
     let l = line.trim();
     if !l.starts_with("[download]") {
@@ -590,7 +590,7 @@ fn entry_from_json(v: &serde_json::Value) -> Option<Entry> {
     if id.is_empty() && raw_url.is_empty() {
         return None;
     }
-    // Com `--flat-playlist` o `url` às vezes é só o id.
+    // With `--flat-playlist` the `url` is sometimes just the id.
     let url = if raw_url.starts_with("http") {
         raw_url
     } else if !raw_url.is_empty() {
@@ -645,11 +645,11 @@ fn collect_entries(v: &serde_json::Value, out: &mut Vec<Entry>) {
     }
 }
 
-/// Lê o JSON do `--flat-playlist -J`. Aceita playlist (showcase, álbum,
-/// canal), playlist aninhada e o caso degenerado de um vídeo só.
+/// Reads the `--flat-playlist -J` JSON. Accepts a playlist (showcase, album,
+/// channel), a nested playlist and the degenerate case of a single video.
 pub fn parse_listing(json: &str) -> Result<ParsedListing> {
     let v: serde_json::Value = serde_json::from_str(json.trim())
-        .map_err(|e| anyhow!("o yt-dlp devolveu um JSON que não deu para ler: {e}"))?;
+        .map_err(|e| anyhow!("yt-dlp returned JSON that could not be read: {e}"))?;
     let id = v
         .get("id")
         .and_then(|x| x.as_str())
@@ -664,7 +664,7 @@ pub fn parse_listing(json: &str) -> Result<ParsedListing> {
     let mut entries = Vec::new();
     collect_entries(&v, &mut entries);
     if entries.is_empty() && v.get("entries").is_none() {
-        // Um vídeo só: o próprio objeto é a entrada.
+        // A single video: the object itself is the entry.
         if let Some(e) = entry_from_json(&v) {
             entries.push(e);
         }
@@ -674,8 +674,8 @@ pub fn parse_listing(json: &str) -> Result<ParsedListing> {
 
 // ───────────────────────── retomada ─────────────────────────
 
-/// Nome-base do arquivo de um item. O id no fim é o que permite reconhecer o
-/// arquivo depois, mesmo que o título mude.
+/// An item's file base name. The id at the end is what lets the
+/// file be recognized later, even if the title changes.
 pub fn base_name(entry: &Entry) -> String {
     let title = if entry.title.trim().is_empty() {
         entry.id.clone()
@@ -688,9 +688,9 @@ pub fn base_name(entry: &Entry) -> String {
         .to_string()
 }
 
-/// Dado o conteúdo da pasta de destino (`nome`, `bytes`), diz qual arquivo já
-/// é o download pronto deste id. Download pela metade (`.part`, `.ytdl`) ou
-/// arquivo de zero byte não contam: nesse caso o item é baixado de novo.
+/// Given the destination folder's contents (`name`, `bytes`), says which file is already
+/// this id's finished download. A half download (`.part`, `.ytdl`) or a
+/// zero-byte file does not count: in that case the item is downloaded again.
 pub fn pick_existing(files: &[(String, u64)], id: &str) -> Option<String> {
     if id.is_empty() {
         return None;
@@ -737,10 +737,10 @@ fn dir_listing(dest: &Path) -> Vec<(String, u64)> {
 async fn ytdlp_bin() -> Result<PathBuf> {
     crate::core::ytdlp::ensure_ytdlp()
         .await
-        .map_err(|e| anyhow!("o yt-dlp não está disponível: {e}"))
+        .map_err(|e| anyhow!("yt-dlp is not available: {e}"))
 }
 
-/// Roda o yt-dlp e devolve o stdout inteiro. Usado só pela enumeração.
+/// Runs yt-dlp and returns the whole stdout. Used only by the enumeration.
 async fn run_json(bin: &Path, args: &[String], secrets: &[&str]) -> Result<String> {
     let _slot = crate::core::ytdlp::acquire_ytdlp_slot("vimeo-list").await;
     let mut cmd = crate::core::ytdlp::ytdlp_command(bin);
@@ -748,7 +748,7 @@ async fn run_json(bin: &Path, args: &[String], secrets: &[&str]) -> Result<Strin
     let out = cmd
         .output()
         .await
-        .map_err(|e| anyhow!("não foi possível iniciar o yt-dlp: {e}"))?;
+        .map_err(|e| anyhow!("could not start yt-dlp: {e}"))?;
     if !out.status.success() {
         let tail = scrub(&String::from_utf8_lossy(&out.stderr), secrets);
         let msg = tail
@@ -765,7 +765,7 @@ async fn run_json(bin: &Path, args: &[String], secrets: &[&str]) -> Result<Strin
     Ok(String::from_utf8_lossy(&out.stdout).to_string())
 }
 
-/// O que sobrou de um download. `tail` já passou pelo `scrub`.
+/// What is left of a download. `tail` already went through `scrub`.
 struct DownloadOutcome {
     file: Option<String>,
     meta: Option<(String, String)>,
@@ -773,7 +773,7 @@ struct DownloadOutcome {
     success: bool,
 }
 
-/// Roda um download e conta o que aconteceu.
+/// Runs a download and counts what happened.
 async fn run_download(
     bin: &Path,
     args: &[String],
@@ -789,7 +789,7 @@ async fn run_download(
         .stderr(std::process::Stdio::piped());
     let mut child = cmd
         .spawn()
-        .map_err(|e| anyhow!("não foi possível iniciar o yt-dlp: {e}"))?;
+        .map_err(|e| anyhow!("could not start yt-dlp: {e}"))?;
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
     let out_task = tokio::spawn(async move {
@@ -847,7 +847,7 @@ fn secret_refs<'a>(a: Option<&'a String>, b: Option<&'a String>) -> Vec<&'a str>
         .collect()
 }
 
-/// Enumera um showcase, álbum, canal ou perfil.
+/// Enumerates a showcase, album, channel or profile.
 pub async fn list(opts: &ListOptions, progress: &ProgressFn) -> Result<Listing> {
     let target = parse_target(&opts.url).ok_or_else(|| anyhow!("vimeo:bad_url"))?;
     if !target.is_collection() {
@@ -897,7 +897,7 @@ pub async fn list(opts: &ListOptions, progress: &ProgressFn) -> Result<Listing> 
     })
 }
 
-/// Backup em lote: enumera, filtra, baixa item a item com progresso e resumo.
+/// Batch backup: enumerates, filters, downloads item by item with progress and summary.
 pub async fn backup(opts: &BackupOptions, progress: &ProgressFn) -> Result<BackupResult> {
     let target = parse_target(&opts.url).ok_or_else(|| anyhow!("vimeo:bad_url"))?;
     let url = target.canonical_url();
@@ -912,7 +912,7 @@ pub async fn backup(opts: &BackupOptions, progress: &ProgressFn) -> Result<Backu
         opts.video_password.as_ref(),
     );
 
-    // 1. enumerar. Vídeo solto vira uma lista de um item, sem chamar o yt-dlp.
+    // 1. enumerate. A loose video becomes a one-item list, without calling yt-dlp.
     report(
         progress,
         ID_SHOWCASE,
@@ -1087,8 +1087,8 @@ pub async fn backup(opts: &BackupOptions, progress: &ProgressFn) -> Result<Backu
     })
 }
 
-/// Um vídeo privado ou unlisted. O hash já vai na URL; a senha, quando existe,
-/// vai em `--video-password` e nunca sai daqui.
+/// A private or unlisted video. The hash already goes in the URL; the password, when it exists,
+/// goes in `--video-password` and never leaves here.
 pub async fn private(opts: &PrivateOptions, progress: &ProgressFn) -> Result<PrivateResult> {
     let target = parse_target(&opts.url).ok_or_else(|| anyhow!("vimeo:bad_url"))?;
     if target.is_collection() {
@@ -1276,7 +1276,7 @@ mod tests {
                 hash: Some("abc123def4".into())
             })
         );
-        // Item dentro de um showcase e de um canal continua sendo vídeo.
+        // An item inside a showcase and a channel is still a video.
         assert_eq!(
             parse_target("https://vimeo.com/channels/staffpicks/987654321"),
             Some(Target::Video {
@@ -1291,7 +1291,7 @@ mod tests {
                 hash: None
             })
         );
-        // O hash volta para a URL canônica, senão o unlisted não abre.
+        // The hash goes back into the canonical URL, otherwise the unlisted one does not open.
         assert_eq!(
             parse_target("https://player.vimeo.com/video/123456789?h=abc123def4")
                 .map(|t| t.canonical_url()),
@@ -1326,17 +1326,17 @@ mod tests {
 
     #[test]
     fn le_o_json_de_album_com_url_curta() {
-        let p = parse_listing(ALBUM_JSON).expect("json de album");
+        let p = parse_listing(ALBUM_JSON).expect("album json");
         assert_eq!(p.entries.len(), 2);
-        // `--flat-playlist` às vezes devolve só o id em `url`.
+        // `--flat-playlist` sometimes returns just the id in `url`.
         assert_eq!(p.entries[0].url, "https://vimeo.com/333333333");
-        // Sem título, o id serve de rótulo.
+        // Without a title, the id serves as the label.
         assert_eq!(p.entries[1].title, "444444444");
     }
 
     #[test]
     fn le_o_json_de_canal_com_playlist_aninhada() {
-        let p = parse_listing(CHANNEL_JSON).expect("json de canal");
+        let p = parse_listing(CHANNEL_JSON).expect("channel json");
         assert_eq!(p.title, "Staff Picks");
         let ids: Vec<&str> = p.entries.iter().map(|e| e.id.as_str()).collect();
         assert_eq!(ids, vec!["555555555", "666666666"]);
@@ -1372,7 +1372,7 @@ mod tests {
             args.last().map(|s| s.as_str()),
             Some("https://vimeo.com/showcase/10203040")
         );
-        // Sem senha, a flag nem aparece.
+        // Without a password, the flag does not even appear.
         let limpo = list_args("https://vimeo.com/album/1", None, None);
         assert!(!limpo.iter().any(|a| a == "--video-password"));
         assert!(!limpo.iter().any(|a| a == "--cookies"));
@@ -1437,17 +1437,17 @@ mod tests {
             Some(Path::new("/tmp/c.txt")),
         );
         for args in [baixar, enumerar] {
-            // O argv de verdade tem a senha (é o que o yt-dlp precisa)…
+            // The real argv has the password (it is what yt-dlp needs)…
             assert!(args.iter().any(|a| a == SENHA_VIDEO || a == SENHA_SHOWCASE));
             // …mas o que vai para log, tela e resultado, não.
             let linha = safe_command_line("yt-dlp", &args);
             assert!(
                 !linha.contains(SENHA_VIDEO) && !linha.contains(SENHA_SHOWCASE),
-                "a senha vazou no comando exibido: {linha}"
+                "the password leaked in the displayed command: {linha}"
             );
             assert!(linha.contains("--video-password"));
-            // O caminho do arquivo de cookies também é segredo de sessão.
-            assert!(!linha.contains("/tmp/c.txt"), "o cookie vazou: {linha}");
+            // The cookie file's path is also a session secret.
+            assert!(!linha.contains("/tmp/c.txt"), "the cookie leaked: {linha}");
         }
     }
 
@@ -1457,7 +1457,7 @@ mod tests {
         let limpo = scrub(bruto, &["S3nha!"]);
         assert!(!limpo.contains("S3nha!"));
         assert!(limpo.contains("***"));
-        // Segredo vazio não vira substituição maluca.
+        // An empty secret does not become a crazy replacement.
         assert_eq!(scrub("texto", &["", "   "]), "texto");
     }
 
@@ -1493,14 +1493,14 @@ mod tests {
             pick_existing(&files, "111111111"),
             Some("Abertura [111111111].mp4".to_string())
         );
-        // Download pela metade não conta como pronto.
+        // A half download does not count as finished.
         assert_eq!(pick_existing(&files, "222222222"), None);
-        // Zero byte também não.
+        // Zero bytes either.
         assert_eq!(pick_existing(&files, "333333333"), None);
-        // Id que não está na pasta.
+        // An id that is not in the folder.
         assert_eq!(pick_existing(&files, "444444444"), None);
         assert_eq!(pick_existing(&files, ""), None);
-        // Áudio conta.
+        // Audio counts.
         let audio = vec![("Som [555555555].mp3".to_string(), 3_000u64)];
         assert_eq!(
             pick_existing(&audio, "555555555"),
@@ -1520,7 +1520,7 @@ mod tests {
         let base = base_name(&e);
         assert!(base.ends_with("[111111111]"));
         assert!(!base.contains('/'));
-        // Sem título, o id vira o nome.
+        // Without a title, the id becomes the name.
         let sem = base_name(&Entry {
             title: String::new(),
             ..e
@@ -1537,7 +1537,7 @@ mod tests {
             player.vimeo.com\tTRUE\t/\tTRUE\t0\tplayer\tabc\n\
             linha quebrada sem colunas\n";
         let (out, n) = filter_netscape(content);
-        assert_eq!(n, 3, "só os três cookies de vimeo.com entram");
+        assert_eq!(n, 3, "only the three vimeo.com cookies get in");
         assert!(!out.contains("google.com"));
         assert!(out.contains("is_logged_in"));
         assert!(out.starts_with("# Netscape HTTP Cookie File"));
@@ -1557,7 +1557,7 @@ mod tests {
     // ── rede: precisam de internet e do yt-dlp, rodam só sob demanda ──
 
     #[tokio::test]
-    #[ignore = "rede: enumera um showcase publico do Vimeo com o yt-dlp de verdade"]
+    #[ignore = "network: enumerates a public Vimeo showcase with the real yt-dlp"]
     async fn enumera_showcase_publico_de_verdade() {
         let opts = ListOptions {
             url: "https://vimeo.com/channels/staffpicks".to_string(),
@@ -1567,13 +1567,13 @@ mod tests {
         };
         let listing = list(&opts, &super::super::noop_progress())
             .await
-            .expect("enumerar canal publico");
+            .expect("enumerate public channel");
         assert!(!listing.entries.is_empty());
         assert!(!listing.command.contains("--video-password"));
     }
 
     #[tokio::test]
-    #[ignore = "rede: baixa um video publico do Vimeo para a pasta temporaria"]
+    #[ignore = "network: downloads a public Vimeo video to the temp folder"]
     async fn baixa_um_video_publico_de_verdade() {
         let dest = super::super::temp_dir().join("vimeo-teste");
         let opts = PrivateOptions {
@@ -1588,7 +1588,7 @@ mod tests {
         };
         let res = private(&opts, &super::super::noop_progress())
             .await
-            .expect("baixar video publico");
+            .expect("download public video");
         assert!(res.file.is_some());
     }
 }

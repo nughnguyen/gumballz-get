@@ -1,5 +1,5 @@
-//! gallery-dl (estudo 52) como processo: lista antes (`-j`) e baixa depois,
-//! contando arquivos pela saída.
+//! gallery-dl (study 52) as a process: list first (`-j`) and download after,
+//! counting files from its output.
 
 use anyhow::anyhow;
 use serde::Serialize;
@@ -28,7 +28,7 @@ pub async fn install() -> anyhow::Result<String> {
     crate::core::dependencies::ensure_gallerydl()
         .await
         .map(|p| p.to_string_lossy().to_string())
-        .ok_or_else(|| anyhow!("nao foi possivel baixar o gallery-dl para este sistema"))
+        .ok_or_else(|| anyhow!("could not download gallery-dl for this system"))
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -47,7 +47,7 @@ pub async fn download(
     use tokio::io::{AsyncBufReadExt, BufReader};
     let bin = crate::core::dependencies::ensure_gallerydl()
         .await
-        .ok_or_else(|| anyhow!("gallery-dl nao esta instalado"))?;
+        .ok_or_else(|| anyhow!("gallery-dl is not installed"))?;
     std::fs::create_dir_all(dest)?;
     let mut cmd = crate::core::process::command(&bin);
     cmd.args(["-d", dest, "--write-metadata"]);
@@ -60,7 +60,7 @@ pub async fn download(
         .stderr(std::process::Stdio::piped());
     let mut child = cmd
         .spawn()
-        .map_err(|e| anyhow!("nao foi possivel iniciar o gallery-dl: {}", e))?;
+        .map_err(|e| anyhow!("could not start gallery-dl: {}", e))?;
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
     let id = format!("gallery:{}", url);

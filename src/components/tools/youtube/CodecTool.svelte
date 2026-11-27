@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Forçar H.264 (estudo 39, enhanced-h264ify): a opção mora na extensão do navegador; aqui está o guia e o script para quem usa Tampermonkey. */
+  /** Force H.264 (study 39, enhanced-h264ify): the option lives in the browser extension; here is the guide and script for Tampermonkey users. */
   import { t } from "$lib/i18n";
   import { showToast } from "$lib/stores/toast-store.svelte";
   import { openUrl } from "$lib/tools/rt";

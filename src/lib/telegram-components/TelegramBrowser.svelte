@@ -1430,7 +1430,7 @@
           });
         }
       } catch {
-        /* sem foto disponível */
+        /* no photo available */
       }
     });
   }
@@ -1565,7 +1565,7 @@
       const timeoutMs = 25_000;
       const timeoutPromise = new Promise<TelegramMediaItem[]>((_, reject) =>
         setTimeout(
-          () => reject(new Error(`telegram_list_media timeout (${timeoutMs}ms) — provavelmente FLOOD_WAIT, tente novamente em alguns segundos`)),
+          () => reject(new Error(`telegram_list_media timeout (${timeoutMs}ms) — probably FLOOD_WAIT, try again in a few seconds`)),
           timeoutMs,
         ),
       );
@@ -1626,7 +1626,7 @@
           });
         }
       } catch {
-        /* fallback pra ícone genérico */
+        /* fallback to generic icon */
       }
     });
   }
@@ -1995,7 +1995,7 @@
         });
         newlyBookmarked.push(it);
       }
-      // L11: auto-tag in background — não bloqueia o flow
+      // L11: auto-tag in background — doesn't block the flow
       for (const it of newlyBookmarked) {
         const tags = inferTagsFromItem(it);
         for (const tag of tags) {

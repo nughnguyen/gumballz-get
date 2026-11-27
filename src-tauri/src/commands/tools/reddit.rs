@@ -1,7 +1,7 @@
-//! Comandos da categoria Reddit. Tudo conteúdo público: baixar a mídia de um
-//! post (vídeo do v.redd.it com áudio, galeria, imagem, link de fora),
-//! arquivar uma thread inteira com os comentários e ler o export oficial de
-//! dados do usuário (esse último sem tocar na rede).
+//! Commands of the Reddit category. All public content: downloading a post's
+//! media (v.redd.it video with audio, gallery, image, outside link), archiving
+//! a whole thread with its comments and reading the user's official data export
+//! (that last one without touching the network).
 
 use gumballz_core::core::tools::reddit::{download, gdpr, thread};
 
@@ -9,11 +9,11 @@ use super::{err, progress};
 
 const DOMAIN: &str = "reddit.com";
 
-/// Cookies da conta escolhida no gerenciador (None = `_default`). O Reddit
-/// passou a responder 403 em todo `.json` anônimo; com a sessão da extensão
-/// ele responde como responde ao navegador do usuário, e o desafio de
-/// JavaScript da porta de entrada vira só a rede de segurança de quem não
-/// capturou cookie nenhum.
+/// Cookies of the account chosen in the manager (None = `_default`). Reddit
+/// started answering 403 on every anonymous `.json`; with the extension's
+/// session it answers the way it answers the user's browser, and the entry
+/// gate's JavaScript challenge becomes just the safety net for whoever captured
+/// no cookie at all.
 fn session_of(slug: Option<&str>) -> Option<String> {
     let slug = slug.unwrap_or("_default");
     let content = crate::cookies::storage::read_account_file(DOMAIN, slug).ok()?;

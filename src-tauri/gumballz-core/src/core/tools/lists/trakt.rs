@@ -1,16 +1,16 @@
-//! Trakt — API oficial, plano gratuito, sem raspar nada.
+//! Trakt — official API, free plan, no scraping at all.
 //!
-//! O Trakt publica uma API REST de verdade e o plano gratuito já entrega
-//! histórico de visualização, notas, watchlist e listas do usuário; VIP só
-//! muda limite e estatística. A autenticação é o **device flow**: o app pede
-//! um código, o usuário digita esse código em trakt.tv/activate e o app fica
-//! consultando até o Trakt liberar o token.
+//! Trakt publishes a real REST API and the free plan already delivers
+//! watch history, ratings, watchlist and the user's lists; VIP only
+//! changes limits and statistics. Authentication is the **device flow**: the app asks for
+//! a code, the user types that code at trakt.tv/activate and the app keeps
+//! polling until Trakt releases the token.
 //!
-//! O `client_id`/`client_secret` são **do usuário**, criados por ele em
-//! <https://trakt.tv/oauth/applications>. Nada de segredo embutido no
-//! binário: as credenciais e o token ficam no mesmo cofre local que as
-//! chaves de IA usam (`<app_data>/tools/`), e a UI só recebe o começo e o
-//! fim de cada uma.
+//! The `client_id`/`client_secret` are **the user's**, created by them at
+//! <https://trakt.tv/oauth/applications>. No secret baked into the
+//! binary: the credentials and the token stay in the same local vault the
+//! AI keys use (`<app_data>/tools/`), and the UI only receives the start and the
+//! end of each one.
 
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -24,13 +24,13 @@ use crate::core::tools::{report, ProgressFn};
 
 const TOOL_ID: &str = "trakt-export";
 pub const API: &str = "https://api.trakt.tv";
-/// O Trakt separou os hosts: tudo que é `/oauth/*` vai para o de
-/// autenticação, e só o resto continua no da API.
+/// Trakt split the hosts: everything under `/oauth/*` goes to the
+/// authentication one, and only the rest stays on the API one.
 pub const AUTH: &str = "https://auth.trakt.tv";
-/// Onde o usuário cria a app dele e pega client_id/client_secret.
+/// Where the user creates their app and gets client_id/client_secret.
 pub const APP_URL: &str = "https://app.trakt.tv/settings/apps/api/new";
 
-// ── Cofre local ─────────────────────────────────────────────────────────
+// ── Local vault ─────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Creds {
@@ -42,14 +42,14 @@ pub struct Creds {
     pub access_token: String,
     #[serde(default)]
     pub refresh_token: String,
-    /// Unix em segundos; 0 = desconhecido.
+    /// Unix in seconds; 0 = unknown.
     #[serde(default)]
     pub expires_at: i64,
     #[serde(default)]
     pub username: String,
 }
 
-/// O que a UI vê: nunca a credencial inteira.
+/// What the UI sees: never the whole credential.
 #[derive(Debug, Clone, Serialize)]
 pub struct CredsView {
     pub client_id_hint: String,
@@ -89,7 +89,7 @@ fn load() -> Creds {
 }
 
 fn store(c: &Creds) -> Result<()> {
-    let p = file().ok_or_else(|| anyhow!("sem pasta de dados"))?;
+    let p = file().ok_or_else(|| anyhow!("no data folder"))?;
     if let Some(parent) = p.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -104,15 +104,15 @@ pub fn creds_view() -> CredsView {
     load().view()
 }
 
-/// Grava as credenciais da app do usuário. Campo em branco mantém o que já
-/// estava guardado (a UI nunca recebe o segredo de volta para reenviar).
+/// Saves the user's app credentials. A blank field keeps what was already
+/// saved (the UI never gets the secret back to resend).
 pub fn save_app(client_id: &str, client_secret: &str) -> Result<CredsView> {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let mut c = load();
     let id = client_id.trim();
     let secret = client_secret.trim();
     if !id.is_empty() && id != c.client_id {
-        // Trocou de app: o token antigo não vale mais.
+        // Switched apps: the old token is no good any more.
         c.access_token.clear();
         c.refresh_token.clear();
         c.expires_at = 0;
@@ -142,7 +142,7 @@ pub fn disconnect() -> Result<CredsView> {
     Ok(c.view())
 }
 
-/// Apaga tudo, inclusive as credenciais da app.
+/// Erases everything, including the app credentials.
 pub fn forget() -> Result<CredsView> {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let c = Creds::default();
@@ -152,38 +152,38 @@ pub fn forget() -> Result<CredsView> {
 
 // ── Device flow ─────────────────────────────────────────────────────────
 
-/// O que a UI mostra enquanto o usuário libera o acesso. Volta para o app no
-/// passo 2, então precisa saber ir e voltar.
+/// What the UI shows while the user grants access. It goes back to the app at
+/// step 2, so it needs to know how to go back and forth.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeviceCode {
     pub device_code: String,
-    /// O código curto que o usuário digita no site.
+    /// The short code the user types on the site.
     pub user_code: String,
     pub verification_url: String,
-    /// Segundos até o código morrer.
+    /// Seconds until the code dies.
     pub expires_in: u64,
-    /// Segundos entre uma consulta e outra, como o Trakt pede.
+    /// Seconds between one poll and the next, as Trakt asks.
     pub interval: u64,
 }
 
-/// Cada resposta possível do polling do device flow. É uma máquina de
-/// estados pequena, mas errar um código aqui significa martelar o servidor
-/// ou desistir cedo demais — por isso ela é uma função pura, testada.
+/// Every possible answer from device-flow polling. It is a small state
+/// machine, but getting one code wrong here means hammering the server
+/// or giving up too early — which is why it is a pure, tested function.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Poll {
-    /// 200: token liberado.
+    /// 200: token released.
     Done,
-    /// 400: o usuário ainda não digitou o código. Continue esperando.
+    /// 400: the user has not typed the code yet. Keep waiting.
     Pending,
-    /// 429: consultando rápido demais; aumente o intervalo.
+    /// 429: polling too fast; increase the interval.
     SlowDown,
-    /// 404: `device_code` inválido — recomeçar.
+    /// 404: invalid `device_code` — start over.
     NotFound,
-    /// 409: esse código já virou token.
+    /// 409: this code has already become a token.
     Used,
-    /// 410: expirou antes de o usuário aprovar.
+    /// 410: expired before the user approved.
     Expired,
-    /// 418: o usuário negou.
+    /// 418: the user denied.
     Denied,
     Http(u16),
 }
@@ -202,7 +202,7 @@ pub fn poll_state(status: u16) -> Poll {
 }
 
 impl Poll {
-    /// Se vale a pena consultar de novo.
+    /// Whether it is worth polling again.
     pub fn keep_waiting(&self) -> bool {
         matches!(self, Poll::Pending | Poll::SlowDown)
     }
@@ -210,13 +210,13 @@ impl Poll {
     pub fn message(&self) -> &'static str {
         match self {
             Poll::Done => "conectado",
-            Poll::Pending => "esperando você liberar o acesso no site",
+            Poll::Pending => "waiting for you to grant access on the site",
             Poll::SlowDown => "o Trakt pediu para consultar mais devagar",
-            Poll::NotFound => "código inválido: comece de novo",
-            Poll::Used => "esse código já foi usado",
-            Poll::Expired => "o código expirou antes de você liberar",
+            Poll::NotFound => "invalid code: start over",
+            Poll::Used => "this code was already used",
+            Poll::Expired => "the code expired before you granted access",
             Poll::Denied => "acesso negado no site do Trakt",
-            Poll::Http(_) => "o Trakt respondeu algo inesperado",
+            Poll::Http(_) => "Trakt answered something unexpected",
         }
     }
 }
@@ -225,7 +225,7 @@ fn client() -> Result<reqwest::Client> {
     crate::core::tools::client()
 }
 
-/// Passo 1: pede o código que o usuário vai digitar em trakt.tv/activate.
+/// Step 1: asks for the code the user will type at trakt.tv/activate.
 pub async fn device_code() -> Result<DeviceCode> {
     let c = {
         let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
@@ -244,7 +244,7 @@ pub async fn device_code() -> Result<DeviceCode> {
         .await?;
     if !r.status().is_success() {
         return Err(anyhow!(
-            "o Trakt recusou o pedido de código (HTTP {}) — confira o client_id",
+            "Trakt refused the code request (HTTP {}) — check the client_id",
             r.status()
         ));
     }
@@ -263,7 +263,7 @@ pub fn parse_device_code(v: &Value) -> Result<DeviceCode> {
     let device = s("device_code");
     let user = s("user_code");
     if device.is_empty() || user.is_empty() {
-        return Err(anyhow!("o Trakt não devolveu o código do dispositivo"));
+        return Err(anyhow!("Trakt did not return the device code"));
     }
     let mut url = s("verification_url");
     if url.is_empty() {
@@ -274,7 +274,7 @@ pub fn parse_device_code(v: &Value) -> Result<DeviceCode> {
         user_code: user,
         verification_url: url,
         expires_in: n("expires_in", 600),
-        // O Trakt pede 5 s; menos que isso leva 429.
+        // Trakt asks for 5 s; less than that gets a 429.
         interval: n("interval", 5).clamp(1, 60),
     })
 }
@@ -286,8 +286,8 @@ pub struct ConnectResult {
     pub message: String,
 }
 
-/// Passo 2: consulta até o usuário liberar (ou o código morrer). Respeita o
-/// intervalo pedido e recua quando leva 429.
+/// Step 2: polls until the user grants it (or the code dies). Respects the
+/// requested interval and backs off when it gets a 429.
 pub async fn wait_for_token(dc: &DeviceCode, p: ProgressFn) -> Result<ConnectResult> {
     let c = {
         let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
@@ -351,7 +351,7 @@ fn save_token(v: &Value) -> Result<String> {
         .unwrap_or_default()
         .to_string();
     if access.is_empty() {
-        return Err(anyhow!("o Trakt não devolveu o token"));
+        return Err(anyhow!("Trakt did not return the token"));
     }
     let refresh = v
         .get("refresh_token")
@@ -374,9 +374,9 @@ fn save_token(v: &Value) -> Result<String> {
     Ok(c.username)
 }
 
-/// Renova o token quando falta menos de um dia, sem incomodar o usuário. O
-/// token do Trakt dura de 1 a 7 dias conforme a app, então um dia de
-/// antecedência cobre os dois casos.
+/// Renews the token when less than a day is left, without bothering the user. The
+/// Trakt token lasts 1 to 7 days depending on the app, so a day of
+/// lead time covers both cases.
 pub fn needs_refresh(expires_at: i64, now: i64) -> bool {
     expires_at > 0 && expires_at - now < 86_400
 }
@@ -399,16 +399,16 @@ async fn refresh_if_needed(c: &mut Creds) -> Result<()> {
     if !r.status().is_success() {
         let status = r.status().as_u16();
         let body = r.text().await.unwrap_or_default();
-        // O Trakt passou a invalidar o refresh token a cada uso, e a sessão
-        // antiga morre de vez: quando ele diz isso, não adianta insistir.
+        // Trakt started invalidating the refresh token on each use, and the old session
+        // dies for good: when it says so, there is no point insisting.
         if status == 400 && body.contains("invalid_grant") {
             let _ = disconnect();
             return Err(anyhow!(
-                "a autorização do Trakt expirou de vez. Conecte a conta de novo (o código aparece aqui e você libera em trakt.tv/activate)"
+                "the Trakt authorization expired for good. Connect the account again (the code appears here and you grant it at trakt.tv/activate)"
             ));
         }
-        // Fora isso não é fatal: o token atual ainda pode valer.
-        tracing::debug!("trakt: refresh recusado (HTTP {})", status);
+        // Other than that it is not fatal: the current token may still be valid.
+        tracing::debug!("trakt: refresh refused (HTTP {})", status);
         return Ok(());
     }
     let v: Value = r.json().await?;
@@ -418,9 +418,9 @@ async fn refresh_if_needed(c: &mut Creds) -> Result<()> {
     Ok(())
 }
 
-// ── Leitura da API ──────────────────────────────────────────────────────
+// ── Reading the API ──────────────────────────────────────────────────────
 
-/// Cliente autenticado com freio, no mesmo desenho do Reddit.
+/// Authenticated client with a brake, in the same shape as Reddit's.
 struct Api {
     http: reqwest::Client,
     client_id: String,
@@ -453,7 +453,7 @@ impl Api {
         *last = Some(Instant::now());
     }
 
-    /// GET de uma página. Devolve o corpo e quantas páginas existem.
+    /// GETs one page. Returns the body and how many pages there are.
     async fn get_page(&self, path: &str, page: u32, limit: u32) -> Result<(Value, u32)> {
         let url = format!("{}{}", API, path);
         let sep = if path.contains('?') { '&' } else { '?' };
@@ -478,11 +478,11 @@ impl Api {
             let status = r.status();
             if status.as_u16() == 401 {
                 return Err(anyhow!(
-                    "o Trakt recusou o token (401). Reconecte a conta no botão acima"
+                    "Trakt refused the token (401). Reconnect the account with the button above"
                 ));
             }
             if status.as_u16() == 426 {
-                return Err(anyhow!("esse recurso é só para contas VIP do Trakt"));
+                return Err(anyhow!("this feature is only for Trakt VIP accounts"));
             }
             if status.as_u16() == 420 {
                 return Err(anyhow!(
@@ -491,12 +491,12 @@ impl Api {
             }
             if status.as_u16() == 423 {
                 return Err(anyhow!(
-                    "a conta do Trakt está bloqueada; fale com o suporte deles"
+                    "the Trakt account is blocked; talk to their support"
                 ));
             }
             if status.as_u16() == 429 || status.is_server_error() {
                 if attempt == 4 {
-                    return Err(anyhow!("o Trakt está limitando o acesso (HTTP {})", status));
+                    return Err(anyhow!("Trakt is limiting access (HTTP {})", status));
                 }
                 let retry = r
                     .headers()
@@ -520,10 +520,10 @@ impl Api {
             let v: Value = r.json().await?;
             return Ok((v, pages.max(1)));
         }
-        Err(anyhow!("não consegui ler {}", url))
+        Err(anyhow!("could not read {}", url))
     }
 
-    /// Percorre todas as páginas até o teto pedido.
+    /// Walks all the pages up to the requested cap.
     async fn get_all(
         &self,
         path: &str,
@@ -582,9 +582,9 @@ fn ids_of(v: &Value) -> (Option<u64>, String, String) {
     (tmdb, imdb, slug)
 }
 
-/// Um item de qualquer endpoint de sincronismo do Trakt (`/sync/history`,
-/// `/sync/ratings`, `/sync/watchlist`, itens de lista) vira uma linha. O
-/// `type` diz onde procurar o título: `movie`, `show`, `episode`, `season`.
+/// An item from any Trakt sync endpoint (`/sync/history`,
+/// `/sync/ratings`, `/sync/watchlist`, list items) becomes a row. The
+/// `type` says where to look for the title: `movie`, `show`, `episode`, `season`.
 pub fn parse_item(v: &Value, list: &str) -> Option<Entry> {
     let kind = v.get("type").and_then(|x| x.as_str()).unwrap_or("movie");
     let date = ["watched_at", "rated_at", "listed_at", "last_watched_at"]
@@ -653,7 +653,7 @@ pub fn parse_items(v: &[Value], list: &str) -> Vec<Entry> {
     v.iter().filter_map(|i| parse_item(i, list)).collect()
 }
 
-/// As listas pessoais: `/users/me/lists` devolve nome e id de cada uma.
+/// The personal lists: `/users/me/lists` returns the name and id of each one.
 pub fn parse_lists(v: &[Value]) -> Vec<(u64, String)> {
     v.iter()
         .filter_map(|l| {
@@ -667,17 +667,17 @@ pub fn parse_lists(v: &[Value]) -> Vec<(u64, String)> {
         .collect()
 }
 
-// ── Execução ────────────────────────────────────────────────────────────
+// ── Execution ────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Options {
     pub dest: String,
-    /// `history`, `ratings`, `watchlist`, `lists`. Vazio = tudo.
+    /// `history`, `ratings`, `watchlist`, `lists`. Empty = all.
     #[serde(default)]
     pub parts: Vec<String>,
     #[serde(default)]
     pub formats: Vec<String>,
-    /// Teto de páginas por endpoint (100 itens por página).
+    /// Cap on pages per endpoint (100 items per page).
     #[serde(default = "default_pages")]
     pub max_pages: u32,
     #[serde(default = "default_delay")]
@@ -687,7 +687,7 @@ pub struct Options {
 fn default_pages() -> u32 {
     50
 }
-/// O teto do Trakt é 500 GET a cada 5 minutos (1,67/s). 800 ms deixa folga.
+/// Trakt's cap is 500 GETs every 5 minutes (1.67/s). 800 ms leaves slack.
 fn default_delay() -> u64 {
     800
 }
@@ -706,7 +706,7 @@ pub struct ExportResult {
 
 pub async fn run(opts: &Options, p: ProgressFn) -> Result<ExportResult> {
     if opts.dest.trim().is_empty() {
-        return Err(anyhow!("escolha a pasta de destino"));
+        return Err(anyhow!("choose the destination folder"));
     }
     let mut c = {
         let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
@@ -714,7 +714,7 @@ pub async fn run(opts: &Options, p: ProgressFn) -> Result<ExportResult> {
     };
     if c.access_token.is_empty() {
         return Err(anyhow!(
-            "conecte a conta do Trakt primeiro (o código aparece aqui e você libera em trakt.tv/activate)"
+            "connect the Trakt account first (the code appears here and you grant it at trakt.tv/activate)"
         ));
     }
     refresh_if_needed(&mut c).await?;
@@ -722,7 +722,7 @@ pub async fn run(opts: &Options, p: ProgressFn) -> Result<ExportResult> {
     let want =
         |x: &str| opts.parts.is_empty() || opts.parts.iter().any(|s| s.eq_ignore_ascii_case(x));
 
-    // Quem é o usuário — serve de teste de token e nomeia o arquivo.
+    // Who the user is — serves as a token test and names the file.
     let mut username = c.username.clone();
     if let Ok((v, _)) = api.get_page("/users/settings", 1, 1).await {
         if let Some(u) = v
@@ -753,7 +753,7 @@ pub async fn run(opts: &Options, p: ProgressFn) -> Result<ExportResult> {
 
     if want("history") {
         let v = api
-            .get_all("/sync/history", opts.max_pages, &p, "histórico")
+            .get_all("/sync/history", opts.max_pages, &p, "history")
             .await?;
         push(
             "historico",
@@ -789,7 +789,7 @@ pub async fn run(opts: &Options, p: ProgressFn) -> Result<ExportResult> {
         }
     }
     if all.is_empty() {
-        return Err(anyhow!("a conta não devolveu nenhuma linha"));
+        return Err(anyhow!("the account returned no lines"));
     }
     all.sort_by(|a, b| b.date.cmp(&a.date).then(a.title.cmp(&b.title)));
 
@@ -891,7 +891,7 @@ mod tests {
         let e = parse_item(&v, "historico").unwrap_or_else(|| unreachable!());
         assert_eq!(e.kind, "serie");
         assert_eq!(e.title, "Breaking Bad S01E02 — Cat's in the Bag...");
-        // O id é o da série, não o do episódio: é assim que casa com o resto.
+        // The id is the series', not the episode's: that is how it matches the rest.
         assert_eq!(e.tmdb_id, Some(1396));
         assert_eq!(e.year, Some(2008));
         assert!(e.url.contains("/shows/breaking-bad/seasons/1/episodes/2"));
@@ -966,9 +966,9 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "rede + app do usuário: roda o device flow inteiro contra api.trakt.tv"]
-    fn device_flow_de_verdade() {
-        // Precisa de client_id/client_secret reais e de alguém digitando o
-        // código em trakt.tv/activate; o CI não tem nem um nem outro.
+    #[ignore = "network + user app: runs the whole device flow against api.trakt.tv"]
+    fn real_device_flow() {
+        // Needs real client_id/client_secret and someone typing the
+        // code at trakt.tv/activate; the CI has neither.
     }
 }

@@ -1,7 +1,7 @@
-//! Panorama do export inteiro: inventario dos arquivos, crescimento das
-//! conexoes, volume de mensagens, posts, reacoes, comentarios, convites e o
-//! que o LinkedIn guarda sobre voce em `Ad_Targeting.csv` — que costuma ser a
-//! parte que mais surpreende. Exporta JSON e Markdown.
+//! Overview of the whole export: file inventory, connection growth,
+//! message volume, posts, reactions, comments, invites and what
+//! LinkedIn keeps about you in `Ad_Targeting.csv` — which is usually the
+//! most surprising part. Exports JSON and Markdown.
 
 use std::collections::HashMap;
 
@@ -15,7 +15,7 @@ use crate::core::tools::{report, ProgressFn};
 
 const ID: &str = "li-overview";
 
-/// Arquivos que a gente sabe ler; o que faltar vira aviso.
+/// Files we know how to read; whatever is missing becomes a warning.
 const KNOWN: &[&str] = &[
     "Connections.csv",
     "messages.csv",
@@ -104,7 +104,7 @@ pub struct Invites {
     pub by_year: Vec<Bucket>,
 }
 
-/// Um criterio que anunciantes usaram para te alcancar.
+/// A criterion advertisers used to reach you.
 #[derive(Debug, Clone, Serialize)]
 pub struct AdItem {
     pub field: String,
@@ -134,8 +134,8 @@ fn year_of(raw: &str) -> Option<String> {
     parse_date(raw).map(|d| d.y.to_string())
 }
 
-/// Le uma tabela simples "tem data e talvez um tipo" (reacoes, comentarios,
-/// empresas seguidas).
+/// Reads a simple table "has a date and maybe a type" (reactions, comments,
+/// followed companies).
 fn simple(src: &Source, names: &[&str], date_cols: &[&str], kind_cols: &[&str]) -> Simple {
     let t = src.table_or_empty(names);
     let mut by_year = HashMap::new();
@@ -155,8 +155,8 @@ fn simple(src: &Source, names: &[&str], date_cols: &[&str], kind_cols: &[&str]) 
     }
 }
 
-/// `Ad_Targeting.csv` vem de dois jeitos: uma coluna por criterio com os
-/// valores juntos, ou duas colunas (criterio, valor).
+/// `Ad_Targeting.csv` comes in two ways: one column per criterion with the
+/// values together, or two columns (criterion, value).
 fn ad_targeting(src: &Source) -> Vec<AdItem> {
     let t = src.table_or_empty(&["Ad_Targeting.csv", "Ads Clicked.csv"]);
     if t.headers.is_empty() {
@@ -304,11 +304,11 @@ fn markdown(o: &Overview) -> String {
         o.messages.total, o.messages.conversations, o.messages.sent
     ));
     s.push_str(&format!(
-        "- Posts: **{}** · reacoes: {} · comentarios: {}\n",
+        "- Posts: **{}** · reactions: {} · comments: {}\n",
         o.posts.total, o.reactions.total, o.comments.total
     ));
     s.push_str(&format!(
-        "- Convites: {} enviados, {} recebidos · empresas seguidas: {}\n\n",
+        "- Invites: {} sent, {} received · companies followed: {}\n\n",
         o.invitations.sent, o.invitations.received, o.follows.total
     ));
 
@@ -330,7 +330,7 @@ fn markdown(o: &Overview) -> String {
     }
     if !o.ad_targeting.is_empty() {
         s.push_str(&format!(
-            "\n## O que anunciantes usam sobre voce ({} valores)\n\n",
+            "\n## What advertisers use about you ({} values)\n\n",
             o.ad_targeting_values
         ));
         for a in &o.ad_targeting {

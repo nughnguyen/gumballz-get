@@ -18,9 +18,9 @@
 
 <script lang="ts">
   /**
-   * Exportar (estudo 67): galeria HTML offline com busca e seções (o board
-   * sem "More ideas"), PDF um pin por página, CSV/JSON para planilha ou
-   * migração (Eagle, Notion, Are.na).
+   * Export (study 67): offline HTML gallery with search and sections (the board
+   * without "More ideas"), PDF with one pin per page, CSV/JSON for spreadsheets or
+   * migration (Eagle, Notion, Are.na).
    */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";

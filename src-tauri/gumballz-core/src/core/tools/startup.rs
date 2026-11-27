@@ -1,8 +1,8 @@
-//! Inicialização (estudo 10, Kudu; 25, Sophia): o que abre junto com o
-//! sistema, com liga/desliga. macOS: LaunchAgents do usuário e Itens de
-//! Login; Windows: chaves Run/RunOnce, pasta Inicializar e o estado em
-//! StartupApproved; Linux: `~/.config/autostart` (com override dos itens de
-//! `/etc/xdg/autostart`) e serviços `systemd --user`.
+//! Startup (study 10, Kudu; 25, Sophia): what opens together with the
+//! system, with on/off. macOS: the user's LaunchAgents and Login
+//! Items; Windows: Run/RunOnce keys, the Startup folder and the state in
+//! StartupApproved; Linux: `~/.config/autostart` (overriding the items in
+//! `/etc/xdg/autostart`) and `systemd --user` services.
 
 use std::path::{Path, PathBuf};
 
@@ -125,7 +125,7 @@ async fn mac_items() -> Vec<StartupItem> {
             });
         }
     }
-    // Itens de Login (System Settings → Geral → Itens de Login)
+    // Login Items (System Settings → General → Login Items)
     if let Ok(list) = run(
         "osascript",
         &[
@@ -135,7 +135,7 @@ async fn mac_items() -> Vec<StartupItem> {
     )
     .await
     {
-        // Saída: {{n1, n2}, {p1, p2}, {false, true}} → parse simples
+        // Output: {{n1, n2}, {p1, p2}, {false, true}} → simple parse
         let parts: Vec<Vec<String>> = list
             .trim()
             .trim_start_matches('{')
@@ -165,7 +165,7 @@ async fn mac_items() -> Vec<StartupItem> {
             }
         }
     }
-    // Itens de login desligados por nós ficam guardados para religar.
+    // Login items we turned off stay saved so they can be turned back on.
     for (name, path) in removed_login_items() {
         if !out
             .iter()
@@ -266,7 +266,7 @@ async fn mac_set(item: &StartupItem, enabled: bool) -> anyhow::Result<()> {
             save_removed(&removed);
             Ok(())
         }
-        _ => Err(anyhow!("nao da para alterar este item")),
+        _ => Err(anyhow!("cannot change this item")),
     }
 }
 
@@ -313,7 +313,7 @@ async fn win_approved(scope: &str, folder: bool) -> std::collections::HashMap<St
     let mut map = std::collections::HashMap::new();
     for key in super::win_registry::reg_query(&approved_key(scope, folder), false).await {
         for v in key.values {
-            // REG_BINARY: primeiro byte 02/06 = ligado, 03/07 = desligado
+            // REG_BINARY: first byte 02/06 = on, 03/07 = off
             let enabled = v
                 .data
                 .get(0..2)
@@ -439,7 +439,7 @@ async fn linux_items() -> Vec<StartupItem> {
                 .map(|s| s.to_string_lossy().to_string())
                 .unwrap_or_default();
             if !seen.insert(file.clone()) {
-                continue; // o do usuário sobrepõe o do sistema
+                continue; // the user's one overrides the system's
             }
             let text = std::fs::read_to_string(&p).unwrap_or_default();
             let hidden = desktop_field(&text, "Hidden")
@@ -505,7 +505,7 @@ async fn linux_set(item: &StartupItem, enabled: bool) -> anyhow::Result<()> {
             std::fs::create_dir_all(&user_dir)?;
             let file = Path::new(&item.path)
                 .file_name()
-                .ok_or_else(|| anyhow!("arquivo invalido"))?;
+                .ok_or_else(|| anyhow!("invalid file"))?;
             let target = user_dir.join(file);
             let mut text = std::fs::read_to_string(&item.path).unwrap_or_default();
             let mut lines: Vec<String> = text
@@ -535,7 +535,7 @@ async fn linux_set(item: &StartupItem, enabled: bool) -> anyhow::Result<()> {
             .await?;
             Ok(())
         }
-        _ => Err(anyhow!("nao da para alterar este item")),
+        _ => Err(anyhow!("cannot change this item")),
     }
 }
 
@@ -556,7 +556,7 @@ pub async fn list() -> Vec<StartupItem> {
 pub async fn set_enabled(item: &StartupItem, enabled: bool) -> anyhow::Result<()> {
     if !item.can_toggle {
         return Err(anyhow!(
-            "este item so pode ser alterado com privilegios de administrador"
+            "this item can only be changed with administrator privileges"
         ));
     }
     if cfg!(target_os = "macos") {

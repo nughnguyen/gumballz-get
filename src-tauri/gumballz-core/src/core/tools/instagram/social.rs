@@ -1,4 +1,4 @@
-//! Comentários, curtidas, sorteio e hashtags.
+//! Comments, likes, giveaway and hashtags.
 
 use std::collections::HashSet;
 use std::sync::atomic::AtomicBool;
@@ -118,7 +118,7 @@ pub async fn comments(
     Ok(out)
 }
 
-/// `GET /api/v1/media/{pk}/likers/` (uma resposta só, até ~1000 contas).
+/// `GET /api/v1/media/{pk}/likers/` (a single response, up to ~1000 accounts).
 pub async fn likers(client: &IgClient, media_pk: &str) -> Result<(u64, Vec<MiniUser>), IgError> {
     let json = client
         .get_json(&format!("/api/v1/media/{}/likers/", media_pk), &[])
@@ -134,13 +134,13 @@ pub async fn likers(client: &IgClient, media_pk: &str) -> Result<(u64, Vec<MiniU
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct GiveawayRules {
     pub winners: usize,
-    /// Um comentário por pessoa (a mais recente conta uma vez).
+    /// One comment per person (the most recent counts once).
     pub unique_users: bool,
-    /// Precisa mencionar pelo menos N contas.
+    /// Must mention at least N accounts.
     pub min_mentions: usize,
-    /// Palavra/hashtag obrigatória (vazio = nenhuma).
+    /// Required word/hashtag (empty = none).
     pub keyword: String,
-    /// Não deixar o dono do post nem estas contas ganharem.
+    /// Do not let the post owner or these accounts win.
     pub exclude: Vec<String>,
     pub owner_username: String,
 }
@@ -181,8 +181,8 @@ pub fn giveaway(comments: &[Comment], rules: &GiveawayRules) -> GiveawayResult {
     }
     let eligible = pool.len();
     let seed = rand::random::<u64>();
-    // Fisher-Yates com um LCG determinístico a partir da semente, para o
-    // resultado poder ser reproduzido pela semente exibida.
+    // Fisher-Yates with a deterministic LCG from the seed, so the
+    // result can be reproduced from the displayed seed.
     let mut state = seed | 1;
     let mut next = move || {
         state = state

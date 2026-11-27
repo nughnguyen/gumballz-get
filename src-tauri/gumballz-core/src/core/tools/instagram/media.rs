@@ -1,7 +1,7 @@
-//! Itens de mídia do Instagram: um único formato normalizado para post,
-//! reel, carrossel, story e highlight, venha ele do REST (`/api/v1`) ou do
-//! GraphQL (os nós `xdt_*` têm o mesmo desenho do REST). Download com nome
-//! previsível, legenda em .txt e extração de áudio pelo ffmpeg.
+//! Instagram media items: one normalized format for post,
+//! reel, carousel, story and highlight, whether from the REST (`/api/v1`) or
+//! GraphQL (the `xdt_*` nodes have the same shape as REST). Download with a
+//! predictable name, caption in .txt and audio extraction via ffmpeg.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
@@ -19,7 +19,7 @@ pub struct MediaFile {
     pub kind: String,
     pub width: u64,
     pub height: u64,
-    /// Capa (imagem) quando o arquivo é um vídeo.
+    /// Cover (image) when the file is a video.
     pub poster: Option<String>,
     pub pk: String,
 }
@@ -28,7 +28,7 @@ pub struct MediaFile {
 pub struct MediaItem {
     pub pk: String,
     pub code: String,
-    /// 1 foto · 2 vídeo · 8 carrossel
+    /// 1 photo · 2 video · 8 carousel
     pub media_type: u8,
     /// "feed" | "clips" | "igtv" | "carousel_container" | "story"
     pub product_type: String,
@@ -52,7 +52,7 @@ pub struct MediaItem {
     pub mentions: Vec<String>,
     pub is_paid_partnership: bool,
     pub coauthors: Vec<String>,
-    /// Título do highlight de onde o item veio, quando houver.
+    /// Title of the highlight the item came from, when there is one.
     pub title: Option<String>,
 }
 
@@ -112,8 +112,8 @@ fn tags(text: &str, prefix: char) -> Vec<String> {
     out
 }
 
-/// Converte um item do REST/GraphQL (post, story ou highlight) no formato
-/// normalizado. Devolve `None` quando não há mídia utilizável.
+/// Converts a REST/GraphQL item (post, story or highlight) to the normalized
+/// format. Returns `None` when there is no usable media.
 pub fn parse_item(v: &Value) -> Option<MediaItem> {
     let user = v.get("user").cloned().unwrap_or(Value::Null);
     let username = s(&user, "username");
@@ -217,7 +217,7 @@ pub fn parse_item(v: &Value) -> Option<MediaItem> {
     })
 }
 
-/// `GET /api/v1/media/{pk}/info/` — post, reel, carrossel ou IGTV.
+/// `GET /api/v1/media/{pk}/info/` — post, reel, carousel or IGTV.
 pub async fn post_info(client: &IgClient, shortcode: &str) -> Result<MediaItem, IgError> {
     let pk = super::shortcode_to_pk(shortcode)
         .ok_or_else(|| IgError::NotFound(format!("shortcode {}", shortcode)))?;
@@ -230,20 +230,20 @@ pub async fn post_info(client: &IgClient, shortcode: &str) -> Result<MediaItem, 
         .and_then(|a| a.first())
         .ok_or_else(|| IgError::NotFound(format!("post {}", shortcode)))?;
     parse_item(item)
-        .ok_or_else(|| IgError::Other("o post nao tem midia que eu saiba baixar".into()))
+        .ok_or_else(|| IgError::Other("the post has no media I know how to download".into()))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DownloadOptions {
-    /// Grava `<nome>.txt` com a legenda.
+    /// Writes `<name>.txt` with the caption.
     pub caption_txt: bool,
-    /// Grava `<nome>.json` com os metadados do item.
+    /// Writes `<name>.json` with the item metadata.
     pub metadata_json: bool,
-    /// Só o áudio dos vídeos: "" (não), "m4a" ou "mp3".
+    /// Only the audio of videos: "" (no), "m4a" or "mp3".
     pub audio_only: String,
-    /// Pula arquivos que já existem na pasta.
+    /// Skips files that already exist in the folder.
     pub skip_existing: bool,
-    /// Subpasta por usuário (`<dest>/<username>/`).
+    /// Subfolder per user (`<dest>/<username>/`).
     pub per_user_folder: bool,
 }
 
@@ -273,7 +273,7 @@ fn ext_of(url: &str, kind: &str) -> String {
 pub fn base_name(item: &MediaItem) -> String {
     let date = chrono::DateTime::from_timestamp(item.taken_at, 0)
         .map(|d| d.format("%Y-%m-%d").to_string())
-        .unwrap_or_else(|| "sem-data".into());
+        .unwrap_or_else(|| "no-date".into());
     let user = if item.username.is_empty() {
         "instagram".to_string()
     } else {
@@ -310,8 +310,8 @@ async fn extract_audio(video: &Path, format: &str) -> anyhow::Result<PathBuf> {
     Ok(out)
 }
 
-/// Baixa uma lista de itens para `dest`, reportando `ig:<job>` com
-/// done/total e o nome do arquivo atual.
+/// Downloads a list of items to `dest`, reporting `ig:<job>` with
+/// done/total and the current file name.
 pub async fn download_items(
     client: &IgClient,
     items: &[MediaItem],

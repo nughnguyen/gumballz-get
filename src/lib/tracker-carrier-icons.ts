@@ -3,10 +3,10 @@ import type { Carrier } from "$lib/tracker-bridge";
 export type CarrierIcon = {
   svgPath: string;
   color: string;
-  /// Nome de exibição. Nomes de transportadora são marcas registradas e
-  /// permanecem literais em todos os idiomas — exceto `unknown`, que usa
-  /// `labelKey` pra resolver via i18n. Quando `labelKey` está presente, o
-  /// caller deve preferi-la sobre `label`.
+  /// Display name. Carrier names are trademarks and
+  /// stay literal in every language — except `unknown`, which uses
+  /// `labelKey` to resolve via i18n. When `labelKey` is present, the
+  /// caller should prefer it over `label`.
   label: string;
   labelKey?: string;
 };

@@ -1,6 +1,6 @@
-//! PDF (juntar, dividir, comprimir, converter, OCR, sanitizar). A lógica mora
-//! em `gumballz_core::core::tools::pdf`; aqui só se despacha para uma thread
-//! de bloqueio porque o PDFium é síncrono e não é thread-safe.
+//! PDF (merge, split, compress, convert, OCR, sanitize). The logic lives in
+//! `gumballz_core::core::tools::pdf`; here it is only dispatched to a blocking
+//! thread because PDFium is synchronous and not thread-safe.
 
 use gumballz_core::core::tools::{pdf, pdf_markdown, pdf_repair, pdf_write};
 
@@ -180,7 +180,7 @@ pub async fn tool_pdf_redaction_check(
     .map_err(err)
 }
 
-// ── Escrita de estrutura (lopdf): senha, marca, corte, sumário ─────────
+// ── Structure writing (lopdf): password, watermark, crop, outline ─────────
 
 #[tauri::command]
 pub async fn tool_pdf_password(
@@ -247,7 +247,7 @@ pub async fn tool_pdf_markdown(
         .map_err(err)
 }
 
-// ── Tarja, tabela e formulário ─────────────────────────────────────────
+// ── Banner, table and form ─────────────────────────────────────────
 
 use gumballz_core::core::tools::{pdf_form, pdf_redact, pdf_table};
 

@@ -1,6 +1,6 @@
-//! Métricas de perfil (engajamento, ritmo, horários, hashtags), comparação
-//! entre perfis, seguidores fantasmas e leitura do export oficial ("Baixe
-//! suas informações", formato JSON).
+//! Profile metrics (engagement, pace, times, hashtags), comparison
+//! between profiles, ghost followers and reading the official export ("Download
+//! your information", JSON format).
 
 use std::collections::{HashMap, HashSet};
 use std::io::Read;
@@ -39,7 +39,7 @@ pub struct ProfileStats {
     pub avg_comments: f64,
     pub avg_plays: f64,
     pub median_likes: u64,
-    /// (curtidas + comentários) médios ÷ seguidores, em %.
+    /// Average (likes + comments) ÷ followers, in %.
     pub engagement_rate: f64,
     pub comment_ratio: f64,
     pub follow_ratio: f64,
@@ -50,10 +50,10 @@ pub struct ProfileStats {
     pub avg_hashtags: f64,
     pub top_hashtags: Vec<(String, u32)>,
     pub top_mentions: Vec<(String, u32)>,
-    /// 0 = domingo … 6 = sábado (hora local), contagem de posts.
+    /// 0 = Sunday … 6 = Saturday (local time), post count.
     pub weekday_counts: [u32; 7],
     pub hour_counts: [u32; 24],
-    /// Engajamento médio por dia da semana (curtidas + comentários).
+    /// Average engagement per weekday (likes + comments).
     pub weekday_engagement: [f64; 7],
     pub best_weekday: u8,
     pub best_hour: u8,
@@ -180,7 +180,7 @@ pub fn compute(user: UserInfo, posts: &[MediaItem]) -> ProfileStats {
     st
 }
 
-// ── Seguidores fantasmas ─────────────────────────────────────────────────
+// ── Ghost followers ─────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize)]
 pub struct GhostReport {
@@ -188,11 +188,11 @@ pub struct GhostReport {
     pub followers_total: usize,
     pub engaged: usize,
     pub ghosts: Vec<MiniUser>,
-    /// Seguidores que curtiram/comentaram e quantas vezes.
+    /// Followers who liked/commented and how many times.
     pub top_fans: Vec<(MiniUser, u32)>,
 }
 
-/// Seguidores que não curtiram nem comentaram nenhum dos últimos N posts.
+/// Followers who did not like or comment on any of the last N posts.
 pub async fn ghosts(
     client: &IgClient,
     followers: Vec<MiniUser>,
@@ -257,7 +257,7 @@ pub async fn ghosts(
     })
 }
 
-// ── Export oficial ───────────────────────────────────────────────────────
+// ── Official export ───────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct ExportUser {
@@ -283,12 +283,12 @@ pub struct ExportReport {
     pub restricted: Vec<ExportUser>,
     pub hide_story_from: Vec<ExportUser>,
     pub removed_suggestions: Vec<ExportUser>,
-    /// Seguidores por mês (AAAA-MM → n), a partir do timestamp do export.
+    /// Followers per month (YYYY-MM → n), from the export timestamp.
     pub followers_by_month: Vec<(String, u32)>,
 }
 
-/// Todo item do export tem `string_list_data: [{href, value, timestamp}]`;
-/// alguns arquivos são um array na raiz, outros `{"relationships_x": [...]}`.
+/// Every export item has `string_list_data: [{href, value, timestamp}]`;
+/// some files are a root array, others `{"relationships_x": [...]}`.
 fn collect_users(v: &Value, out: &mut Vec<ExportUser>) {
     match v {
         Value::Array(a) => a.iter().for_each(|x| collect_users(x, out)),
@@ -372,7 +372,7 @@ fn read_export_files(path: &Path) -> anyhow::Result<Vec<(String, Vec<u8>)>> {
         }
     }
     if files.is_empty() {
-        return Err(anyhow!("nao achei os arquivos JSON de seguidores no export. No Instagram, peça o export em formato JSON (Configurações → Central de contas → Suas informações e permissões → Baixar suas informações)"));
+        return Err(anyhow!("could not find the followers JSON files in the export. On Instagram, request the export in JSON format (Settings → Accounts Centre → Your information and permissions → Download your information)"));
     }
     Ok(files)
 }

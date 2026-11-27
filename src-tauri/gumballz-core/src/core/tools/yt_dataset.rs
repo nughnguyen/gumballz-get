@@ -1,10 +1,10 @@
-//! Acervo montado a partir de buscas, não de um canal ou playlist.
+//! Archive built from searches, not from a channel or playlist.
 //!
-//! O `yt_archive` sabe enumerar uma URL; para juntar vídeos de várias buscas
-//! (ex.: todos os guias de um jogo, em vários idiomas) a fila precisa ser
-//! semeada com resultados já filtrados. `seed` grava esses itens no mesmo
-//! estado `.gumballz-get-archive.json`, sem rede, e o `yt_archive::run` segue dali
-//! com retomada, falhas registradas e teto de espaço em disco.
+//! `yt_archive` knows how to enumerate a URL; to gather videos from several searches
+//! (e.g. all the guides for a game, in several languages) the queue needs to be
+//! seeded with already-filtered results. `seed` writes those items into the same
+//! `.gumballz-get-archive.json` state, with no network, and `yt_archive::run` carries on from there
+//! with resume, recorded failures and a disk-space cap.
 
 use std::path::Path;
 
@@ -15,14 +15,14 @@ use super::yt_archive::{self, ArchiveItem, ArchiveState, ItemStatus};
 #[derive(Debug, Clone, Serialize)]
 pub struct SeedResult {
     pub state_path: String,
-    /// Itens novos que entraram na fila agora.
+    /// New items that entered the queue just now.
     pub added: usize,
-    /// Tamanho da fila depois da semeadura.
+    /// Queue size after seeding.
     pub total: usize,
 }
 
-/// Lê NDJSON (uma linha por vídeo, como o `gumballz-get search --json` imprime)
-/// e devolve itens pendentes. Linha sem `id` ou que não é JSON é ignorada.
+/// Reads NDJSON (one line per video, as `gumballz-get search --json` prints)
+/// and returns pending items. A line without an `id` or that is not JSON is ignored.
 pub fn parse_seed(text: &str) -> Vec<ArchiveItem> {
     let mut seen = std::collections::HashSet::new();
     text.lines()
@@ -55,7 +55,7 @@ pub fn parse_seed(text: &str) -> Vec<ArchiveItem> {
         .collect()
 }
 
-/// Junta os itens à fila da pasta sem perder o que já foi baixado ou falhou.
+/// Adds the items to the folder's queue without losing what was already downloaded or failed.
 pub fn seed(dest: &Path, title: &str, items: Vec<ArchiveItem>) -> anyhow::Result<SeedResult> {
     let mut st = yt_archive::load_state(dest).unwrap_or_else(|| ArchiveState::new("", title));
     let added = st.merge(title, items, false);
@@ -67,8 +67,8 @@ pub fn seed(dest: &Path, title: &str, items: Vec<ArchiveItem>) -> anyhow::Result
     })
 }
 
-/// Soma o tamanho dos arquivos sob `dir` (sem seguir links). Usado como teto
-/// do acervo: a medida é o disco de fato, não o que o estado acha que baixou.
+/// Adds up the size of the files under `dir` (without following links). Used as a disk-space cap
+/// for the archive: the measure is the actual disk, not what the state thinks was downloaded.
 pub fn dir_size(dir: &Path) -> u64 {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return 0;
@@ -89,7 +89,7 @@ mod tests {
 
     fn temp(name: &str) -> std::path::PathBuf {
         let dir = super::super::temp_dir().join(format!("{}-{}", name, uuid::Uuid::new_v4()));
-        std::fs::create_dir_all(&dir).expect("pasta temporária");
+        std::fs::create_dir_all(&dir).expect("temp folder");
         dir
     }
 
@@ -127,7 +127,7 @@ lixo
         assert_eq!(
             a1.status,
             ItemStatus::Ok,
-            "o que já baixou não volta à fila"
+            "what already downloaded does not go back to the queue"
         );
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -135,7 +135,7 @@ lixo
     #[test]
     fn dir_size_sums_nested_files() {
         let dir = temp("yt-dataset-size");
-        std::fs::create_dir_all(dir.join("canal")).expect("subpasta");
+        std::fs::create_dir_all(dir.join("canal")).expect("subfolder");
         std::fs::write(dir.join("a.bin"), vec![0u8; 100]).expect("a");
         std::fs::write(dir.join("canal").join("b.bin"), vec![0u8; 50]).expect("b");
         assert_eq!(dir_size(&dir), 150);

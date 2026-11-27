@@ -1,7 +1,7 @@
-//! Utilitários de CTF e análise de arquivo. Tudo Rust puro e offline: nada
-//! aqui dispara ataque contra ninguém — é calculadora de hash, identificador
-//! de formato, cifra clássica e análise de frequência, o que se usa para
-//! *entender* um arquivo ou um texto que já está na sua mão.
+//! CTF utilities and file analysis. All pure Rust and offline: nothing
+//! here launches an attack against anyone — it is a hash calculator, format
+//! identifier, classic cipher and frequency analysis, what you use to
+//! *understand* a file or a text already in your hands.
 
 pub mod analysis;
 pub mod ciphers;

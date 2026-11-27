@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Le o messages.csv do export, agrupa por conversa e gera HTML/Markdown/JSON local. */
+  /** Reads the export's messages.csv, groups by conversation and generates local HTML/Markdown/JSON. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

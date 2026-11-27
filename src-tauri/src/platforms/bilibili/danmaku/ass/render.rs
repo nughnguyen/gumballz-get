@@ -17,9 +17,9 @@ pub struct AssRenderOptions {
     pub outline: f32,
     pub shadow: f32,
     pub avg_char_width_px: f32,
-    /// Trilhas de rolagem; 0 calcula pela altura e pelo tamanho da fonte.
+    /// Scroll lanes; 0 computes from the height and the font size.
     pub scroll_lanes: u32,
-    /// Trilhas fixas, de cada lado; 0 acompanha o número das rolantes.
+    /// Fixed lanes, on each side; 0 follows the number of scrolling ones.
     pub static_lanes: u32,
 }
 
@@ -270,8 +270,8 @@ mod tests {
         }
     }
 
-    /// Com poucas trilhas os comentários se empilham nas mesmas alturas e
-    /// voltam ao topo; é o que faz o `\move` repetir o mesmo Y.
+    /// With few lanes the comments pile up at the same heights and return to the
+    /// top; that is what makes `\move` repeat the same Y.
     #[test]
     fn explicit_lane_count_limits_the_rows() {
         let elems: Vec<DanmakuElem> = (0..6).map(|i| elem(i * 100, 1, "linha")).collect();
@@ -311,7 +311,7 @@ mod tests {
             serde_json::from_str(r#"{"font_size": 60, "scroll_lanes": 4}"#).unwrap();
         assert_eq!(opts.font_size, 60);
         assert_eq!(opts.scroll_lanes, 4);
-        // O que o front não mandou continua no padrão.
+        // What the frontend did not send stays at the default.
         assert_eq!(opts.resolution_x, 1920);
         assert_eq!(opts.alpha, 0x40);
     }

@@ -1,29 +1,30 @@
-//! Detecta que um video foi reeditado, censurado ou re-uploadado entre dois
-//! downloads do mesmo id.
+//! Detects that a video was re-edited, censored or re-uploaded between two
+//! downloads of the same id.
 //!
-//! O archive de dedup e o historico ja guardam o suficiente para ancorar isto:
-//! ao re-baixar um id ja arquivado, compara-se o que mudou em vez de sobrescrever
-//! em silencio. Feature de arquivista, e nenhum concorrente faz.
+//! The dedup archive and the history already keep enough to anchor this:
+//! when re-downloading an already archived id, it compares what changed
+//! instead of silently overwriting. An archivist feature, and no competitor
+//! does it.
 //!
-//! Origem: `git diff`, aplicado a metadado de midia.
+//! Origin: `git diff`, applied to media metadata.
 
 use serde::{Deserialize, Serialize};
 
-/// O que se guarda de uma versao. Nao guarda o arquivo — so o suficiente para
-/// afirmar que algo mudou e o que.
+/// What is kept of a version. It does not keep the file — only enough to
+/// say that something changed, and what.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct MediaSnapshot {
     pub duration_secs: Option<f64>,
     #[serde(default)]
     pub chapters: Vec<String>,
-    /// SHA-256 do arquivo final, quando calculado.
+    /// SHA-256 of the final file, when computed.
     pub sha256: Option<String>,
     pub title: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum Change {
-    /// Duracao mudou alem da tolerancia. Corte de censura aparece aqui.
+    /// Duration changed beyond the tolerance. A censorship cut shows up here.
     Duration {
         before: f64,
         after: f64,
@@ -35,18 +36,18 @@ pub enum Change {
         before: String,
         after: String,
     },
-    /// Mesma duracao, mesmos chapters, bytes diferentes: re-encode ou
-    /// re-upload. O caso mais silencioso, e o que so o hash pega.
+    /// Same duration, same chapters, different bytes: re-encode or
+    /// re-upload. The quietest case, and the one only the hash catches.
     ContentOnly,
 }
 
-/// Diferenca menor que isto e ruido de remux, nao edicao.
+/// A difference smaller than this is remux noise, not an edit.
 ///
-/// Meio segundo: um remux muda a duracao em milissegundos por causa de
-/// arredondamento de timestamp, e um corte de censura real nunca e tao curto.
+/// Half a second: a remux changes the duration by milliseconds because of
+/// timestamp rounding, and a real censorship cut is never that short.
 pub const DURATION_TOLERANCE_SECS: f64 = 0.5;
 
-/// O que mudou entre duas versoes. Vazio significa que nada detectavel mudou.
+/// What changed between two versions. Empty means nothing detectable changed.
 pub fn diff(before: &MediaSnapshot, after: &MediaSnapshot) -> Vec<Change> {
     let mut changes = Vec::new();
 
@@ -90,8 +91,9 @@ pub fn diff(before: &MediaSnapshot, after: &MediaSnapshot) -> Vec<Change> {
         }
     }
 
-    // So vale reportar "so o conteudo mudou" quando nada mais mudou; junto de
-    // uma mudanca de duracao seria ruido, porque o hash muda por consequencia.
+    // "Only the content changed" is only worth reporting when nothing else
+    // changed; alongside a duration change it would be noise, because the hash
+    // changes as a consequence.
     if changes.is_empty() {
         if let (Some(a), Some(b)) = (&before.sha256, &after.sha256) {
             if a != b {
@@ -103,7 +105,7 @@ pub fn diff(before: &MediaSnapshot, after: &MediaSnapshot) -> Vec<Change> {
     changes
 }
 
-/// Resumo de uma linha, para o historico.
+/// One-line summary, for the history.
 pub fn summarize(changes: &[Change]) -> Option<String> {
     if changes.is_empty() {
         return None;
@@ -146,8 +148,8 @@ mod tests {
 
     #[test]
     fn remux_nao_conta_como_edicao() {
-        // Arredondamento de timestamp muda a duracao em milissegundos; reportar
-        // isso como "video foi editado" treinaria o usuario a ignorar o aviso.
+        // Timestamp rounding changes the duration by milliseconds; reporting
+        // that as "video was edited" would train the user to ignore the warning.
         let a = snap(600.0, &["intro"], "aaa");
         let b = snap(600.2, &["intro"], "bbb");
         let c = diff(&a, &b);
@@ -169,8 +171,8 @@ mod tests {
 
     #[test]
     fn re_upload_sem_mudanca_visivel_so_aparece_pelo_hash() {
-        // O caso mais silencioso: mesma duracao, mesmos chapters, bytes
-        // diferentes. Sem o hash nao existiria sinal nenhum.
+        // The quietest case: same duration, same chapters, different bytes.
+        // Without the hash there would be no signal at all.
         let a = snap(600.0, &["intro"], "aaa");
         let b = snap(600.0, &["intro"], "zzz");
         assert_eq!(diff(&a, &b), vec![Change::ContentOnly]);
@@ -178,8 +180,8 @@ mod tests {
 
     #[test]
     fn content_only_nao_polui_quando_algo_maior_mudou() {
-        // O hash muda por consequencia de qualquer edicao; reporta-lo junto
-        // seria ruido em toda deteccao real.
+        // The hash changes as a consequence of any edit; reporting it alongside
+        // would be noise in every real detection.
         let a = snap(600.0, &["intro"], "aaa");
         let b = snap(300.0, &["intro"], "bbb");
         let c = diff(&a, &b);
@@ -188,7 +190,8 @@ mod tests {
 
     #[test]
     fn metadado_faltando_nao_inventa_mudanca() {
-        // Snapshot antigo sem hash ou sem duracao nao pode virar falso positivo.
+        // An old snapshot without a hash or without a duration must not become
+        // a false positive.
         let sem_hash = MediaSnapshot {
             duration_secs: Some(600.0),
             chapters: vec![],

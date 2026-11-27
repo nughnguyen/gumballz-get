@@ -1,9 +1,9 @@
-//! `gumballz-get search`: busca por texto e imprime um vídeo por linha.
+//! `gumballz-get search`: search by text and print one video per line.
 //!
-//! Com `--json` a saída é NDJSON e serve de semente para `gumballz-get archive
-//! --seed`, o que permite a um agente montar um acervo a partir de uma lista
-//! de termos sem abrir o app. Progresso e erros vão para o stderr para não
-//! sujar o NDJSON do stdout.
+//! With `--json` the output is NDJSON and serves as seed for `gumballz-get archive
+//! --seed`, which lets an agent build an archive from a list of terms without
+//! opening the app. Progress and errors go to stderr so they do not pollute
+//! the NDJSON on stdout.
 
 use std::collections::HashSet;
 

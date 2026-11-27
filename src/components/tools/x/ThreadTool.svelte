@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Desenrolar thread (estudo 67): FxTwitter público, GraphQL da sessão como reserva. */
+  /** Unroll a thread (study 67): public FxTwitter, session GraphQL as backup. */
   import { invoke } from "@tauri-apps/api/core";
   import { t } from "$lib/i18n";
   import { showToast } from "$lib/stores/toast-store.svelte";

@@ -1,9 +1,9 @@
-//! Twitch: ferramentas que só usam o que o site expõe sem login.
+//! Twitch: tools that only use what the site exposes without login.
 //!
-//! - `gql`: o GraphQL público (Client-ID do player web), parsing de links de
-//!   canal, VOD e clipe.
-//! - `emotes`: bulk-download de emotes e badges nativos + BTTV, FFZ e 7TV.
-//! - `chat`: replay de chat de VOD/clipe exportado em JSON, CSV e legenda.
+//! - `gql`: the public GraphQL (web player Client-ID), parsing of channel,
+//!   VOD and clip links.
+//! - `emotes`: bulk-download of native emotes and badges + BTTV, FFZ and 7TV.
+//! - `chat`: VOD/clip chat replay exported as JSON, CSV and subtitles.
 
 pub mod chat;
 pub mod emotes;

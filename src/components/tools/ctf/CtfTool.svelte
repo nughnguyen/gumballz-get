@@ -18,9 +18,9 @@
 
 <script lang="ts">
   /**
-   * Seis tools de CTF num componente: hash, tipo de arquivo, cifras, XOR,
-   * codificações e frequência. `mode` decide qual formulário aparece — todas
-   * têm a mesma forma (entra texto ou arquivo, sai resultado) e tudo é local.
+   * Six CTF tools in one component: hash, file type, ciphers, XOR,
+   * encodings and frequency. `mode` picks which form shows — they all
+   * have the same shape (text or file in, result out) and everything is local.
    */
   import { invoke } from "@tauri-apps/api/core";
   import { t } from "$lib/i18n";

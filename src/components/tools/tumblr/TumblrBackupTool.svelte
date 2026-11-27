@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Espelho offline de um blog do Tumblr: HTML navegável com a cadeia de reblog. */
+  /** Offline mirror of a Tumblr blog: navigable HTML with the reblog chain. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

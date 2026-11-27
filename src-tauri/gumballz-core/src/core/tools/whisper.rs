@@ -1,10 +1,10 @@
-//! Transcrição local com whisper.cpp (estudo 01).
+//! Local transcription with whisper.cpp (study 01).
 //!
-//! O binário `whisper-cli` vem da release oficial no Windows (x64, CPU ou
-//! cuBLAS) e no Linux (Ubuntu x64/arm64). No macOS o upstream só publica o
-//! xcframework, então lá o GumballZ Get usa o `whisper-cli` do sistema (Homebrew:
-//! `brew install whisper-cpp`) ou um caminho escolhido pelo usuário.
-//! Modelos GGML vêm do Hugging Face para `<app_data>/models/whisper/`.
+//! The `whisper-cli` binary comes from the official release on Windows (x64, CPU or
+//! cuBLAS) and on Linux (Ubuntu x64/arm64). On macOS upstream only publishes the
+//! xcframework, so there GumballZ Get uses the system's `whisper-cli` (Homebrew:
+//! `brew install whisper-cpp`) or a path chosen by the user.
+//! GGML models come from Hugging Face into `<app_data>/models/whisper/`.
 
 use std::path::{Path, PathBuf};
 
@@ -29,20 +29,20 @@ pub struct ModelInfo {
     pub size_bytes: u64,
 }
 
-/// (id, tamanho aproximado em MB, nota curta)
+/// (id, approximate size in MB, short note)
 const MODELS: &[(&str, u64, &str)] = &[
-    ("tiny-q5_1", 32, "rápido, baixa qualidade"),
-    ("base-q5_1", 60, "rápido, qualidade básica"),
-    ("small-q5_1", 190, "equilíbrio para máquinas fracas"),
-    ("medium-q5_0", 540, "boa qualidade, mais lento"),
+    ("tiny-q5_1", 32, "fast, low quality"),
+    ("base-q5_1", 60, "fast, basic quality"),
+    ("small-q5_1", 190, "balanced for weak machines"),
+    ("medium-q5_0", 540, "good quality, slower"),
     (
         "large-v3-turbo-q5_0",
         574,
-        "recomendado: quase large-v3, 8× mais rápido",
+        "recommended: almost large-v3, 8× faster",
     ),
-    ("large-v3-turbo", 1620, "turbo sem quantização"),
-    ("large-v3-q5_0", 1080, "melhor qualidade quantizado"),
-    ("large-v3", 3100, "melhor qualidade, mais pesado"),
+    ("large-v3-turbo", 1620, "turbo without quantization"),
+    ("large-v3-q5_0", 1080, "best quantized quality"),
+    ("large-v3", 3100, "best quality, heavier"),
 ];
 
 pub fn models_dir() -> Option<PathBuf> {
@@ -117,7 +117,7 @@ pub struct WhisperStatus {
     pub path: Option<String>,
     pub source: String,
     pub version: Option<String>,
-    /// Variantes que a release publica para este sistema (vazio no macOS).
+    /// Variants the release publishes for this system (empty on macOS).
     pub variants: Vec<String>,
     pub can_install: bool,
     pub install_hint: String,
@@ -137,7 +137,7 @@ pub async fn locate() -> Option<(PathBuf, &'static str)> {
     if let Some(found) = dependencies::find_tool_with_source("whisper-cli").await {
         return Some(found);
     }
-    // Homebrew instala como whisper-cli; builds antigas chamavam "main"/"whisper".
+    // Homebrew installs it as whisper-cli; old builds called it "main"/"whisper".
     for name in ["whisper-cpp", "whisper"] {
         if let Some(found) = dependencies::find_tool_with_source(name).await {
             return Some(found);
@@ -172,7 +172,7 @@ fn asset_name(variant: &str) -> anyhow::Result<&'static str> {
         }
     } else {
         return Err(anyhow!(
-            "o whisper.cpp nao publica binario para este sistema; instale com `brew install whisper-cpp` ou aponte o caminho em Configuracoes"
+            "whisper.cpp does not publish a binary for this system; install with `brew install whisper-cpp` or point to the path in Settings"
         ));
     })
 }
@@ -221,14 +221,14 @@ pub async fn install(variant: &str, progress: ProgressFn) -> anyhow::Result<Path
         .map_err(|e| anyhow!("Spawn blocking failed: {}", e))??;
     let Some(exe) = github::find_file(&staging, &bin_name("whisper-cli")) else {
         let _ = std::fs::remove_dir_all(&staging);
-        return Err(anyhow!("o pacote baixado nao contem o whisper-cli"));
+        return Err(anyhow!("the downloaded package does not contain whisper-cli"));
     };
     github::make_executable(&exe);
-    // As libs (.dll/.so) ficam ao lado do executável no mesmo pacote.
+    // The libs (.dll/.so) sit next to the executable in the same package.
     github::swap_dir(&staging, &dir)?;
     github::strip_quarantine(&dir).await;
     let final_exe = github::find_file(&dir, &bin_name("whisper-cli"))
-        .ok_or_else(|| anyhow!("whisper-cli sumiu depois de mover a pasta"))?;
+        .ok_or_else(|| anyhow!("whisper-cli disappeared after moving the folder"))?;
     std::fs::write(dir.join("VERSION"), &asset.tag).ok();
     Ok(final_exe)
 }
@@ -237,17 +237,17 @@ pub async fn install(variant: &str, progress: ProgressFn) -> anyhow::Result<Path
 pub struct TranscribeOptions {
     pub input: String,
     pub model: String,
-    /// "auto" ou código ISO ("pt", "en").
+    /// "auto" or an ISO code ("pt", "en").
     pub language: String,
-    /// Traduzir a saída para inglês (recurso nativo do Whisper).
+    /// Translate the output to English (a native Whisper feature).
     #[serde(default)]
     pub translate: bool,
-    /// Tamanho máximo de segmento em caracteres (0 = deixar o modelo decidir).
+    /// Maximum segment size in characters (0 = let the model decide).
     #[serde(default)]
     pub max_len: u32,
     #[serde(default)]
     pub prompt: String,
-    /// Pasta de saída; vazio = ao lado do arquivo de entrada.
+    /// Output folder; empty = next to the input file.
     #[serde(default)]
     pub output_dir: String,
     #[serde(default)]
@@ -265,7 +265,7 @@ pub struct TranscribeResult {
     pub seconds: f64,
 }
 
-/// Áudio como o whisper.cpp quer: WAV 16 kHz mono PCM16.
+/// Audio as whisper.cpp wants it: WAV 16 kHz mono PCM16.
 async fn to_wav16k(input: &Path) -> anyhow::Result<PathBuf> {
     let ffmpeg = crate::core::dependencies::ensure_ffmpeg().await?;
     let out = super::temp_dir().join(format!("whisper-{}.wav", uuid::Uuid::new_v4()));
@@ -278,7 +278,7 @@ async fn to_wav16k(input: &Path) -> anyhow::Result<PathBuf> {
         .await?;
     if !output.status.success() {
         return Err(anyhow!(
-            "ffmpeg nao conseguiu converter o audio: {}",
+            "ffmpeg could not convert the audio: {}",
             String::from_utf8_lossy(&output.stderr).trim()
         ));
     }
@@ -316,16 +316,16 @@ pub async fn transcribe(
 ) -> anyhow::Result<TranscribeResult> {
     let (bin, _) = locate()
         .await
-        .ok_or_else(|| anyhow!("whisper-cli nao esta instalado"))?;
+        .ok_or_else(|| anyhow!("whisper-cli is not installed"))?;
     let model_path = models_dir()
         .ok_or_else(|| anyhow!("Could not determine data directory"))?
         .join(format!("ggml-{}.bin", opts.model));
     if !model_path.exists() {
-        return Err(anyhow!("modelo {} nao esta baixado", opts.model));
+        return Err(anyhow!("model {} is not downloaded", opts.model));
     }
     let input = PathBuf::from(&opts.input);
     if !input.exists() {
-        return Err(anyhow!("arquivo nao encontrado: {}", opts.input));
+        return Err(anyhow!("file not found: {}", opts.input));
     }
     let id = format!("transcribe:{}", opts.input);
     report(&progress, &id, "convert", 0, Some(100), None);
@@ -359,9 +359,9 @@ pub async fn transcribe(
         .stderr(std::process::Stdio::piped());
     let mut child = cmd
         .spawn()
-        .map_err(|e| anyhow!("nao foi possivel iniciar o whisper-cli: {}", e))?;
+        .map_err(|e| anyhow!("could not start whisper-cli: {}", e))?;
 
-    // `-pp` escreve "progress = 42%" no stderr.
+    // `-pp` writes "progress = 42%" to stderr.
     let stderr = child.stderr.take();
     let p2 = progress.clone();
     let id2 = id.clone();

@@ -1,12 +1,12 @@
-//! Limpar áudio: normalizar loudness (EBU R128) e tirar ruído de fundo.
+//! Clean audio: normalize loudness (EBU R128) and remove background noise.
 //!
-//! Normalizar com `volume` ou pico não serve para voz: o que o ouvido (e o
-//! YouTube, e o Spotify) medem é loudness integrado. O `loudnorm` faz isso,
-//! mas numa passagem só ele trabalha em modo dinâmico e "bombeia". Duas
-//! passagens — medir, depois aplicar as medidas — dão ganho linear.
+//! Normalizing with `volume` or peak does not work for voice: what the ear (and
+//! YouTube, and Spotify) measure is integrated loudness. `loudnorm` does that,
+//! but in a single pass it works in dynamic mode and "pumps". Two
+//! passes — measure, then apply the measurements — give linear gain.
 //!
-//! O ruído sai com filtros nativos (`afftdn`, `anlmdn`), sem baixar modelo. O
-//! `arnndn` (RNNoise) só entra se o usuário já tiver um `.rnnn` na máquina.
+//! Noise goes away with native filters (`afftdn`, `anlmdn`), without downloading a model. The
+//! `arnndn` (RNNoise) only kicks in if the user already has a `.rnnn` on the machine.
 
 use std::path::{Path, PathBuf};
 
@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 
 // ── Loudness ───────────────────────────────────────────────────────────
 
-/// Alvos de LUFS integrados que as plataformas usam.
+/// Integrated LUFS targets the platforms use.
 pub const TARGETS: &[(&str, f64, f64)] = &[
     ("streaming", -14.0, -1.0),
     ("podcast", -16.0, -1.5),
@@ -39,15 +39,15 @@ pub struct Loudness {
     pub target_offset: f64,
 }
 
-/// O `loudnorm` imprime um JSON no stderr, junto com o resto do log.
+/// `loudnorm` prints a JSON on stderr, along with the rest of the log.
 pub fn parse_measure(stderr: &str) -> Option<Loudness> {
     let start = stderr.rfind('{')?;
     let end = stderr[start..].find('}')? + start + 1;
     let v: serde_json::Value = serde_json::from_str(&stderr[start..end]).ok()?;
     let num = |k: &str| -> Option<f64> {
         let s = v.get(k)?.as_str()?;
-        // Silêncio total devolve "-inf", e `parse` aceita isso: infinito na
-        // linha de comando do ffmpeg quebra a segunda passagem. Vira -99.
+        // Total silence returns "-inf", and `parse` accepts that: infinity on
+        // ffmpeg's command line breaks the second pass. It becomes -99.
         let n: f64 = s.parse().unwrap_or(-99.0);
         Some(if n.is_finite() { n } else { -99.0 })
     };
@@ -74,10 +74,10 @@ pub fn apply_filter(m: &Loudness, target_i: f64, target_tp: f64) -> String {
     )
 }
 
-// ── Ruído ──────────────────────────────────────────────────────────────
+// ── Noise ──────────────────────────────────────────────────────────────
 
-/// Cadeia de filtros por modo. `voice` corta o que não é voz antes de
-/// denoiser nenhum: quase todo ruído de sala mora fora de 80 Hz-12 kHz.
+/// Filter chain per mode. `voice` cuts what is not voice before any
+/// denoiser: almost all room noise lives outside 80 Hz-12 kHz.
 pub fn denoise_filter(mode: &str, strength: u32, rnnn: Option<&str>) -> String {
     let s = strength.clamp(1, 100) as f64;
     match mode {
@@ -94,7 +94,7 @@ pub fn denoise_filter(mode: &str, strength: u32, rnnn: Option<&str>) -> String {
     }
 }
 
-// ── Execução ───────────────────────────────────────────────────────────
+// ── Execution ───────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Deserialize)]
 #[cfg_attr(test, derive(Default))]
@@ -103,7 +103,7 @@ pub struct CleanOptions {
     /// "loudness" | "denoise" | "both"
     #[serde(default = "default_mode")]
     pub mode: String,
-    /// Alvo de loudness: "streaming" | "podcast" | "broadcast".
+    /// Loudness target: "streaming" | "podcast" | "broadcast".
     #[serde(default = "default_target")]
     pub target: String,
     /// "fft" | "nlm" | "voice" | "rnnoise"
@@ -111,10 +111,10 @@ pub struct CleanOptions {
     pub denoise_mode: String,
     #[serde(default = "default_strength")]
     pub strength: u32,
-    /// Caminho de um modelo `.rnnn`, quando o usuário tiver um.
+    /// Path to a `.rnnn` model, when the user has one.
     #[serde(default)]
     pub rnnn_path: String,
-    /// Extensão de saída para arquivo de áudio; vídeo mantém o container.
+    /// Output extension for audio files; video keeps its container.
     #[serde(default)]
     pub audio_format: String,
     #[serde(default)]
@@ -160,11 +160,11 @@ async fn measure(ffmpeg: &Path, input: &Path, filter: &str) -> anyhow::Result<Lo
         .args(["-af", filter, "-f", "null", "-"])
         .output()
         .await
-        .map_err(|e| anyhow!("ffmpeg nao iniciou: {}", e))?;
+        .map_err(|e| anyhow!("ffmpeg did not start: {}", e))?;
     let stderr = String::from_utf8_lossy(&out.stderr).to_string();
     parse_measure(&stderr).ok_or_else(|| {
         anyhow!(
-            "não consegui medir o loudness: {}",
+            "could not measure the loudness: {}",
             stderr.lines().last().unwrap_or("").trim()
         )
     })
@@ -174,7 +174,7 @@ async fn clean_one(ffmpeg: &Path, opts: &CleanOptions, input: &str) -> anyhow::R
     let inp = Path::new(input);
     let probe = crate::core::ffmpeg::probe(inp).await?;
     if !probe.streams.iter().any(|s| s.codec_type == "audio") {
-        return Err(anyhow!("o arquivo não tem trilha de áudio"));
+        return Err(anyhow!("the file has no audio track"));
     }
     let has_video = probe
         .streams
@@ -197,7 +197,7 @@ async fn clean_one(ffmpeg: &Path, opts: &CleanOptions, input: &str) -> anyhow::R
         measured = Some(m);
     }
     if chain.is_empty() {
-        return Err(anyhow!("nenhuma operação escolhida"));
+        return Err(anyhow!("no operation chosen"));
     }
     let filter = chain.join(",");
 
@@ -234,7 +234,7 @@ async fn clean_one(ffmpeg: &Path, opts: &CleanOptions, input: &str) -> anyhow::R
         .arg(inp)
         .args(["-af", &filter]);
     if has_video {
-        // O vídeo não é tocado: só a trilha de áudio é reescrita.
+        // The video is not touched: only the audio track is rewritten.
         cmd.args(["-c:v", "copy", "-map", "0"]);
     } else {
         cmd.args(["-vn"]);
@@ -249,7 +249,7 @@ async fn clean_one(ffmpeg: &Path, opts: &CleanOptions, input: &str) -> anyhow::R
         .arg(&output)
         .output()
         .await
-        .map_err(|e| anyhow!("ffmpeg nao iniciou: {}", e))?;
+        .map_err(|e| anyhow!("ffmpeg did not start: {}", e))?;
     if !out.status.success() {
         return Err(anyhow!("{}", String::from_utf8_lossy(&out.stderr).trim()));
     }
@@ -358,7 +358,7 @@ mod tests {
     fn targets_match_the_platforms() {
         assert_eq!(target_for("streaming").0, -14.0);
         assert_eq!(target_for("broadcast").0, -23.0);
-        // Nome desconhecido cai no podcast, não em zero.
+        // An unknown name falls back to podcast, not to zero.
         assert_eq!(target_for("nada disso").0, -16.0);
     }
 
@@ -377,7 +377,7 @@ mod tests {
         assert!(denoise_filter("rnnoise", 50, None).starts_with("afftdn"));
     }
 
-    /// Mede e normaliza um tom baixo de verdade, e limpa ruído branco.
+    /// Measures and normalizes a genuinely quiet tone, and cleans white noise.
     /// `cargo test -p gumballz-core --lib -- --ignored live_audio`
     #[tokio::test]
     #[ignore]
@@ -421,7 +421,7 @@ mod tests {
             .unwrap();
         let item = &res.items[0];
         assert!(item.ok, "falhou: {:?}", item.error);
-        let m = item.measured.expect("sem medição");
+        let m = item.measured.expect("without measurement");
         assert!(m.input_i.is_finite(), "medida infinita: {}", m.input_i);
         assert!(
             m.input_i < -20.0,
@@ -430,11 +430,11 @@ mod tests {
         );
         assert!(
             item.gain_db > 0.0,
-            "tinha que ganhar volume: {}",
+            "it had to gain volume: {}",
             item.gain_db
         );
 
-        // Confere no arquivo de saída: medir de novo tem que dar perto do alvo.
+        // Check the output file: measuring again has to land near the target.
         let out = item.output.clone().unwrap();
         let after = measure(
             &ffmpeg,

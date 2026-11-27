@@ -1,15 +1,15 @@
-//! Humanizar texto: aplica o skill "Humanizer" (blader/humanizer, MIT) na
-//! IA configurada. O skill inteiro vai no prompt de sistema; o texto do
-//! usuário vai como mensagem. Só o texto final volta, sem rascunho nem
-//! crítica, porque aqui não há chat para conversar sobre o resultado.
+//! Humanize text: applies the "Humanizer" skill (blader/humanizer, MIT) to the
+//! configured AI. The whole skill goes in the system prompt; the user's text
+//! goes as the message. Only the final text comes back, no draft or
+//! critique, because there is no chat here to discuss the result.
 
 use crate::core::ai;
 
-/// O SKILL.md original, sem o frontmatter. Vive num `.txt` porque o repo
-/// não versiona `.md`.
+/// The original SKILL.md, without the frontmatter. Lives in a `.txt` because the repo
+/// does not version `.md`.
 pub const SKILL: &str = include_str!("humanizer_skill.txt");
 
-/// Limite generoso: acima disso o modelo perde o fio e o custo dispara.
+/// Generous limit: above it the model loses the thread and the cost spikes.
 pub const MAX_CHARS: usize = 40_000;
 
 pub fn system_prompt(sample: Option<&str>) -> String {
@@ -34,11 +34,11 @@ pub fn system_prompt(sample: Option<&str>) -> String {
 pub async fn humanize(text: &str, sample: Option<&str>) -> Result<String, String> {
     let text = text.trim();
     if text.is_empty() {
-        return Err("texto vazio".into());
+        return Err("empty text".into());
     }
     if text.chars().count() > MAX_CHARS {
         return Err(format!(
-            "texto grande demais ({} caracteres; o limite é {})",
+            "text too large ({} characters; the limit is {})",
             text.chars().count(),
             MAX_CHARS
         ));
@@ -50,13 +50,13 @@ pub async fn humanize(text: &str, sample: Option<&str>) -> Result<String, String
     Ok(strip_fence(out.trim()).to_string())
 }
 
-/// Alguns modelos devolvem o texto dentro de ```…``` mesmo pedindo que não.
+/// Some models return the text inside ```…``` even when asked not to.
 fn strip_fence(s: &str) -> &str {
     let t = s.trim();
     if let Some(inner) = t.strip_prefix("```") {
         if let Some(end) = inner.rfind("```") {
             let body = &inner[..end];
-            // pula o identificador de linguagem na primeira linha, se houver
+            // skip the language identifier on the first line, if any
             return body
                 .split_once('\n')
                 .map(|(_, rest)| rest)
@@ -72,7 +72,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn prompt_contem_skill_e_modo_embutido() {
+    fn prompt_contains_skill_and_embedded_mode() {
         let p = system_prompt(Some("oi, sou eu"));
         assert!(p.contains("Signs of AI writing"));
         assert!(p.contains("Embedded mode"));
@@ -81,7 +81,7 @@ mod tests {
     }
 
     #[test]
-    fn tira_cerca_de_codigo() {
+    fn strips_code_fence() {
         assert_eq!(strip_fence("```text\nolá\n```"), "olá");
         assert_eq!(strip_fence("```\nolá\n```"), "olá");
         assert_eq!(strip_fence("olá"), "olá");

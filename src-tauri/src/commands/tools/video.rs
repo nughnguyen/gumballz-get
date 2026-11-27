@@ -1,7 +1,6 @@
-//! Tools de edição de vídeo que não são gravação de tela: comprimir para um
-//! alvo de tamanho, virar GIF/WebP ou figurinha, cortar silêncio e mexer em
-//! legenda.
-//! A lógica mora em `gumballz_core::core::tools`.
+//! Video editing tools that are not screen recording: compress to a size target,
+//! turn into GIF/WebP or a sticker, cut silence and edit subtitles.
+//! The logic lives in `gumballz_core::core::tools`.
 
 use gumballz_core::core::tools::{
     silence_cut, sticker, subtitle, video_compress, video_gif, video_restore,

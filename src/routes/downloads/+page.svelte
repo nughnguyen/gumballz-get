@@ -96,9 +96,9 @@
     return platform.charAt(0).toUpperCase() + platform.slice(1);
   }
 
-  // Rótulo do stream real ("1080p60 · mp4 · avc1"), montado do `info.*` que o
-  // yt-dlp manda no template de progresso — é o que está descendo, não o que
-  // foi pedido.
+  // Label of the real stream ("1080p60 · mp4 · avc1"), built from the `info.*` that
+  // yt-dlp sends in the progress template — it is what is downloading, not what
+  // was requested.
   function streamLabel(s: StreamInfo): string {
     const parts: string[] = [];
     const v = s.vcodec && s.vcodec !== "none" ? s.vcodec.split(".")[0] : null;
@@ -128,8 +128,8 @@
     return audio ? streamLabel(audio) : streamLabel(all[all.length - 1]);
   }
 
-  // Tamanho anunciado pelos streams, quando o total real ainda não existe
-  // (bv+ba: o áudio só revela o tamanho quando começa).
+  // Size announced by the streams, when the real total doesn't exist yet
+  // (bv+ba: the audio only reveals its size when it starts).
   function plannedSize(item: GenericDownloadItem): number | null {
     const all: StreamInfo[] = [...(item.streamsDone ?? []), ...(item.stream ? [item.stream] : [])];
     let sum = 0;
@@ -1468,7 +1468,7 @@
     align-self: flex-start;
   }
 
-  /* Pills chuẩn neo-brutalist: nền solid + viền ink 2px; active = accent fill. */
+  /* Standard neo-brutalist pills: solid background + 2px ink border; active = accent fill. */
   .filter-pill.segmented-btn {
     gap: 6px;
     height: 28px;
@@ -1695,9 +1695,9 @@
     to { transform: scale(1); }
   }
 
-  /* Trạng thái luôn có chữ + (với hoàn thành/lỗi) ký hiệu — không báo chỉ bằng màu.
-     Fill đặc: downloading = accent, error = danger, paused = warning;
-     complete/queued/seeding = surface-hi + chữ chính. */
+  /* Status always has text + (for complete/error) a symbol — never color alone.
+     Solid fill: downloading = accent, error = danger, paused = warning;
+     complete/queued/seeding = surface-hi + primary text. */
   .item-status {
     display: inline-flex;
     align-items: center;

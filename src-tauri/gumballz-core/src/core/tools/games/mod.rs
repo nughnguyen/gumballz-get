@@ -1,9 +1,9 @@
-//! Categoria Games: importar e organizar o que os consoles e os gravadores de
-//! PC cospem em pastas sem nome, e responder "roda no Linux?" antes de comprar.
+//! Games category: import and organize what consoles and PC recorders
+//! spit into nameless folders, and answer "does it run on Linux?" before buying.
 //!
-//! Os três módulos compartilham o mesmo esqueleto: ler um nome de arquivo,
-//! extrair jogo + data, decidir um destino legível e mover/copiar sem
-//! reimportar o que já está lá. O que muda é o padrão do nome.
+//! The three modules share the same skeleton: read a filename,
+//! extract game + date, decide a readable destination and move/copy without
+//! reimporting what is already there. What changes is the name pattern.
 
 pub mod clip_organizer;
 pub mod protondb;
@@ -16,21 +16,21 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
-/// Nome do arquivo de índice que fica na raiz da biblioteca de destino. É o
-/// que evita reler (e re-hashear) a biblioteca inteira a cada importação.
+/// Name of the index file that sits at the root of the destination library. It is what
+/// avoids rereading (and re-hashing) the whole library on every import.
 pub const INDEX_FILE: &str = ".gumballz-get-import-index.txt";
 
-/// Uma linha do relatório: o que aconteceu com um arquivo de origem.
+/// One line of the report: what happened to a source file.
 #[derive(Debug, Clone, Serialize)]
 pub struct ImportItem {
     pub source: String,
     pub dest: Option<String>,
-    /// Nome do jogo, ou o próprio identificador quando não conhecemos.
+    /// Game name, or the identifier itself when we do not know it.
     pub game: String,
     /// Identificador cru (hash do Switch, appid da Steam, vazio no resto).
     pub game_id: String,
     pub known_game: bool,
-    /// "2026-09-09 21-14-03", ou vazio quando o nome não trouxe data.
+    /// "2026-09-09 21-14-03", or empty when the name carried no date.
     pub taken_at: String,
     pub bytes: u64,
     /// "image" | "clip"
@@ -38,7 +38,7 @@ pub struct ImportItem {
     pub duration_s: Option<f64>,
     pub width: Option<u32>,
     pub height: Option<u32>,
-    /// Saída da conversão/recompressão opcional.
+    /// Output of the optional conversion/recompression.
     pub extra: Option<String>,
     /// "imported" | "skipped" | "error"
     pub status: String,
@@ -46,7 +46,7 @@ pub struct ImportItem {
     pub reason: Option<String>,
 }
 
-/// Quantos arquivos e quantos bytes por jogo, para o resumo da tela.
+/// How many files and how many bytes per game, for the screen summary.
 #[derive(Debug, Clone, Serialize)]
 pub struct GameSummary {
     pub game: String,
@@ -71,7 +71,7 @@ pub fn is_image_ext(ext: &str) -> bool {
     )
 }
 
-/// SHA-256 do conteúdo, em blocos, para não carregar um clipe de 1 GB na RAM.
+/// SHA-256 of the content, in blocks, so a 1 GB clip is not loaded into RAM.
 pub fn sha256_file(path: &Path) -> anyhow::Result<String> {
     use sha2::Digest;
     let mut file = std::fs::File::open(path)?;
@@ -87,8 +87,8 @@ pub fn sha256_file(path: &Path) -> anyhow::Result<String> {
     Ok(hex::encode(hasher.finalize()))
 }
 
-/// Um caminho livre dentro de `dir`. Se `nome.jpg` já existe, tenta
-/// `nome (2).jpg` e assim por diante — nunca sobrescreve.
+/// A free path inside `dir`. If `nome.jpg` already exists, tries
+/// `name (2).jpg` and so on — never overwrites.
 pub fn unique_path(dir: &Path, stem: &str, ext: &str) -> PathBuf {
     let first = dir.join(format!("{}.{}", stem, ext));
     if !first.exists() {
@@ -103,8 +103,8 @@ pub fn unique_path(dir: &Path, stem: &str, ext: &str) -> PathBuf {
     dir.join(format!("{} {}.{}", stem, uuid::Uuid::new_v4(), ext))
 }
 
-/// Copia ou move. `rename` só funciona dentro do mesmo volume — do cartão SD
-/// para o HD ele falha, então o caminho de mover cai para copiar e apagar.
+/// Copies or moves. `rename` only works within the same volume — from the SD card
+/// to the HD it fails, so the move path falls back to copy and delete.
 pub fn place_file(src: &Path, dest: &Path, move_it: bool) -> anyhow::Result<()> {
     if let Some(parent) = dest.parent() {
         std::fs::create_dir_all(parent)?;
@@ -123,9 +123,9 @@ pub fn place_file(src: &Path, dest: &Path, move_it: bool) -> anyhow::Result<()> 
     Ok(())
 }
 
-/// Índice de conteúdo já importado. Guarda só os SHA-256, um por linha, na
-/// raiz da biblioteca. Sem o arquivo, a primeira importação varre e hasheia o
-/// que já está lá para não duplicar o que o usuário copiou na mão.
+/// Index of already-imported content. Stores only the SHA-256s, one per line, at
+/// the library root. Without the file, the first import scans and hashes what
+/// is already there so it does not duplicate what the user copied by hand.
 #[derive(Debug, Default)]
 pub struct DedupeIndex {
     hashes: HashSet<String>,
@@ -225,7 +225,7 @@ impl DedupeIndex {
     }
 }
 
-/// Agrupa o relatório por jogo, do maior para o menor.
+/// Groups the report by game, largest first.
 pub fn summarize(items: &[ImportItem]) -> Vec<GameSummary> {
     let mut map: std::collections::BTreeMap<String, GameSummary> =
         std::collections::BTreeMap::new();
@@ -257,7 +257,7 @@ mod tests {
     fn tempdir(tag: &str) -> PathBuf {
         let d =
             std::env::temp_dir().join(format!("gumballz-get-games-{}-{}", tag, uuid::Uuid::new_v4()));
-        std::fs::create_dir_all(&d).expect("criar tempdir de teste");
+        std::fs::create_dir_all(&d).expect("create test tempdir");
         d
     }
 
@@ -303,7 +303,7 @@ mod tests {
         assert!(idx.is_empty());
         assert!(idx.insert("a".repeat(64)));
         assert!(!idx.insert("a".repeat(64)));
-        idx.save().expect("salvar índice");
+        idx.save().expect("save index");
         let again = DedupeIndex::load(&dir);
         assert_eq!(again.len(), 1);
         assert!(again.contains(&"a".repeat(64)));
@@ -313,11 +313,11 @@ mod tests {
     #[test]
     fn index_bootstraps_from_files_already_in_the_library() {
         let dir = tempdir("bootstrap");
-        std::fs::create_dir_all(dir.join("Jogo")).expect("criar");
-        std::fs::write(dir.join("Jogo").join("velha.jpg"), b"abc").expect("escrever");
-        std::fs::write(dir.join("Jogo").join("nota.txt"), b"abc").expect("escrever");
+        std::fs::create_dir_all(dir.join("Jogo")).expect("create");
+        std::fs::write(dir.join("Jogo").join("velha.jpg"), b"abc").expect("write");
+        std::fs::write(dir.join("Jogo").join("nota.txt"), b"abc").expect("write");
         let idx = DedupeIndex::load(&dir);
-        // Só a imagem entra; o .txt é ignorado.
+        // Only the image goes in; the .txt is ignored.
         assert_eq!(idx.len(), 1);
         assert!(idx.contains("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"));
         let _ = std::fs::remove_dir_all(&dir);

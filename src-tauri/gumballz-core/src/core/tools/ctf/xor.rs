@@ -1,6 +1,5 @@
-//! XOR: aplicar uma chave, quebrar chave de um byte pela frequência das
-//! letras, e achar o tamanho da chave de vários bytes pela distância de
-//! Hamming — o caminho clássico do "repeating-key XOR".
+//! XOR: apply a key, break a one-byte key by letter frequency, and find the
+//! multi-byte key length by Hamming distance — the classic "repeating-key XOR" path.
 
 use serde::{Deserialize, Serialize};
 
@@ -24,7 +23,7 @@ pub struct XorCandidate {
     pub score: f64,
 }
 
-/// Testa as 256 chaves de um byte e ordena pela que mais parece texto.
+/// Tests all 256 one-byte keys and sorts by which looks most like text.
 pub fn brute_single(data: &[u8], top_n: usize) -> Vec<XorCandidate> {
     let mut out: Vec<XorCandidate> = (0..=255u8)
         .map(|k| {
@@ -51,12 +50,12 @@ pub fn hamming(a: &[u8], b: &[u8]) -> u32 {
     a.iter().zip(b).map(|(x, y)| (x ^ y).count_ones()).sum()
 }
 
-/// Tamanhos de chave prováveis, do mais provável para o menos.
+/// Likely key lengths, most likely first.
 ///
-/// A ideia: com o tamanho certo, dois blocos consecutivos foram cifrados com
-/// a mesma chave, então a distância de Hamming normalizada entre eles cai
-/// para a distância entre dois textos em inglês (~2-3 bits/byte) em vez da
-/// de dois blocos aleatórios (~4).
+/// The idea: with the right length, two consecutive blocks were encrypted with
+/// the same key, so the normalized Hamming distance between them drops
+/// to the distance between two English texts (~2-3 bits/byte) instead of
+/// that between two random blocks (~4).
 pub fn guess_key_sizes(data: &[u8], max_size: usize, top_n: usize) -> Vec<(usize, f64)> {
     let mut scores: Vec<(usize, f64)> = Vec::new();
     for size in 2..=max_size.min(data.len() / 4).max(2) {
@@ -85,8 +84,8 @@ pub fn guess_key_sizes(data: &[u8], max_size: usize, top_n: usize) -> Vec<(usize
     scores
 }
 
-/// Quebra a chave inteira: descobre o tamanho, fatia por posição e roda a
-/// força bruta de um byte em cada fatia.
+/// Breaks the whole key: finds the length, slices by position and runs
+/// one-byte brute force on each slice.
 pub fn break_repeating(data: &[u8], max_size: usize) -> Option<XorCandidate> {
     let sizes = guess_key_sizes(data, max_size, 3);
     let mut best: Option<XorCandidate> = None;
@@ -114,14 +113,14 @@ pub fn break_repeating(data: &[u8], max_size: usize) -> Option<XorCandidate> {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct XorOptions {
-    /// Texto de entrada; hex quando `input_hex` for verdadeiro.
+    /// Input text; hex when `input_hex` is true.
     pub input: String,
     #[serde(default)]
     pub input_hex: bool,
     /// "apply" | "single" | "repeating"
     #[serde(default = "default_mode")]
     pub mode: String,
-    /// Chave para o modo "apply" (texto, ou hex se `key_hex`).
+    /// Key for "apply" mode (text, or hex if `key_hex`).
     #[serde(default)]
     pub key: String,
     #[serde(default)]
@@ -146,14 +145,14 @@ pub struct XorResult {
 pub fn run(opts: &XorOptions) -> anyhow::Result<XorResult> {
     let data = if opts.input_hex {
         hex::decode(opts.input.trim().replace([' ', '\n', ':'], ""))
-            .map_err(|e| anyhow::anyhow!("hex inválido: {}", e))?
+            .map_err(|e| anyhow::anyhow!("invalid hex: {}", e))?
     } else {
         opts.input.as_bytes().to_vec()
     };
     Ok(match opts.mode.as_str() {
         "apply" => {
             let key = if opts.key_hex {
-                hex::decode(opts.key.trim()).map_err(|e| anyhow::anyhow!("chave hex: {}", e))?
+                hex::decode(opts.key.trim()).map_err(|e| anyhow::anyhow!("hex key: {}", e))?
             } else {
                 opts.key.as_bytes().to_vec()
             };
@@ -190,7 +189,7 @@ mod tests {
         let data = b"mensagem secreta";
         let key = b"chave";
         assert_eq!(xor(&xor(data, key), key), data);
-        assert_eq!(xor(data, b""), data, "sem chave, nada muda");
+        assert_eq!(xor(data, b""), data, "without a key, nothing changes");
     }
 
     #[test]
@@ -213,7 +212,7 @@ mod tests {
                      under the warm sun and nothing else happens in this small town today";
         let enc = xor(plain.as_bytes(), b"rust");
         let best = break_repeating(&enc, 12).unwrap();
-        assert_eq!(best.key, "rust", "chave achada: {:?}", best.key);
+        assert_eq!(best.key, "rust", "key found: {:?}", best.key);
         assert_eq!(best.text, plain);
     }
 
@@ -225,7 +224,7 @@ mod tests {
         let sizes = guess_key_sizes(&enc, 12, 5);
         assert!(
             sizes.iter().take(3).any(|(s, _)| *s == 5),
-            "5 tinha que estar no topo: {:?}",
+            "5 had to be at the top: {:?}",
             sizes
         );
     }

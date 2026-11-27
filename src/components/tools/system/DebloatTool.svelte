@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** ⚠️ Só Windows. Debloat de apps da Store (estudo 25, Sophia). */
+  /** ⚠️ Windows only. Debloat Store apps (study 25, Sophia). */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

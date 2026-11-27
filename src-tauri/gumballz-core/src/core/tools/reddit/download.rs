@@ -1,13 +1,13 @@
-//! Baixar mídia de um post do Reddit.
+//! Downloading media from a Reddit post.
 //!
-//! O problema real do Reddit é o v.redd.it: vídeo e áudio são duas faixas
-//! separadas, e quase todo site de download entrega o vídeo mudo. Aqui quem
-//! baixa é o yt-dlp já gerido pelo app, que junta as duas com o ffmpeg.
+//! The real problem with Reddit is v.redd.it: video and audio are two separate
+//! tracks, and almost every download site delivers the video mute. Here the
+//! downloader is the app-managed yt-dlp, which joins the two with ffmpeg.
 //!
-//! Cada tipo de post tem um caminho: vídeo vai no yt-dlp, galeria sai direto
-//! do `media_metadata` (o original em i.redd.it, sem passar por preview) com
-//! o gallery-dl de reserva, imagem única é um GET, e link de fora
-//! (redgifs, imgur, YouTube…) volta para o yt-dlp.
+//! Each post type has a path: video goes through yt-dlp, the gallery comes straight
+//! from `media_metadata` (the original on i.redd.it, without going through preview) with
+//! the gallery-dl as a fallback, a single image is one GET, and an outside link
+//! (redgifs, imgur, YouTube…) goes back to yt-dlp.
 
 use std::path::{Path, PathBuf};
 
@@ -36,27 +36,27 @@ fn def_delay() -> u64 {
 pub struct Options {
     pub url: String,
     pub dest: String,
-    /// Grava um arquivo ao lado com título, autor, sub e data.
+    /// Writes a file next to it with title, author, sub and date.
     #[serde(default = "def_true")]
     pub write_info: bool,
-    /// "json", "txt" ou "both".
+    /// "json", "txt" or "both".
     #[serde(default = "def_info")]
     pub info_format: String,
-    /// Só a trilha de áudio (mp3), quando o post é vídeo.
+    /// Only the audio track (mp3), when the post is a video.
     #[serde(default)]
     pub audio_only: bool,
-    /// Caminho de um cookies.txt, para post de sub restrito.
+    /// Path to a cookies.txt, for a restricted-sub post.
     #[serde(default)]
     pub cookies: Option<String>,
     #[serde(default = "def_delay")]
     pub delay_ms: u64,
-    /// Conta do gerenciador de cookies a usar (None = `_default`). Com a
-    /// sessão da extensão o Reddit responde como responde ao navegador do
-    /// usuário; sem ela, cai no modo anônimo com o desafio de JavaScript.
+    /// Cookie-manager account to use (None = `_default`). With the
+    /// extension session Reddit responds as it responds to the user's
+    /// browser; without it, it falls into anonymous mode with the JavaScript challenge.
     #[serde(default)]
     pub account_slug: Option<String>,
-    /// Conteúdo Netscape do bucket `reddit.com`. Quem preenche é o comando
-    /// Tauri, nunca o front — daí o `skip`.
+    /// Netscape content of the `reddit.com` bucket. The Tauri command fills it,
+    /// never the frontend — hence the `skip`.
     #[serde(skip)]
     pub session_netscape: Option<String>,
 }
@@ -90,7 +90,7 @@ pub struct DownloadResult {
     pub dest: String,
     pub info: PostInfo,
     pub log_tail: String,
-    /// Se a leitura do post saiu com a sessão do usuário ou anônima.
+    /// Whether the post read went out with the user's session or anonymously.
     pub used_session: bool,
 }
 
@@ -98,15 +98,15 @@ pub struct DownloadResult {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Plan {
-    /// v.redd.it e afins: o yt-dlp junta vídeo e áudio.
+    /// v.redd.it and the like: yt-dlp joins video and audio.
     Video { url: String },
-    /// Galeria: uma lista de originais em i.redd.it.
+    /// Gallery: a list of originals on i.redd.it.
     Gallery { urls: Vec<String> },
-    /// Imagem única.
+    /// Single image.
     Image { url: String },
-    /// Link de fora do Reddit: o yt-dlp que resolva.
+    /// Link from outside Reddit: let yt-dlp resolve it.
     External { url: String },
-    /// Post só de texto: não há o que baixar.
+    /// Text-only post: there is nothing to download.
     TextOnly,
 }
 
@@ -139,9 +139,9 @@ fn ext_from_mime(mime: &str) -> &str {
     }
 }
 
-/// Os originais de uma galeria. A ordem vem do `gallery_data`; o formato, do
-/// `media_metadata`. `i.redd.it/<id>.<ext>` é o arquivo cru — a URL do
-/// `preview.redd.it` que o JSON traz é uma reamostragem.
+/// The originals of a gallery. The order comes from `gallery_data`; the format, from
+/// `media_metadata`. `i.redd.it/<id>.<ext>` is the raw file — the
+/// `preview.redd.it` URL the JSON brings is a resample.
 pub fn gallery_urls(post: &Value) -> Vec<String> {
     let meta = post.get("media_metadata").and_then(|m| m.as_object());
     let order: Vec<String> = post
@@ -187,9 +187,9 @@ pub fn gallery_urls(post: &Value) -> Vec<String> {
     out
 }
 
-/// Olha o post e diz por onde baixar.
+/// Looks at the post and says where to download from.
 pub fn plan_for(post: &Value) -> Plan {
-    // Crosspost: o que interessa está no post original.
+    // Crosspost: what matters is in the original post.
     if let Some(orig) = post
         .pointer("/crosspost_parent_list/0")
         .filter(|v| v.is_object())
@@ -284,7 +284,7 @@ pub fn post_info(post: &Value) -> PostInfo {
 
 pub fn info_txt(info: &PostInfo) -> String {
     let mut out = String::new();
-    out.push_str(&format!("Título: {}\n", info.title));
+    out.push_str(&format!("Title: {}\n", info.title));
     out.push_str(&format!("Autor: u/{}\n", info.author));
     out.push_str(&format!("Sub: r/{}\n", info.subreddit));
     out.push_str(&format!("Data: {}\n", info.created));
@@ -293,12 +293,12 @@ pub fn info_txt(info: &PostInfo) -> String {
         info.score,
         (info.upvote_ratio * 100.0).round() as i64
     ));
-    out.push_str(&format!("Comentários: {}\n", info.num_comments));
+    out.push_str(&format!("Comments: {}\n", info.num_comments));
     if !info.flair.is_empty() {
         out.push_str(&format!("Flair: {}\n", info.flair));
     }
     if info.over_18 {
-        out.push_str("Marcado como NSFW\n");
+        out.push_str("Marked as NSFW\n");
     }
     out.push_str(&format!("Link: {}\n", info.permalink));
     if !info.url.is_empty() && info.url != info.permalink {
@@ -312,8 +312,8 @@ pub fn info_txt(info: &PostInfo) -> String {
     out
 }
 
-/// Nome-base dos arquivos: título curto com o id do post no fim, para dois
-/// posts de mesmo título não brigarem.
+/// Base name of the files: short title with the post id at the end, so two
+/// posts with the same title do not clash.
 pub fn base_name(info: &PostInfo) -> String {
     let title = if info.title.trim().is_empty() {
         "post".to_string()
@@ -329,8 +329,8 @@ pub fn base_name(info: &PostInfo) -> String {
 
 const MARK: &str = "GUMBALLZ_FILEPATH:";
 
-/// Argumentos do yt-dlp para um post. Separado para o teste conferir sem
-/// precisar do binário.
+/// yt-dlp arguments for a post. Separate so the test can check without
+/// needing the binary.
 pub fn ytdlp_args(
     url: &str,
     dest: &Path,
@@ -359,7 +359,7 @@ pub fn ytdlp_args(
         args.push("--audio-format".to_string());
         args.push("mp3".to_string());
     } else {
-        // O v.redd.it entrega vídeo e áudio separados; sem isto sai mudo.
+        // v.redd.it delivers video and audio separately; without this it comes out mute.
         args.push("-f".to_string());
         args.push("bv*+ba/b".to_string());
         args.push("--merge-output-format".to_string());
@@ -377,7 +377,7 @@ pub fn ytdlp_args(
     args
 }
 
-/// Percentual de uma linha `[download]  12.3% of ...`.
+/// Percentage of a `[download]  12.3% of ...` line.
 pub fn parse_progress(line: &str) -> Option<f64> {
     let l = line.trim();
     if !l.starts_with("[download]") {
@@ -397,7 +397,7 @@ async fn run_ytdlp(
     use tokio::io::{AsyncBufReadExt, BufReader};
     let bin = crate::core::ytdlp::ensure_ytdlp()
         .await
-        .map_err(|e| anyhow!("o yt-dlp não está disponível: {}", e))?;
+        .map_err(|e| anyhow!("yt-dlp is not available: {}", e))?;
     let ffmpeg = crate::core::dependencies::find_tool("ffmpeg").await;
     let args = ytdlp_args(
         url,
@@ -414,7 +414,7 @@ async fn run_ytdlp(
         .stderr(std::process::Stdio::piped());
     let mut child = cmd
         .spawn()
-        .map_err(|e| anyhow!("não foi possível iniciar o yt-dlp: {}", e))?;
+        .map_err(|e| anyhow!("could not start yt-dlp: {}", e))?;
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
     let p = progress.clone();
@@ -454,7 +454,7 @@ async fn run_ytdlp(
     let tail = err_task.await.unwrap_or_default();
     if files.is_empty() {
         return Err(anyhow!(
-            "o yt-dlp não baixou nada{}{}",
+            "yt-dlp downloaded nothing{}{}",
             if status.success() { "" } else { " (falhou)" },
             if tail.is_empty() {
                 String::new()
@@ -474,7 +474,7 @@ async fn fetch_post(fetcher: &Fetcher, id: &str) -> Result<Value> {
         .await?;
     v.pointer("/0/data/children/0/data")
         .cloned()
-        .ok_or_else(|| anyhow!("o post não veio na resposta (apagado, privado ou id errado)"))
+        .ok_or_else(|| anyhow!("the post did not come in the response (deleted, private or wrong id)"))
 }
 
 async fn download_direct(
@@ -516,8 +516,8 @@ async fn download_direct(
     Ok(files)
 }
 
-/// Reserva da galeria: quando o `media_metadata` não serve, o gallery-dl
-/// resolve o post inteiro.
+/// Gallery fallback: when `media_metadata` does not work, gallery-dl
+/// resolves the whole post.
 async fn download_gallery_dl(
     url: &str,
     dest: &Path,
@@ -541,10 +541,10 @@ pub async fn run(opts: &Options, progress: ProgressFn) -> Result<DownloadResult>
     if let Target::Short { url } = &target {
         let final_url = fetcher.resolve(url).await?;
         target = parse_target(&final_url)
-            .ok_or_else(|| anyhow!("o link curto não levou a um post ({})", final_url))?;
+            .ok_or_else(|| anyhow!("the short link did not lead to a post ({})", final_url))?;
     }
 
-    // Mídia solta e link de fora não têm post para consultar.
+    // Loose media and outside links have no post to consult.
     let (post, plan) = match &target {
         Target::Post { id, .. } => {
             let post = fetch_post(&fetcher, id).await?;
@@ -556,10 +556,10 @@ pub async fn run(opts: &Options, progress: ProgressFn) -> Result<DownloadResult>
         Target::External { url } => (None, Plan::External { url: url.clone() }),
         Target::Subreddit { .. } | Target::User { .. } => {
             return Err(anyhow!(
-                "isto é um sub ou um perfil: cole o link de um post"
+                "this is a sub or a profile: paste a post link"
             ))
         }
-        Target::Short { .. } => return Err(anyhow!("não foi possível resolver o link curto")),
+        Target::Short { .. } => return Err(anyhow!("could not resolve the short link")),
     };
 
     let info = post.as_ref().map(post_info).unwrap_or_else(|| PostInfo {
@@ -620,7 +620,7 @@ pub async fn run(opts: &Options, progress: ProgressFn) -> Result<DownloadResult>
         }
     }
     if files.is_empty() {
-        return Err(anyhow!("este post não tem mídia para baixar (é só texto)"));
+        return Err(anyhow!("this post has no media to download (it is just text)"));
     }
     report(
         &progress,
@@ -823,7 +823,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "rede: baixa uma galeria de verdade do i.redd.it"]
+    #[ignore = "network: really downloads a gallery from i.redd.it"]
     async fn baixa_uma_galeria_de_verdade() {
         let dir = std::env::temp_dir().join("gumballz-get-rddl-live-galeria");
         let _ = std::fs::create_dir_all(&dir);

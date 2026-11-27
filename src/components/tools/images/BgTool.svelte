@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Remover fundo de imagem (img-bg): ONNX Runtime + modelo gerido, tudo local. */
+  /** Remove image background (img-bg): ONNX Runtime + managed model, all local. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

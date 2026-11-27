@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Return YouTube Dislike (estudo 44): likes, dislikes e proporção. */
+  /** Return YouTube Dislike (study 44): likes, dislikes and ratio. */
   import { invoke } from "@tauri-apps/api/core";
   import { t } from "$lib/i18n";
   import { showToast } from "$lib/stores/toast-store.svelte";

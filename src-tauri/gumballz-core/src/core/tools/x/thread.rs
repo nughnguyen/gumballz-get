@@ -1,7 +1,7 @@
-//! Desenrolar thread (estudo 67): o que o Thread Reader App faz. Via
-//! publica pelo FxTwitter `/2/thread/{id}`; se falhar, `TweetDetail` da
-//! sessao e a reconstrucao do XActions (`thread.js`): posts do mesmo autor
-//! ligados por `in_reply_to`, seguindo os cursores de "mostrar mais".
+//! Unroll a thread (study 67): what Thread Reader App does. Via the
+//! public route through FxTwitter `/2/thread/{id}`; if that fails, `TweetDetail` from the
+//! session and the XActions reconstruction (`thread.js`): posts by the same author
+//! linked by `in_reply_to`, following the "show more" cursors.
 
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
@@ -33,7 +33,7 @@ impl Thread {
 
 pub async fn unroll(input: &str) -> anyhow::Result<Thread> {
     let id = super::post_id_from(input)
-        .ok_or_else(|| anyhow!("nao reconheci um post do X em: {}", input))?;
+        .ok_or_else(|| anyhow!("did not recognise an X post in: {}", input))?;
     match super::fx::thread(&id).await {
         Ok((focal, posts, truncated)) => {
             let posts = if posts.is_empty() {
@@ -80,7 +80,7 @@ async fn unroll_graphql(id: &str) -> anyhow::Result<Thread> {
             .gql_get("TweetDetail", vars, json!({}), Some(json!({"withArticleRichContentState": true, "withArticlePlainText": false, "withGrokAnalyze": false, "withDisallowedReplyControls": false})))
             .await?;
         all.extend(super::parse::tweets_from(&v));
-        // cursores de "mostrar mais desta conversa"
+        // "show more of this conversation" cursors
         let next = find_show_more(&v);
         if next.is_none() || Some(&next.clone().unwrap()) == cursor.as_ref() {
             break;
@@ -92,14 +92,14 @@ async fn unroll_graphql(id: &str) -> anyhow::Result<Thread> {
         .iter()
         .find(|p| p.id == id)
         .cloned()
-        .ok_or_else(|| anyhow!("post indisponivel"))?;
+        .ok_or_else(|| anyhow!("post unavailable"))?;
     let author = focal.author.handle.to_ascii_lowercase();
     let mut by_id: std::collections::HashMap<String, XPost> = all
         .iter()
         .filter(|p| p.author.handle.to_ascii_lowercase() == author)
         .map(|p| (p.id.clone(), p.clone()))
         .collect();
-    // sobe ate a raiz
+    // climbs up to the root
     let mut root = focal.clone();
     while let Some(parent) = root
         .reply_to_id
@@ -108,7 +108,7 @@ async fn unroll_graphql(id: &str) -> anyhow::Result<Thread> {
     {
         root = parent;
     }
-    // desce pela cadeia de respostas do autor
+    // goes down the author's reply chain
     let mut chain = vec![root.clone()];
     by_id.remove(&root.id);
     loop {

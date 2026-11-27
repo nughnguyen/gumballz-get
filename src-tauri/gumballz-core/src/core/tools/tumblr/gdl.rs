@@ -1,9 +1,9 @@
-//! Camada fina sobre o gallery-dl: dump JSON (`-j`) e download, mais o
-//! parsing das mensagens que ele cospe.
+//! Thin layer over gallery-dl: JSON dump (`-j`) and download, plus
+//! parsing of the messages it spits out.
 //!
-//! O `-j` devolve um array de mensagens; cada uma é um array cujo primeiro
-//! item é o tipo (2 = diretório, 3 = arquivo/URL, 6 = fila). O que interessa
-//! para um índice é a mensagem 3: `[3, "<url do arquivo>", { metadados }]`.
+//! The `-j` returns an array of messages; each one is an array whose first
+//! item is the type (2 = directory, 3 = file/URL, 6 = queue). What matters
+//! for an index is message 3: `[3, "<file url>", { metadata }]`.
 
 use std::path::{Path, PathBuf};
 
@@ -26,8 +26,8 @@ impl Entry {
         self.kind == KIND_URL
     }
 
-    /// Campo de texto, aceitando caminho com ponto (`author.username`).
-    /// Número vira texto, para o CSV não perder id que veio como inteiro.
+    /// Text field, accepting a dotted path (`author.username`).
+    /// A number becomes text, so the CSV does not lose an id that came as an integer.
     pub fn text(&self, path: &str) -> String {
         match dig(&self.meta, path) {
             Some(Value::String(s)) => s.clone(),
@@ -37,7 +37,7 @@ impl Entry {
         }
     }
 
-    /// Primeiro caminho que existir e não estiver vazio.
+    /// First path that exists and is not empty.
     pub fn first_text(&self, paths: &[&str]) -> String {
         for p in paths {
             let v = self.text(p);
@@ -56,8 +56,8 @@ impl Entry {
         }
     }
 
-    /// Tags: o gallery-dl entrega lista de string, lista de objeto
-    /// (`{"tag_name": …}`) ou uma string só, separada por espaço (Flickr).
+    /// Tags: gallery-dl delivers a list of strings, a list of objects
+    /// (`{"tag_name": …}`) or a single string, space-separated (Flickr).
     pub fn tags(&self, path: &str) -> Vec<String> {
         match dig(&self.meta, path) {
             Some(Value::Array(items)) => items
@@ -81,7 +81,7 @@ impl Entry {
     }
 }
 
-/// Navega um `Value` por caminho com ponto.
+/// Navigates a `Value` by dotted path.
 pub fn dig<'a>(value: &'a Value, path: &str) -> Option<&'a Value> {
     let mut cur = value;
     for part in path.split('.') {
@@ -94,8 +94,8 @@ pub fn dig<'a>(value: &'a Value, path: &str) -> Option<&'a Value> {
     }
 }
 
-/// Lê o array do `gallery-dl -j`. Tolerante: aceita também uma mensagem por
-/// linha (NDJSON), que é o que sai quando a saída é truncada por pipe.
+/// Reads the `gallery-dl -j` array. Tolerant: also accepts one message per
+/// line (NDJSON), which is what comes out when the output is truncated by a pipe.
 pub fn parse_dump(text: &str) -> Result<Vec<Entry>> {
     let trimmed = text.trim();
     if trimmed.is_empty() {
@@ -117,7 +117,7 @@ pub fn parse_dump(text: &str) -> Result<Vec<Entry>> {
         }
     }
     if out.is_empty() {
-        return Err(anyhow!("a saída do gallery-dl não é um dump JSON válido"));
+        return Err(anyhow!("the gallery-dl output is not a valid JSON dump"));
     }
     Ok(out)
 }
@@ -142,9 +142,9 @@ fn entry_from(value: &Value) -> Option<Entry> {
 
 // ───────────────────────── cookies ─────────────────────────
 
-/// Mantém no arquivo só os cookies dos domínios pedidos (e subdomínios).
-/// A sessão da extensão pode ter vindo de um balde compartilhado; o
-/// gallery-dl não precisa ver cookie de outro site.
+/// Keeps in the file only the cookies of the requested domains (and subdomains).
+/// The extension session may have come from a shared bucket; the
+/// gallery-dl does not need to see another site's cookies.
 pub fn filter_netscape(content: &str, domains: &[&str]) -> String {
     let mut out = String::from("# Netscape HTTP Cookie File\n");
     for raw in content.lines() {
@@ -175,8 +175,8 @@ pub fn filter_netscape(content: &str, domains: &[&str]) -> String {
     out
 }
 
-/// Junta várias sessões (uma por domínio) num arquivo Netscape só, com um
-/// cabeçalho único.
+/// Joins several sessions (one per domain) into a single Netscape file, with one
+/// single header.
 pub fn merge_netscape(parts: &[String]) -> String {
     let mut out = String::from("# Netscape HTTP Cookie File\n");
     for part in parts {
@@ -197,8 +197,8 @@ pub fn merge_netscape(parts: &[String]) -> String {
     out
 }
 
-/// Grava a sessão filtrada num arquivo temporário para o `--cookies`.
-/// Devolve `None` quando não sobrou cookie nenhum.
+/// Writes the filtered session to a temporary file for `--cookies`.
+/// Returns `None` when no cookie is left.
 pub struct CookieFile {
     pub path: PathBuf,
 }
@@ -230,10 +230,10 @@ fn range_arg(limit: Option<u64>) -> Option<String> {
 async fn binary() -> Result<PathBuf> {
     crate::core::dependencies::ensure_gallerydl()
         .await
-        .ok_or_else(|| anyhow!("o gallery-dl não está instalado e não foi possível baixá-lo"))
+        .ok_or_else(|| anyhow!("gallery-dl is not installed and could not be downloaded"))
 }
 
-/// `gallery-dl -j <url>`: só lista, não baixa nada.
+/// `gallery-dl -j <url>`: only lists, downloads nothing.
 pub async fn dump(
     url: &str,
     cookies: Option<&Path>,
@@ -263,11 +263,11 @@ pub async fn dump(
 
     let mut child = cmd
         .spawn()
-        .map_err(|e| anyhow!("não foi possível iniciar o gallery-dl: {}", e))?;
+        .map_err(|e| anyhow!("could not start gallery-dl: {}", e))?;
     let mut stdout = child
         .stdout
         .take()
-        .ok_or_else(|| anyhow!("o gallery-dl não abriu a saída padrão"))?;
+        .ok_or_else(|| anyhow!("gallery-dl did not open stdout"))?;
     let stderr = child.stderr.take();
 
     let err_task = tokio::spawn(async move {
@@ -303,9 +303,9 @@ pub async fn dump(
     let tail = err_task.await.unwrap_or_default();
     if !status.success() && text.trim().is_empty() {
         return Err(anyhow!(
-            "o gallery-dl não conseguiu ler essa página: {}",
+            "gallery-dl could not read this page: {}",
             if tail.is_empty() {
-                "sem detalhe".to_string()
+                "no detail".to_string()
             } else {
                 tail
             }
@@ -320,8 +320,8 @@ pub struct Downloaded {
     pub log_tail: String,
 }
 
-/// `gallery-dl -d <dest> --write-metadata <url>`: baixa a mídia e grava o
-/// `.json` de cada arquivo ao lado, que é o que casa arquivo com post.
+/// `gallery-dl -d <dest> --write-metadata <url>`: downloads the media and writes the
+/// `.json` of each file next to it, which is what matches file to post.
 pub async fn download(
     url: &str,
     dest: &Path,
@@ -353,7 +353,7 @@ pub async fn download(
 
     let mut child = cmd
         .spawn()
-        .map_err(|e| anyhow!("não foi possível iniciar o gallery-dl: {}", e))?;
+        .map_err(|e| anyhow!("could not start gallery-dl: {}", e))?;
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
     let p2 = progress.clone();
@@ -409,7 +409,7 @@ mod tests {
 
     #[test]
     fn le_o_array_do_dump_json() {
-        let entries = parse_dump(DUMP).expect("dump válido");
+        let entries = parse_dump(DUMP).expect("valid dump");
         assert_eq!(entries.len(), 3);
         assert_eq!(entries[0].kind, KIND_DIRECTORY);
         assert!(entries[0].url.is_none());
@@ -423,7 +423,7 @@ mod tests {
 
     #[test]
     fn campos_aceitam_caminho_com_ponto_e_numero_vira_texto() {
-        let entries = parse_dump(DUMP).expect("dump válido");
+        let entries = parse_dump(DUMP).expect("valid dump");
         let e = &entries[1];
         assert_eq!(e.text("id"), "700111222");
         assert_eq!(e.text("blog_name"), "estudio");
@@ -475,11 +475,11 @@ mod tests {
         assert!(out.contains("pfg\txyz"));
         assert!(
             !out.contains("c_user"),
-            "cookie de outro site não pode vazar"
+            "cookie from another site cannot leak"
         );
         assert!(
             !out.contains("evil-tumblr.com.br"),
-            "sufixo parecido não é o mesmo domínio"
+            "a similar suffix is not the same domain"
         );
         assert_eq!(out.lines().filter(|l| !l.starts_with('#')).count(), 2);
     }

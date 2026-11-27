@@ -1,21 +1,21 @@
-//! Camada comum das ferramentas de Twitch: o GraphQL público que o próprio
-//! site usa (Client-ID web, sem login, sem token de app) e o parsing dos
-//! links que o usuário cola.
+//! Shared layer of the Twitch tools: the public GraphQL the site itself
+//! uses (web Client-ID, no login, no app token) and parsing of the
+//! links the user pastes.
 //!
-//! Nada aqui exige conta: o Client-ID abaixo é o do player web, o mesmo que
-//! `platforms/twitch` já usa para clipes.
+//! Nothing here needs an account: the Client-ID below is the web player's, the same one
+//! `platforms/twitch` already uses for clips.
 
 use anyhow::{anyhow, bail};
 use serde::Serialize;
 use serde_json::{json, Value};
 
 pub const GQL_URL: &str = "https://gql.twitch.tv/gql";
-/// Client-ID público do player web da Twitch (o mesmo de `platforms/twitch`).
+/// Public Client-ID of the Twitch web player (the same as `platforms/twitch`).
 pub const CLIENT_ID: &str = "kimne78kx3ncx6brgo4mv6wki5h1ko";
-/// Hash da persisted query `VideoCommentsByOffsetOrCursor` (replay de chat).
+/// Hash of the persisted query `VideoCommentsByOffsetOrCursor` (chat replay).
 pub const COMMENTS_HASH: &str = "b70a3591ff0f4e0313d126c6a1502d79a1c02baebb288227c582044aa76adf6a";
 
-/// O que o usuário colou quando pede o chat: um VOD ou um clipe.
+/// What the user pasted when asking for the chat: a VOD or a clip.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ChatTarget {
     Video(String),
@@ -115,12 +115,12 @@ pub struct VideoInfo {
     pub channel_display: String,
     pub duration_seconds: f64,
     pub created_at: String,
-    /// Preenchido quando o alvo era um clipe: janela dentro do VOD de origem.
+    /// Filled in when the target was a clip: window inside the source VOD.
     pub clip_offset: Option<f64>,
     pub clip_duration: Option<f64>,
 }
 
-/// Cliente do GraphQL público, com repetição em 429/5xx.
+/// Public GraphQL client, with retries on 429/5xx.
 pub struct Gql {
     pub http: reqwest::Client,
 }
@@ -166,10 +166,10 @@ impl Gql {
             }
             return Ok(resp.json::<Value>().await?);
         }
-        bail!("Twitch GQL não respondeu depois de 5 tentativas: {}", last)
+        bail!("Twitch GQL did not respond after 5 attempts: {}", last)
     }
 
-    /// Query anônima em texto (as públicas aceitam sem persisted query).
+    /// Anonymous text query (the public ones accept it without a persisted query).
     pub async fn query(&self, query: &str) -> anyhow::Result<Value> {
         let body = json!({ "query": query });
         let json = self.post(&body).await?;
@@ -178,11 +178,11 @@ impl Gql {
         }
         json.get("data")
             .cloned()
-            .ok_or_else(|| anyhow!("resposta do Twitch GQL sem `data`"))
+            .ok_or_else(|| anyhow!("Twitch GQL response without `data`"))
     }
 
-    /// Persisted query (formato em lote, como o site manda). Devolve o
-    /// primeiro elemento cru, para quem quiser ler `errors` também.
+    /// Persisted query (batch format, as the site sends it). Returns the
+    /// first raw element, for whoever wants to read `errors` too.
     pub async fn persisted(&self, op: &str, hash: &str, vars: Value) -> anyhow::Result<Value> {
         let body = json!([{
             "operationName": op,
@@ -193,7 +193,7 @@ impl Gql {
         json.as_array()
             .and_then(|a| a.first())
             .cloned()
-            .ok_or_else(|| anyhow!("resposta em lote inesperada do Twitch GQL"))
+            .ok_or_else(|| anyhow!("unexpected batch response from Twitch GQL"))
     }
 
     pub async fn channel(&self, login: &str) -> anyhow::Result<Channel> {
@@ -203,7 +203,7 @@ impl Gql {
         );
         let data = self.query(&q).await?;
         let u = data.get("user").filter(|v| !v.is_null());
-        let u = u.ok_or_else(|| anyhow!("canal não encontrado: {}", login))?;
+        let u = u.ok_or_else(|| anyhow!("channel not found: {}", login))?;
         Ok(Channel {
             id: str_at(u, "id"),
             login: str_at(u, "login"),
@@ -219,7 +219,7 @@ impl Gql {
         );
         let data = self.query(&q).await?;
         let v = data.get("video").filter(|v| !v.is_null());
-        let v = v.ok_or_else(|| anyhow!("VOD não encontrado (ou já expirou): {}", id))?;
+        let v = v.ok_or_else(|| anyhow!("VOD not found (or already expired): {}", id))?;
         Ok(VideoInfo {
             id: str_at(v, "id"),
             title: str_at(v, "title"),
@@ -248,21 +248,21 @@ impl Gql {
         );
         let data = self.query(&q).await?;
         let c = data.get("clip").filter(|v| !v.is_null());
-        let c = c.ok_or_else(|| anyhow!("clipe não encontrado: {}", slug))?;
+        let c = c.ok_or_else(|| anyhow!("clip not found: {}", slug))?;
         let vid = c
             .pointer("/video/id")
             .and_then(|x| x.as_str())
-            .ok_or_else(|| anyhow!("esse clipe não tem VOD de origem, então não há chat"))?;
+            .ok_or_else(|| anyhow!("this clip has no source VOD, so there is no chat"))?;
         let mut info = self.video(vid).await?;
         info.clip_offset = c.get("videoOffsetSeconds").and_then(num);
         info.clip_duration = c.get("durationSeconds").and_then(num);
         Ok(info)
     }
 
-    /// Resolve o que o usuário colou até chegar num VOD.
+    /// Resolves what the user pasted until it reaches a VOD.
     pub async fn resolve_chat_target(&self, input: &str) -> anyhow::Result<VideoInfo> {
         let target = parse_video(input)
-            .ok_or_else(|| anyhow!("cole o link de um VOD ou de um clipe da Twitch: {}", input))?;
+            .ok_or_else(|| anyhow!("paste the link of a Twitch VOD or clip: {}", input))?;
         match target {
             ChatTarget::Video(id) => self.video(&id).await,
             ChatTarget::Clip(slug) => self.clip_video(&slug).await,
@@ -282,8 +282,8 @@ pub(super) fn str_at(v: &Value, key: &str) -> String {
         .to_string()
 }
 
-/// Escapa o que vai dentro de aspas na query (login e id são simples, mas
-/// não custa não deixar o usuário quebrar a query).
+/// Escapes what goes inside quotes in the query (login and id are simple, but
+/// it costs nothing not to let the user break the query).
 fn escape(s: &str) -> String {
     s.replace('\\', "\\\\").replace('"', "\\\"")
 }
@@ -295,7 +295,7 @@ pub(super) fn first_error(v: &Value) -> Option<String> {
         .map(|e| {
             e.get("message")
                 .and_then(|m| m.as_str())
-                .unwrap_or("erro sem mensagem")
+                .unwrap_or("error without message")
                 .to_string()
         })
 }

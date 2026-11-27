@@ -1,14 +1,14 @@
-//! Costurar prints numa imagem longa.
+//! Stitch screenshots into one long image.
 //!
-//! O modo simples empilha os arquivos com alinhamento, espaçamento e cor de
-//! fundo. O modo inteligente é o que dá valor: ele descobre quanto um print
-//! repete do anterior — a conversa que rolou meia tela, a página que voltou
-//! um pouco — e costura sem repetir conteúdo.
+//! The simple mode stacks the files with alignment, spacing and background colour.
+//! The smart mode is the valuable one: it figures out how much one screenshot
+//! repeats from the previous — the chat that scrolled half a screen, the page that went
+//! back a little — and stitches without repeating content.
 //!
-//! A busca é por deslocamento puro: para cada par testamos as sobreposições
-//! possíveis e ficamos com a que tem a menor diferença média entre as faixas.
-//! Se nem a melhor chega no limiar, aquela junta vira empilhamento normal e o
-//! resultado diz isso, junta a junta, para a UI mostrar o que aconteceu.
+//! The search is by pure offset: for each pair we test the possible overlaps
+//! and keep the one with the smallest average difference between the strips.
+//! If not even the best reaches the threshold, that seam becomes plain stacking and the
+//! result says so, seam by seam, so the UI can show what happened.
 
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
@@ -19,54 +19,54 @@ use serde::{Deserialize, Serialize};
 
 use super::ProgressFn;
 
-/// Faixa mínima aceita como sobreposição. Abaixo disso qualquer print casa
-/// com qualquer outro por acaso.
+/// Minimum strip accepted as an overlap. Below this, any screenshot matches
+/// any other by chance.
 const MIN_OVERLAP: u32 = 8;
-/// Linhas e colunas amostradas por deslocamento testado. Comparar a faixa
-/// inteira a cada candidato custa caro e não muda o vencedor.
+/// Rows and columns sampled per tested offset. Comparing the whole strip
+/// for every candidate costs a lot and does not change the winner.
 const ROW_SAMPLES: u32 = 48;
 const COL_SAMPLES: u32 = 128;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct StitchOptions {
     pub inputs: Vec<String>,
-    /// "vertical" (padrão) ou "horizontal".
+    /// "vertical" (default) or "horizontal".
     #[serde(default = "default_direction")]
     pub direction: String,
-    /// "start" | "center" | "end" — o eixo curto, quando os prints têm
+    /// "start" | "center" | "end" — the short axis, when the screenshots have
     /// tamanhos diferentes.
     #[serde(default = "default_align")]
     pub align: String,
-    /// Espaço entre prints, em px. Só vale nas juntas empilhadas.
+    /// Space between screenshots, in px. Only counts at stacked seams.
     #[serde(default)]
     pub spacing: u32,
     #[serde(default = "default_bg")]
     pub background: String,
-    /// Liga a detecção de sobreposição.
+    /// Turns on overlap detection.
     #[serde(default)]
     pub smart: bool,
-    /// Maior sobreposição procurada, em px. 0 = procurar até onde der.
+    /// Largest overlap searched for, in px. 0 = search as far as it goes.
     #[serde(default)]
     pub search: u32,
-    /// Diferença média por canal (0-255) ainda aceita como "é a mesma faixa".
+    /// Average per-channel difference (0-255) still accepted as "the same strip".
     #[serde(default = "default_tolerance")]
     pub tolerance: f32,
-    /// Barra fixa no topo do print seguinte, ignorada na comparação e
+    /// Fixed bar at the top of the next screenshot, ignored in the comparison and
     /// recortada na costura.
     #[serde(default)]
     pub crop_top: u32,
-    /// Barra fixa no rodapé do print anterior, ignorada na comparação.
+    /// Fixed bar at the bottom of the previous screenshot, ignored in the comparison.
     #[serde(default)]
     pub crop_bottom: u32,
-    /// Maior largura da imagem final; 0 = manter.
+    /// Largest width of the final image; 0 = keep.
     #[serde(default)]
     pub max_width: u32,
-    /// "png" (padrão) ou "jpeg".
+    /// "png" (default) or "jpeg".
     #[serde(default = "default_format")]
     pub format: String,
     #[serde(default = "default_quality")]
     pub quality: u8,
-    /// Caminho de saída; vazio = ao lado do primeiro print.
+    /// Output path; empty = beside the first screenshot.
     #[serde(default)]
     pub output: String,
 }
@@ -90,16 +90,16 @@ fn default_quality() -> u8 {
     90
 }
 
-/// Uma junta entre dois prints consecutivos.
+/// One seam between two consecutive screenshots.
 #[derive(Debug, Clone, Serialize)]
 pub struct StitchSeam {
-    /// Índice do print de baixo (a junta é entre `index - 1` e `index`).
+    /// Index of the lower screenshot (the seam is between `index - 1` and `index`).
     pub index: u32,
-    /// Quantos px de conteúdo repetido foram descartados.
+    /// How many px of repeated content were dropped.
     pub overlap: u32,
-    /// Diferença média por canal na faixa escolhida (menor é melhor).
+    /// Average per-channel difference on the chosen strip (lower is better).
     pub score: f32,
-    /// Falso quando a junta caiu para empilhamento puro.
+    /// False when the seam fell back to pure stacking.
     pub matched: bool,
 }
 
@@ -110,12 +110,12 @@ pub struct StitchResult {
     pub height: u32,
     pub bytes: u64,
     pub count: u32,
-    /// Total de px de repetição removidos.
+    /// Total px of repetition removed.
     pub saved_px: u32,
     pub seams: Vec<StitchSeam>,
 }
 
-/// O que a busca de sobreposição precisa saber, sem arrastar as opções todas.
+/// What the overlap search needs to know, without dragging all the options along.
 #[derive(Debug, Clone, Copy)]
 pub struct MatchParams {
     pub search: u32,
@@ -135,8 +135,8 @@ impl From<&StitchOptions> for MatchParams {
     }
 }
 
-/// Diferença média por canal entre a faixa de baixo de `a` e a de cima de `b`
-/// para uma sobreposição de `overlap` linhas.
+/// Average per-channel difference between the bottom strip of `a` and the top strip of `b`
+/// for an overlap of `overlap` rows.
 fn band_diff(a: &RgbaImage, b: &RgbaImage, overlap: u32, a_bottom: u32, b_top: u32) -> f32 {
     let w = a.width().min(b.width());
     if w == 0 || overlap == 0 {
@@ -173,9 +173,9 @@ fn band_diff(a: &RgbaImage, b: &RgbaImage, overlap: u32, a_bottom: u32, b_top: u
     }
 }
 
-/// Melhor sobreposição entre dois prints consecutivos, ou `None` quando nem a
-/// melhor candidata chega no limiar. Empates ficam com a maior faixa: repetir
-/// menos conteúdo é o que o usuário quer.
+/// Best overlap between two consecutive screenshots, or `None` when not even the
+/// best candidate reaches the threshold. Ties keep the largest strip: repeating
+/// less content is what the user wants.
 pub fn best_overlap(a: &RgbaImage, b: &RgbaImage, p: &MatchParams) -> Option<(u32, f32)> {
     let a_usable = a.height().saturating_sub(p.crop_bottom);
     let b_usable = b.height().saturating_sub(p.crop_top);
@@ -198,7 +198,7 @@ pub fn best_overlap(a: &RgbaImage, b: &RgbaImage, p: &MatchParams) -> Option<(u3
     best.filter(|(_, s)| *s <= p.tolerance)
 }
 
-/// Deslocamento no eixo curto conforme o alinhamento.
+/// Offset on the short axis according to the alignment.
 fn align_offset(total: u32, item: u32, align: &str) -> i64 {
     let sobra = total.saturating_sub(item);
     match align {
@@ -208,8 +208,8 @@ fn align_offset(total: u32, item: u32, align: &str) -> i64 {
     }
 }
 
-/// Costura vertical: é o único caso implementado: o horizontal gira 90°,
-/// costura e desgira, para não ter duas versões do mesmo algoritmo.
+/// Vertical stitching: the only case implemented: horizontal rotates 90°,
+/// stitches and rotates back, so there are not two versions of the same algorithm.
 fn stitch_vertical(
     frames: &[RgbaImage],
     opts: &StitchOptions,
@@ -219,8 +219,8 @@ fn stitch_vertical(
     let params = MatchParams::from(opts);
     let total = frames.len() as u64;
 
-    // Cada print entra na costura inteiro, menos a barra fixa do topo quando
-    // a junta casou: aquela faixa já está no print de cima.
+    // Each screenshot enters the stitch whole, minus the fixed top bar when
+    // the seam matched: that strip is already in the screenshot above.
     let mut drawn: Vec<RgbaImage> = Vec::with_capacity(frames.len());
     let mut tops: Vec<i64> = Vec::with_capacity(frames.len());
     let mut seams: Vec<StitchSeam> = Vec::new();
@@ -249,16 +249,16 @@ fn stitch_vertical(
             Some((k, s)) => (k, s, true),
             None => (0, 0.0, false),
         };
-        // Recorta a barra de topo só quando ela é mesmo repetição do anterior.
+        // Cut the top bar only when it really is a repeat of the previous one.
         let cut = if matched && opts.crop_top > 0 && opts.crop_top < cur.height() {
             opts.crop_top
         } else {
             0
         };
         let top = if matched {
-            // A linha `prev.height - crop_bottom - overlap` do print de cima é
-            // a linha `crop_top` do de baixo; `removed_prev` corrige o recorte
-            // que o print de cima já sofreu.
+            // The line `prev.height - crop_bottom - overlap` of the screenshot above is
+            // the `crop_top` line of the one below; `removed_prev` corrects the crop
+            // the screenshot above already suffered.
             tops[i - 1] + prev.height() as i64
                 - opts.crop_bottom.min(prev.height()) as i64
                 - overlap as i64
@@ -281,7 +281,7 @@ fn stitch_vertical(
         });
     }
 
-    // Sobreposição agressiva pode empurrar um print para antes do zero.
+    // Aggressive overlap can push a screenshot to before zero.
     let shift = tops.iter().copied().min().unwrap_or(0).min(0);
     let height = drawn
         .iter()
@@ -301,20 +301,20 @@ fn stitch_vertical(
     (canvas, seams)
 }
 
-/// Costura a lista já carregada. Fica separada do `run` para os testes não
-/// precisarem de arquivo em disco.
+/// Stitches the already-loaded list. Kept separate from `run` so the tests do not
+/// need a file on disk.
 pub fn stitch(
     frames: &[RgbaImage],
     opts: &StitchOptions,
     progress: &ProgressFn,
 ) -> anyhow::Result<(RgbaImage, Vec<StitchSeam>)> {
     if frames.is_empty() {
-        return Err(anyhow!("escolha pelo menos um print"));
+        return Err(anyhow!("choose at least one screenshot"));
     }
     if opts.direction == "horizontal" {
-        // Girando 90° no sentido horário, a borda direita vira o rodapé e a
-        // esquerda vira o topo — exatamente o que a costura vertical espera.
-        // O eixo curto inverte junto, então o alinhamento troca de ponta.
+        // Rotating 90° clockwise, the right edge becomes the footer and the
+        // left becomes the top — exactly what vertical stitching expects.
+        // The short axis flips along with it, so the alignment swaps ends.
         let turned: Vec<RgbaImage> = frames.iter().map(imageops::rotate90).collect();
         let align = match opts.align.as_str() {
             "start" => "end",
@@ -328,7 +328,7 @@ pub fn stitch(
     }
 }
 
-/// Encolhe proporcionalmente quando passa da largura pedida.
+/// Shrinks proportionally when it passes the requested width.
 fn cap_width(img: RgbaImage, max_width: u32) -> RgbaImage {
     if max_width == 0 || img.width() <= max_width {
         return img;
@@ -344,14 +344,14 @@ fn encode(img: &RgbaImage, format: &str, quality: u8) -> anyhow::Result<Vec<u8>>
         let mut buf = Cursor::new(Vec::new());
         DynamicImage::ImageRgba8(img.clone())
             .write_to(&mut buf, image::ImageFormat::Png)
-            .map_err(|e| anyhow!("não gravei o PNG: {}", e))?;
+            .map_err(|e| anyhow!("could not save the PNG: {}", e))?;
         Ok(buf.into_inner())
     }
 }
 
 pub fn run(opts: &StitchOptions, progress: &ProgressFn) -> anyhow::Result<StitchResult> {
     if opts.inputs.is_empty() {
-        return Err(anyhow!("escolha pelo menos um print"));
+        return Err(anyhow!("choose at least one screenshot"));
     }
     let total = opts.inputs.len() as u64;
     let mut frames: Vec<RgbaImage> = Vec::with_capacity(opts.inputs.len());
@@ -365,7 +365,7 @@ pub fn run(opts: &StitchOptions, progress: &ProgressFn) -> anyhow::Result<Stitch
             Some(path.clone()),
         );
         let img = image::open(Path::new(path))
-            .map_err(|e| anyhow!("não abri {}: {}", path, e))?
+            .map_err(|e| anyhow!("could not open {}: {}", path, e))?
             .to_rgba8();
         frames.push(img);
     }
@@ -410,8 +410,8 @@ pub fn run(opts: &StitchOptions, progress: &ProgressFn) -> anyhow::Result<Stitch
 mod tests {
     use super::*;
 
-    /// Conteúdo com linha a linha diferente: é o que um print de conversa tem
-    /// e o que faz o deslocamento certo ser um mínimo único.
+    /// Content that differs line by line: what a chat screenshot has
+    /// and what makes the right offset a unique minimum.
     fn source(w: u32, h: u32) -> RgbaImage {
         let mut img = RgbaImage::new(w, h);
         for (x, y, p) in img.enumerate_pixels_mut() {
@@ -466,10 +466,10 @@ mod tests {
         let a = rows(&src, 0, 250);
         let b = rows(&src, 200, 400);
         let found = best_overlap(&a, &b, &params(&base(true)));
-        assert_eq!(found.map(|(k, _)| k), Some(50), "deslocamento errado");
+        assert_eq!(found.map(|(k, _)| k), Some(50), "wrong offset");
         assert!(
             found.unwrap().1 < 0.001,
-            "faixa idêntica tinha que dar zero"
+            "identical strip had to give zero"
         );
     }
 
@@ -493,7 +493,7 @@ mod tests {
         }
         assert!(
             best_overlap(&a, &b, &params(&base(true))).is_none(),
-            "print sem relação não pode virar sobreposição"
+            "unrelated screenshot cannot become an overlap"
         );
     }
 
@@ -506,7 +506,7 @@ mod tests {
         o.search = 30;
         assert!(
             best_overlap(&a, &b, &params(&o)).is_none(),
-            "a sobreposição real é 50; com busca de 30 não podia achar nada bom"
+            "the real overlap is 50; with a search of 30 it could not find anything good"
         );
     }
 
@@ -521,7 +521,7 @@ mod tests {
         assert_eq!(seams[0].overlap, 50);
         assert!(
             same(&canvas, &src),
-            "a costura tinha que devolver o original"
+            "the stitch had to return the original"
         );
     }
 
@@ -536,13 +536,13 @@ mod tests {
         let mut o = base(true);
         o.spacing = 10;
         let (canvas, seams) = stitch(&[a, b], &o, &crate::core::tools::noop_progress()).unwrap();
-        assert!(!seams[0].matched, "não podia ter casado");
+        assert!(!seams[0].matched, "must not have matched");
         assert_eq!(seams[0].overlap, 0);
         assert_eq!(canvas.height(), 150 + 10 + 120);
         assert_eq!(
             canvas.get_pixel(0, 155),
             &image::Rgba([255, 255, 255, 255]),
-            "o espaçamento tem que ficar com a cor de fundo"
+            "the spacing must keep the background color"
         );
     }
 
@@ -553,7 +553,7 @@ mod tests {
         let (canvas, seams) =
             stitch(&frames, &base(false), &crate::core::tools::noop_progress()).unwrap();
         assert!(!seams[0].matched);
-        assert_eq!(canvas.height(), 450, "no modo simples nada é descartado");
+        assert_eq!(canvas.height(), 450, "in simple mode nothing is discarded");
     }
 
     #[test]
@@ -588,7 +588,7 @@ mod tests {
         assert_eq!(seams[0].overlap, 50);
         assert!(
             same(&canvas, &src),
-            "o horizontal tem que refazer o original"
+            "the horizontal one has to rebuild the original"
         );
     }
 
@@ -612,11 +612,11 @@ mod tests {
         o.crop_top = 20;
         o.crop_bottom = 20;
         let (canvas, seams) = stitch(&[a, b], &o, &crate::core::tools::noop_progress()).unwrap();
-        assert!(seams[0].matched, "as barras não podiam atrapalhar a busca");
+        assert!(seams[0].matched, "the bars must not have hindered the search");
         assert_eq!(canvas.height(), 400);
         assert!(
             same(&canvas, &src),
-            "a barra fixa tinha que sumir da costura"
+            "the fixed bar had to disappear from the stitch"
         );
     }
 
@@ -628,7 +628,7 @@ mod tests {
         assert_eq!(
             cap_width(source(100, 50), 400).dimensions(),
             (100, 50),
-            "não amplia"
+            "does not upscale"
         );
     }
 

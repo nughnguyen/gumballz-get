@@ -1,31 +1,31 @@
-//! Arquivo pessoal das newsletters do Substack.
+//! The user's personal Substack newsletter archive.
 //!
-//! O que a tool faz: para cada publicação que o usuário assina, percorre o
-//! arquivo dela e grava cada post em Markdown (com front-matter), HTML e JSON.
-//! É backup do que a **assinatura dele** entrega — nada além disso.
+//! What the tool does: for each publication the user subscribes to, it walks
+//! its archive and saves each post as Markdown (with front-matter), HTML and JSON.
+//! It is a backup of what **their subscription** delivers — nothing beyond that.
 //!
-//! ## Endpoints (verificados em 2026-09-09)
+//! ## Endpoints (verified on 2026-09-09)
 //!
 //! - `GET https://<pub>.substack.com/api/v1/archive?sort=new&search=&offset=N&limit=M`
-//!   — **200 verificado**, devolve um array de resumos de post (`id`, `slug`,
-//!   `title`, `post_date`, `audience`, `canonical_url`, `type`). O `offset`
-//!   pagina de verdade (conferido com offset 0 e 2 devolvendo posts
-//!   diferentes). Quando `limit` volta menos itens do que o pedido, acabou.
-//! - `GET https://<pub>.substack.com/api/v1/posts/<slug>` — **200 verificado**,
-//!   devolve o post inteiro com `body_html`, `subtitle`, `publishedBylines`,
+//!   — **200 verified**, returns an array of post summaries (`id`, `slug`,
+//!   `title`, `post_date`, `audience`, `canonical_url`, `type`). The `offset`
+//!   pages for real (checked with offset 0 and 2 returning different posts).
+//!   When `limit` returns fewer items than requested, that is the end.
+//! - `GET https://<pub>.substack.com/api/v1/posts/<slug>` — **200 verified**,
+//!   returns the whole post with `body_html`, `subtitle`, `publishedBylines`,
 //!   `postTags`, `wordcount`.
 //! - `GET https://substack.com/api/v1/subscriptions` — **401 "Please sign in"
-//!   verificado sem cookie**; com a sessão do usuário é ela que lista as
-//!   assinaturas. Não deu para exercitar o caminho logado, então a tool sai
-//!   como `beta` e o modo manual (o usuário digita as publicações) é o
-//!   caminho garantido.
+//!   verified without a cookie**; with the user's session it is the one that lists
+//!   the subscriptions. The logged-in path could not be exercised, so the tool ships
+//!   as `beta` and the manual mode (the user types the publications) is the
+//!   guaranteed path.
 //!
-//! ## O limite
+//! ## The limit
 //!
-//! Post que a conta não pode ler chega sem corpo (`body_html` vazio) ou
-//! truncado. A tool **conta como pulado** e segue adiante. Não existe aqui
-//! nenhuma tentativa de contornar paywall: o que a assinatura abre, sai; o
-//! resto fica de fora, e o relatório diz quantos foram.
+//! A post the account cannot read arrives without a body (empty `body_html`) or
+//! truncated. The tool **counts it as skipped** and moves on. There is no
+//! attempt here to work around a paywall: what the subscription opens, comes out;
+//! the rest stays out, and the report says how many there were.
 
 use std::path::PathBuf;
 
@@ -40,32 +40,32 @@ use super::{
 use crate::core::tools::ProgressFn;
 
 const ID: &str = "blog-substack";
-/// Domínios cujos cookies este cliente aceita. O `substack.com` cobre o
-/// `<pub>.substack.com` de todo mundo; domínio próprio só funciona se o
-/// usuário tiver capturado os cookies dele também.
+/// Domains whose cookies this client accepts. `substack.com` covers everyone's
+/// `<pub>.substack.com`; a custom domain only works if the user has captured
+/// its cookies too.
 const COOKIE_DOMAINS: &[&str] = &["substack.com"];
 
-// ── Opções e resultado ─────────────────────────────────────────────────
+// ── Options and result ─────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct Options {
-    /// Publicações a exportar: `foo`, `foo.substack.com` ou a URL inteira.
-    /// Vazio = descobrir pelas assinaturas da conta logada.
+    /// Publications to export: `foo`, `foo.substack.com` or the whole URL.
+    /// Empty = discover from the logged-in account's subscriptions.
     pub publications: Vec<String>,
     pub dest: String,
-    /// Posts por publicação, do mais novo para o mais velho. 0 = tudo.
+    /// Posts per publication, newest first. 0 = all.
     pub limit: usize,
-    /// `AAAA-MM-DD`: para de descer quando o post é mais velho que isso.
+    /// `YYYY-MM-DD`: stop going down when the post is older than this.
     pub since: String,
     pub markdown: bool,
     pub html: bool,
     pub json: bool,
-    /// Baixar as imagens para uma pasta ao lado e reescrever os links.
+    /// Download the images into a folder next to it and rewrite the links.
     pub images: bool,
     pub delay_ms: u64,
-    /// Teto de requisições, para a exportação nunca virar uma varredura sem
-    /// fim num arquivo de dez anos.
+    /// Request ceiling, so the export never turns into an endless sweep of a
+    /// ten-year archive.
     pub max_requests: u32,
     pub account_slug: Option<String>,
     pub session_netscape: Option<String>,
@@ -96,7 +96,7 @@ pub struct PublicationReport {
     pub name: String,
     pub dir: String,
     pub posts: usize,
-    /// Posts que a conta não abre (pago de terceiro, arquivado): pulados.
+    /// Posts the account cannot open (third-party paid, archived): skipped.
     pub locked: usize,
     pub error: Option<String>,
 }
@@ -113,9 +113,9 @@ pub struct ArchiveResult {
     pub files: Vec<String>,
 }
 
-// ── Peças puras ────────────────────────────────────────────────────────
+// ── Pure pieces ────────────────────────────────────────────────────────
 
-/// Uma assinatura da conta: publicação e se é paga.
+/// A subscription of the account: publication and whether it is paid.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Subscription {
     pub host: String,
@@ -123,8 +123,8 @@ pub struct Subscription {
     pub paid: bool,
 }
 
-/// `foo`, `foo.substack.com`, `https://foo.substack.com/p/x` — tudo vira o
-/// host da publicação. Nome com ponto é tratado como domínio próprio.
+/// `foo`, `foo.substack.com`, `https://foo.substack.com/p/x` — all become the
+/// publication's host. A name with a dot is treated as a custom domain.
 pub fn normalize_host(input: &str) -> Option<String> {
     let s = input.trim().trim_matches('/');
     if s.is_empty() {
@@ -155,8 +155,8 @@ fn as_str(v: &Value, key: &str) -> String {
     v.get(key).and_then(Value::as_str).unwrap_or("").to_string()
 }
 
-/// Host de uma publicação vinda do JSON: domínio próprio quando existe,
-/// senão `<subdomain>.substack.com`.
+/// Host of a publication from the JSON: the custom domain when it exists,
+/// otherwise `<subdomain>.substack.com`.
 fn publication_host(p: &Value) -> Option<String> {
     let custom = as_str(p, "custom_domain");
     let custom_ok = p
@@ -174,9 +174,9 @@ fn publication_host(p: &Value) -> Option<String> {
     normalize_host(&custom)
 }
 
-/// Lê `/api/v1/subscriptions`. O JSON traz `publications` (o catálogo) e
-/// `subscriptions` (o vínculo da conta, com `membership_state`). Só entra o
-/// que está de fato assinado; `expired`/`none` fica de fora.
+/// Reads `/api/v1/subscriptions`. The JSON brings `publications` (the catalog) and
+/// `subscriptions` (the account's link, with `membership_state`). Only what is
+/// actually subscribed gets in; `expired`/`none` stays out.
 pub fn parse_subscriptions(v: &Value) -> Vec<Subscription> {
     let pubs = v.get("publications").and_then(Value::as_array);
     let subs = v.get("subscriptions").and_then(Value::as_array);
@@ -223,7 +223,7 @@ pub fn parse_subscriptions(v: &Value) -> Vec<Subscription> {
     out
 }
 
-/// Um item do arquivo da publicação.
+/// An item from the publication's archive.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ArchiveItem {
     pub slug: String,
@@ -244,7 +244,8 @@ pub fn post_url(host: &str, slug: &str) -> String {
     format!("https://{}/api/v1/posts/{}", host, slug)
 }
 
-/// Lê uma página do arquivo. Post sem `slug` não serve para nada e cai fora.
+/// Reads one page of the archive. A post without a `slug` is no use for
+/// anything and drops out.
 pub fn parse_archive(v: &Value) -> Vec<ArchiveItem> {
     let items = match v.as_array() {
         Some(a) => a.clone(),
@@ -272,8 +273,8 @@ pub fn parse_archive(v: &Value) -> Vec<ArchiveItem> {
         .collect()
 }
 
-/// Offsets de uma varredura do arquivo: páginas de `page` itens até `limit`
-/// (0 = sem teto, aí o chamador para quando a página vier curta).
+/// Offsets of an archive sweep: pages of `page` items up to `limit` (0 = no
+/// ceiling, then the caller stops when a page comes back short).
 pub fn offsets(limit: usize, page: usize) -> Vec<usize> {
     let page = page.max(1);
     if limit == 0 {
@@ -283,8 +284,8 @@ pub fn offsets(limit: usize, page: usize) -> Vec<usize> {
     (0..pages).map(|i| i * page).collect()
 }
 
-/// `AAAA-MM-DD` de uma data ISO. Serve para comparar com o `since` sem
-/// arrastar fuso para dentro da conta.
+/// `YYYY-MM-DD` of an ISO date. It exists to compare against `since` without
+/// dragging a timezone into the calculation.
 pub fn day_of(date: &str) -> String {
     date.chars().take(10).collect()
 }
@@ -357,16 +358,16 @@ pub fn parse_post(v: &Value, publication: &str) -> PostDoc {
     }
 }
 
-// ── Execução ───────────────────────────────────────────────────────────
+// ── Execution ──────────────────────────────────────────────────────────
 
 const PAGE: usize = 12;
 
-/// Descobre as assinaturas da conta logada. Sem sessão não há o que
-/// descobrir: o endpoint responde 401.
+/// Discovers the logged-in account's subscriptions. Without a session there is
+/// nothing to discover: the endpoint answers 401.
 pub async fn discover(fetcher: &Fetcher) -> Result<Vec<Subscription>> {
     if !fetcher.has_session() {
         return Err(anyhow!(
-            "sem a sessão do Substack não dá para listar as suas assinaturas. Capture os cookies de substack.com no gerenciador, ou digite as publicações à mão"
+            "without the Substack session your subscriptions cannot be listed. Capture the substack.com cookies in the manager, or type the publications by hand"
         ));
     }
     let v = fetcher
@@ -375,7 +376,7 @@ pub async fn discover(fetcher: &Fetcher) -> Result<Vec<Subscription>> {
     let subs = parse_subscriptions(&v);
     if subs.is_empty() {
         return Err(anyhow!(
-            "a conta logada não tem nenhuma assinatura ativa (ou a sessão expirou)"
+            "the logged-in account has no active subscription (or the session expired)"
         ));
     }
     Ok(subs)
@@ -384,10 +385,10 @@ pub async fn discover(fetcher: &Fetcher) -> Result<Vec<Subscription>> {
 pub async fn run(opts: &Options, progress: ProgressFn) -> Result<ArchiveResult> {
     let dest = opts.dest.trim();
     if dest.is_empty() {
-        return Err(anyhow!("escolha a pasta de destino"));
+        return Err(anyhow!("pick the destination folder"));
     }
     if !opts.markdown && !opts.html && !opts.json {
-        return Err(anyhow!("escolha ao menos um formato"));
+        return Err(anyhow!("pick at least one format"));
     }
     let root = PathBuf::from(dest);
     std::fs::create_dir_all(&root)?;
@@ -395,8 +396,8 @@ pub async fn run(opts: &Options, progress: ProgressFn) -> Result<ArchiveResult> 
     let domains: Vec<String> = COOKIE_DOMAINS.iter().map(|d| d.to_string()).collect();
     let fetcher = Fetcher::new(opts.delay_ms, opts.session_netscape.as_deref(), &domains)?;
 
-    // Lista de publicações: o que o usuário digitou tem precedência; vazio
-    // significa "as minhas assinaturas".
+    // Publication list: what the user typed takes precedence; empty means
+    // "my subscriptions".
     let targets: Vec<Subscription> = if opts.publications.is_empty() {
         crate::core::tools::report(
             &progress,
@@ -419,7 +420,7 @@ pub async fn run(opts: &Options, progress: ProgressFn) -> Result<ArchiveResult> 
             .collect()
     };
     if targets.is_empty() {
-        return Err(anyhow!("nenhuma publicação válida na lista"));
+        return Err(anyhow!("no valid publication in the list"));
     }
 
     let since = opts.since.trim().to_string();
@@ -537,7 +538,7 @@ async fn export_publication(
         let v = match fetcher.get_json(&post_url(&sub.host, &it.slug)).await {
             Ok(v) => v,
             Err(e) => {
-                tracing::warn!("substack: post {} falhou: {}", it.slug, e);
+                tracing::warn!("substack: post {} failed: {}", it.slug, e);
                 continue;
             }
         };
@@ -563,7 +564,7 @@ async fn export_publication(
                     doc.markdown = md;
                     out.images += n;
                 }
-                Err(e) => tracing::warn!("substack: imagens de {} falharam: {}", it.slug, e),
+                Err(e) => tracing::warn!("substack: images of {} failed: {}", it.slug, e),
             }
         }
         let files = write_post(dir, &stem, &doc, opts.markdown, opts.html, opts.json)?;
@@ -577,7 +578,7 @@ async fn export_publication(
     Ok((posts, locked))
 }
 
-/// Só para a UI mostrar o cabeçalho de um post sem gravar nada.
+/// Only so the UI can show a post's header without saving anything.
 pub fn preview(doc: &PostDoc) -> String {
     format!("{}{}", front_matter(&doc.meta), doc.markdown)
 }
@@ -587,7 +588,7 @@ mod tests {
     use super::*;
 
     fn json(s: &str) -> Value {
-        serde_json::from_str(s).expect("json de amostra")
+        serde_json::from_str(s).expect("sample json")
     }
 
     #[test]
@@ -629,10 +630,10 @@ mod tests {
         let subs = parse_subscriptions(&v);
         assert_eq!(subs.len(), 3, "{:?}", subs);
         assert_eq!(subs[0].host, "um.substack.com");
-        assert!(!subs[0].paid, "free_signup é assinatura grátis");
+        assert!(!subs[0].paid, "free_signup is a free subscription");
         assert_eq!(subs[1].host, "dois.com.br");
         assert!(subs[1].paid);
-        // Domínio próprio opcional: o canônico continua sendo o substack.com.
+        // Optional custom domain: the canonical one stays substack.com.
         assert_eq!(subs[2].host, "quatro.substack.com");
         assert!(!subs.iter().any(|s| s.host.starts_with("tres")));
     }
@@ -655,7 +656,7 @@ mod tests {
             ]"#,
         );
         let items = parse_archive(&v);
-        assert_eq!(items.len(), 2, "post sem slug é descartado");
+        assert_eq!(items.len(), 2, "post without slug is discarded");
         assert_eq!(items[0].slug, "um");
         assert_eq!(items[1].audience, "only_paid");
         assert_eq!(day_of(&items[0].date), "2026-09-08");
@@ -668,7 +669,7 @@ mod tests {
         assert_eq!(offsets(1, 12), vec![0]);
         let tudo = offsets(0, 12);
         assert_eq!(&tudo[..3], &[0, 12, 24]);
-        assert!(tudo.len() > 100, "sem teto, o chamador é quem para");
+        assert!(tudo.len() > 100, "without a cap, the caller is the one who stops");
         assert_eq!(
             archive_url("x.substack.com", 24, 12),
             "https://x.substack.com/api/v1/archive?sort=new&search=&offset=24&limit=12"
@@ -698,7 +699,7 @@ mod tests {
         assert_eq!(doc.meta.words, Some(4695));
         assert_eq!(doc.meta.subtitle.as_deref(), Some("O subtítulo"));
         assert!(doc.markdown.contains("**mundo**"), "{}", doc.markdown);
-        assert!(!doc.markdown.contains("Assine"), "widget não entra");
+        assert!(!doc.markdown.contains("Assine"), "the widget does not get in");
         let full = preview(&doc);
         assert!(full.starts_with("---\ntitle: \"Um post\""), "{}", full);
         assert!(full.contains("publication: \"Astral Codex Ten\""));
@@ -716,7 +717,7 @@ mod tests {
                 "truncated_body_text":"Comece a ler..."}"#,
         );
         let doc = parse_post(&v, "Boletim");
-        assert!(doc.locked, "sem body_html a conta não tem acesso");
+        assert!(doc.locked, "without body_html the account has no access");
         assert!(doc.markdown.is_empty());
         assert!(doc.html.is_none());
         assert_eq!(doc.meta.audience.as_deref(), Some("only_paid"));
@@ -729,7 +730,7 @@ mod tests {
         let v = f
             .get_json(&archive_url("astralcodexten.substack.com", 0, 2))
             .await
-            .expect("arquivo");
+            .expect("file");
         let items = parse_archive(&v);
         assert_eq!(items.len(), 2);
         let post = f
@@ -763,9 +764,9 @@ mod tests {
             out.files
                 .iter()
                 .find(|f| f.ends_with(".md"))
-                .expect("um .md"),
+                .expect("a .md"),
         )
-        .expect("le o markdown");
+        .expect("read the markdown");
         assert!(md.starts_with("---\ntitle: \""), "{}", &md[..80]);
         assert!(md.contains("publication: "), "front-matter completo");
         assert!(md.len() > 800, "corpo de verdade");
@@ -776,7 +777,7 @@ mod tests {
     #[ignore = "sessao: lista as assinaturas da conta logada (precisa dos cookies de substack.com)"]
     async fn sessao_lista_assinaturas() {
         let path = std::env::var("GUMBALLZ_SUBSTACK_COOKIES").expect("GUMBALLZ_SUBSTACK_COOKIES");
-        let content = std::fs::read_to_string(path).expect("arquivo netscape");
+        let content = std::fs::read_to_string(path).expect("netscape file");
         let f = Fetcher::new(1200, Some(&content), &["substack.com".to_string()]).expect("cliente");
         assert!(f.has_session(), "nenhum cookie de substack.com no arquivo");
         let subs = discover(&f).await.expect("assinaturas");

@@ -1,9 +1,9 @@
-//! Chaves de API (estudo 24, All API Hub — AGPL, só a ideia): um cofre local
-//! de contas de IA (site → chave → modelos → saldo), teste de conectividade,
-//! saldo onde a API dá (OpenRouter, DeepSeek, SiliconFlow, painéis New API)
-//! e exportação para os clientes (.env, Claude Code, Cherry Studio, Codex,
-//! opencode). Chaves ficam em `<app_data>/tools/ai-keys.json`, como o
-//! `ai_config.json` do app; a UI só recebe o início e o fim de cada chave.
+//! API keys (study 24, All API Hub — AGPL, just the idea): a local vault
+//! of AI accounts (site → key → models → balance), connectivity testing,
+//! balance where the API provides it (OpenRouter, DeepSeek, SiliconFlow, New API panels)
+//! and export to clients (.env, Claude Code, Cherry Studio, Codex,
+//! opencode). Keys live in `<app_data>/tools/ai-keys.json`, like the
+//! app's `ai_config.json`; the UI only ever gets the start and end of each key.
 
 use std::sync::Mutex;
 
@@ -19,7 +19,7 @@ pub struct KeyEntry {
     pub base_url: String,
     #[serde(default)]
     pub key: String,
-    /// New API: token de acesso do painel (Configurações → Token de acesso)
+    /// New API: panel access token (Settings → Access Token)
     #[serde(default)]
     pub access_token: String,
     #[serde(default)]
@@ -42,7 +42,7 @@ pub struct KeyEntry {
     pub error: Option<String>,
 }
 
-/// O que a UI vê: nunca a chave inteira.
+/// What the UI sees: never the whole key.
 #[derive(Debug, Clone, Serialize)]
 pub struct KeyView {
     pub id: String,
@@ -188,7 +188,7 @@ pub const KINDS: &[Kind] = &[
     },
     Kind {
         id: "custom",
-        name: "OpenAI-compatível",
+        name: "OpenAI-compatible",
         base_url: "https://…/v1",
         balance: false,
         env: "OPENAI_API_KEY",
@@ -199,28 +199,28 @@ fn kind_of(id: &str) -> &'static Kind {
     find_kind(id).unwrap_or(&KINDS[KINDS.len() - 1])
 }
 
-/// A linha da tabela com este id, quando existe: quem não está na tabela é
-/// desconhecido, e desconhecido não é o mesmo que "OpenAI-compatível".
+/// The table row with this id, when it exists: what is not in the table is
+/// unknown, and unknown is not the same as "OpenAI-compatible".
 pub fn find_kind(id: &str) -> Option<&'static Kind> {
     KINDS.iter().find(|k| k.id == id)
 }
 
 impl Kind {
-    /// O provedor exige chave de API. Ollama roda na máquina do usuário e um
-    /// endpoint próprio ("custom") pode não ter autenticação; todo o resto tem.
+    /// The provider requires an API key. Ollama runs on the user's machine and a
+    /// custom endpoint ("custom") may have no authentication; everything else does.
     pub fn needs_key(&self) -> bool {
         !matches!(self.id, "ollama" | "custom")
     }
 
-    /// O endereço da tabela é só um exemplo (Ollama local, relay New API,
-    /// endpoint próprio) — nesses casos quem digita é o usuário.
+    /// The table address is just an example (local Ollama, New API relay,
+    /// custom endpoint) — in those cases the user types it.
     pub fn base_url_editable(&self) -> bool {
         matches!(self.id, "ollama" | "custom") || self.base_url.contains("seu-site.com")
     }
 }
 
-/// O que a tela de IA precisa da tabela: os dados do provedor e as duas
-/// capacidades do formulário (pede chave? pede endereço?).
+/// What the AI screen needs from the table: the provider data and the two
+/// form capabilities (asks for a key? asks for an address?).
 #[derive(Debug, Clone, Serialize)]
 pub struct KindView {
     pub id: &'static str,
@@ -246,13 +246,13 @@ impl KindView {
     }
 }
 
-/// A tabela como o frontend a vê (`tool_keys_kinds`).
+/// The table as the frontend sees it (`tool_keys_kinds`).
 pub fn kinds_view() -> Vec<KindView> {
     KINDS.iter().map(KindView::of).collect()
 }
 
-/// Endereço que o chat do app usa: o que o usuário digitou ou o da tabela.
-/// O Gemini só fala o dialeto OpenAI na rota `/openai`.
+/// Address the app's chat uses: what the user typed, or the table's.
+/// Gemini only speaks the OpenAI dialect on the `/openai` route.
 pub fn app_base_url(kind: &str, base: &str) -> String {
     let raw = if base.trim().is_empty() {
         kind_of(kind).base_url
@@ -267,7 +267,7 @@ pub fn app_base_url(kind: &str, base: &str) -> String {
     }
 }
 
-// ── Armazenamento ──────────────────────────────────────────────────────
+// ── Storage ──────────────────────────────────────────────────────
 
 static LOCK: Mutex<()> = Mutex::new(());
 
@@ -283,7 +283,7 @@ fn load() -> Vec<KeyEntry> {
 }
 
 fn save(list: &[KeyEntry]) -> anyhow::Result<()> {
-    let p = file().ok_or_else(|| anyhow!("sem pasta de dados"))?;
+    let p = file().ok_or_else(|| anyhow!("no data folder"))?;
     std::fs::create_dir_all(p.parent().unwrap())?;
     let tmp = p.with_extension("json.tmp");
     std::fs::write(&tmp, serde_json::to_string_pretty(list)?)?;
@@ -296,7 +296,7 @@ pub fn list() -> Vec<KeyView> {
     load().iter().map(KeyEntry::view).collect()
 }
 
-/// Entrada completa (com segredo) para uso interno do app.
+/// Full input (with secret) for the app's internal use.
 pub fn entry_with_secret(id: &str) -> anyhow::Result<KeyEntry> {
     get(id)
 }
@@ -305,7 +305,7 @@ fn get(id: &str) -> anyhow::Result<KeyEntry> {
     load()
         .into_iter()
         .find(|e| e.id == id)
-        .ok_or_else(|| anyhow!("chave nao encontrada"))
+        .ok_or_else(|| anyhow!("key not found"))
 }
 
 fn update<F: FnOnce(&mut KeyEntry)>(id: &str, f: F) -> anyhow::Result<KeyView> {
@@ -314,14 +314,14 @@ fn update<F: FnOnce(&mut KeyEntry)>(id: &str, f: F) -> anyhow::Result<KeyView> {
     let e = list
         .iter_mut()
         .find(|e| e.id == id)
-        .ok_or_else(|| anyhow!("chave nao encontrada"))?;
+        .ok_or_else(|| anyhow!("key not found"))?;
     f(e);
     let v = e.view();
     save(&list)?;
     Ok(v)
 }
 
-/// Cria ou atualiza. Chave/token vazios mantêm o valor guardado.
+/// Creates or updates. Empty key/token keeps the stored value.
 pub fn upsert(mut entry: KeyEntry) -> anyhow::Result<KeyView> {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let mut list = load();
@@ -365,7 +365,7 @@ pub fn delete(id: &str) -> anyhow::Result<()> {
     save(&list)
 }
 
-// ── Rede ───────────────────────────────────────────────────────────────
+// ── Network ───────────────────────────────────────────────────────────────
 
 fn client() -> anyhow::Result<reqwest::Client> {
     Ok(
@@ -375,14 +375,14 @@ fn client() -> anyhow::Result<reqwest::Client> {
     )
 }
 
-/// Site do painel (New API): base sem o `/v1`.
+/// Panel site (New API): base without the `/v1`.
 fn site_of(base: &str) -> String {
     base.trim_end_matches('/')
         .trim_end_matches("/v1")
         .to_string()
 }
 
-/// GET /models (ou equivalente) → ids dos modelos.
+/// GET /models (or equivalent) → model ids.
 pub async fn models(entry: &KeyEntry) -> anyhow::Result<Vec<String>> {
     let c = client()?;
     let json: serde_json::Value = match entry.kind.as_str() {
@@ -426,7 +426,7 @@ pub async fn models(entry: &KeyEntry) -> anyhow::Result<Vec<String>> {
             }
             serde_json::from_str(&text).map_err(|_| {
                 anyhow!(
-                    "resposta nao e JSON: {}",
+                    "response is not JSON: {}",
                     text.chars().take(120).collect::<String>()
                 )
             })?
@@ -540,7 +540,7 @@ pub async fn balance(id: &str) -> anyhow::Result<KeyView> {
         "newapi" => {
             if entry.access_token.is_empty() {
                 return Err(anyhow!(
-                    "informe o token de acesso e o ID de usuario do painel"
+                    "enter the panel access token and user ID"
                 ));
             }
             let j: serde_json::Value = c
@@ -555,20 +555,20 @@ pub async fn balance(id: &str) -> anyhow::Result<KeyView> {
             if j["success"].as_bool() == Some(false) {
                 return Err(anyhow!(
                     "{}",
-                    j["message"].as_str().unwrap_or("painel recusou")
+                    j["message"].as_str().unwrap_or("panel refused")
                 ));
             }
             let d = &j["data"];
             let quota = d["quota"].as_f64().unwrap_or(0.0) / 500_000.0;
             let used = d["used_quota"].as_f64().unwrap_or(0.0) / 500_000.0;
-            format!("{} ({} usados)", usd(quota), usd(used))
+            format!("{} ({} used)", usd(quota), usd(used))
         }
-        _ => return Err(anyhow!("este provedor nao expoe saldo pela API")),
+        _ => return Err(anyhow!("this provider does not expose balance via the API")),
     };
     update(id, |e| e.balance = Some(text))
 }
 
-// ── Exportar ───────────────────────────────────────────────────────────
+// ── Export ───────────────────────────────────────────────────────────
 
 fn is_openai_compatible(kind: &str) -> bool {
     !matches!(kind, "anthropic" | "gemini")
@@ -581,7 +581,7 @@ pub fn export(format: &str, ids: &[String]) -> anyhow::Result<String> {
         .filter(|e| ids.is_empty() || ids.contains(&e.id))
         .collect();
     if list.is_empty() {
-        return Err(anyhow!("nenhuma chave selecionada"));
+        return Err(anyhow!("no key selected"));
     }
     let slug = |s: &str| {
         s.chars()
@@ -682,16 +682,16 @@ pub fn export(format: &str, ids: &[String]) -> anyhow::Result<String> {
             }
             serde_json::to_string_pretty(&serde_json::json!({ "$schema": "https://opencode.ai/config.json", "provider": providers }))?
         }
-        _ => return Err(anyhow!("formato desconhecido: {}", format)),
+        _ => return Err(anyhow!("unknown format: {}", format)),
     })
 }
 
-/// Usa esta chave como a IA do GumballZ Get (Ajustes → IA).
+/// Use this key as GumballZ Get's AI (Settings → AI).
 pub fn use_in_app(id: &str) -> anyhow::Result<()> {
     let e = get(id)?;
     use crate::core::ai::{self, KeyAction};
-    // Guarda também o provedor da tabela (`kind`): sem ele a tela de IA não
-    // sabe qual endereço usar nem se a chave é obrigatória.
+    // Also save the table provider (`kind`): without it the AI screen does not
+    // know which address to use or whether a key is required.
     ai::set_with_kind(
         &e.kind,
         e.model.clone(),
@@ -716,8 +716,8 @@ mod tests {
 
     #[test]
     fn the_payload_carries_the_form_flags() {
-        // A tela de IA decide o formulário por estes dois campos; se eles não
-        // saírem no JSON, o formulário some (foi o bug do PR #352).
+        // The AI screen decides the form from these two fields; if they do not
+        // come out in the JSON, the form disappears (that was the PR #352 bug).
         let json = serde_json::to_value(kinds_view()).unwrap();
         let arr = json.as_array().unwrap();
         let find = |id: &str| {

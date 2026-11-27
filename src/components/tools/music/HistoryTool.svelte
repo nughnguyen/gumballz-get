@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Histórico completo do export do Spotify — tudo local, sem rede. */
+  /** Full Spotify export history — all local, no network. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

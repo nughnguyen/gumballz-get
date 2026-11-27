@@ -1,15 +1,15 @@
-//! Spicetify: personalização do cliente oficial do Spotify.
+//! Spicetify: customization of the official Spotify client.
 //!
-//! O GumballZ Get não reimplementa o Spicetify; ele baixa o binário oficial do
-//! release do GitHub (hash conferido) e o chama. A pasta de config é a
-//! padrão do Spicetify (`~/.config/spicetify`, `%APPDATA%\spicetify`), de
-//! propósito: quem já usa o CLI no terminal vê o mesmo estado aqui, e o
-//! `spicetify upgrade` continua atualizando o próprio binário.
+//! GumballZ Get does not reimplement Spicetify; it downloads the official binary from the
+//! GitHub release (hash verified) and calls it. The config folder is the
+//! Spicetify default (`~/.config/spicetify`, `%APPDATA%\spicetify`), on
+//! purpose: anyone who already uses the CLI in the terminal sees the same state here, and
+//! `spicetify upgrade` keeps updating the binary itself.
 //!
-//! O tarball do release traz mais que o executável (`jsHelper/`, `Themes/`,
-//! `Extensions/`, `CustomApps/`, `css-map.json`), e o CLI lê tudo isso da
-//! pasta onde está. Por isso a instalação gerida vive numa pasta própria,
-//! `<app_data>/bin/spicetify-cli/`, e não solta em `bin/`.
+//! The release tarball brings more than the executable (`jsHelper/`, `Themes/`,
+//! `Extensions/`, `CustomApps/`, `css-map.json`), and the CLI reads all of that from
+//! the folder it lives in. That is why the managed install lives in its own folder,
+//! `<app_data>/bin/spicetify-cli/`, instead of loose in `bin/`.
 
 use std::path::{Path, PathBuf};
 
@@ -27,8 +27,8 @@ fn managed_dir() -> Option<PathBuf> {
     dependencies::managed_bin_dir().map(|d| d.join("spicetify-cli"))
 }
 
-/// Onde o binário está: override do usuário, pasta gerida, PATH, ou a pasta
-/// que o `install.sh` oficial usa (`~/.spicetify`, que nem sempre está no PATH).
+/// Where the binary is: user override, managed folder, PATH, or the folder
+/// the official `install.sh` uses (`~/.spicetify`, which is not always on PATH).
 pub async fn locate() -> Option<(PathBuf, &'static str)> {
     if let Some(custom) = crate::core::binary_overrides::get("spicetify") {
         return Some((custom, "custom"));
@@ -58,7 +58,7 @@ pub struct CmdOutput {
     pub stderr: String,
 }
 
-/// O Spicetify colore a saída com ANSI; na UI isso vira lixo.
+/// Spicetify colors its output with ANSI; in the UI that becomes garbage.
 fn strip_ansi(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut chars = s.chars().peekable();
@@ -89,7 +89,7 @@ pub async fn run(bin: &Path, args: &[&str]) -> anyhow::Result<CmdOutput> {
         .stderr(std::process::Stdio::piped());
     let output = tokio::time::timeout(std::time::Duration::from_secs(240), cmd.output())
         .await
-        .map_err(|_| anyhow!("spicetify {} nao respondeu em 4 minutos", args.join(" ")))??;
+        .map_err(|_| anyhow!("spicetify {} did not respond in 4 minutes", args.join(" ")))??;
     Ok(CmdOutput {
         ok: output.status.success(),
         code: output.status.code(),
@@ -98,8 +98,8 @@ pub async fn run(bin: &Path, args: &[&str]) -> anyhow::Result<CmdOutput> {
     })
 }
 
-/// Falha vira `Err` com a mensagem que o Spicetify imprimiu, para a UI
-/// mostrar o motivo real ("Spotify not found", "already patched"…).
+/// Failure becomes an `Err` carrying the message Spicetify printed, so the UI
+/// shows the real reason ("Spotify not found", "already patched"…).
 pub async fn run_ok(bin: &Path, args: &[&str]) -> anyhow::Result<CmdOutput> {
     let out = run(bin, args).await?;
     if out.ok {
@@ -111,7 +111,7 @@ pub async fn run_ok(bin: &Path, args: &[&str]) -> anyhow::Result<CmdOutput> {
         out.stderr.trim().to_string()
     };
     Err(anyhow!(
-        "spicetify {} falhou{}",
+        "spicetify {} failed{}",
         args.join(" "),
         if msg.is_empty() {
             String::new()
@@ -187,7 +187,7 @@ pub struct ThemeInfo {
     pub schemes: Vec<String>,
 }
 
-/// Temas em `<config>/Themes/<nome>/color.ini`; cada seção do ini é um esquema.
+/// Themes live in `<config>/Themes/<name>/color.ini`; each ini section is a scheme.
 pub fn list_themes(config_dir: &Path) -> Vec<ThemeInfo> {
     let mut themes = Vec::new();
     let Ok(entries) = std::fs::read_dir(config_dir.join("Themes")) else {
@@ -266,9 +266,9 @@ pub async fn status() -> SpicetifyStatus {
         .map(|o| o.stdout.trim().to_string())
         .filter(|v| !v.is_empty());
 
-    // `-c` imprime o caminho do config.ini e o cria se não existir.
-    // Na primeira execução o CLI imprime "Default config generated" antes
-    // do caminho, então o caminho é a última linha, não a saída inteira.
+    // `-c` prints the config.ini path and creates it if it does not exist.
+    // On first run the CLI prints "Default config generated" before
+    // the path, so the path is the last line, not the whole output.
     let config_path = run(&bin, &["-c"])
         .await
         .ok()
@@ -289,8 +289,8 @@ pub async fn status() -> SpicetifyStatus {
         .as_ref()
         .map(|p| read_config(p))
         .unwrap_or_default();
-    // O CLI detecta o Spotify sozinho e grava em `spotify_path`; vazio ou
-    // apontando para algo que não existe significa "não encontrado".
+    // The CLI detects Spotify itself and writes it to `spotify_path`; empty or
+    // pointing at something that does not exist means "not found".
     let spotify_path = Some(cfg.spotify_path.trim().to_string())
         .filter(|p| !p.is_empty() && Path::new(p).exists());
     let spotify_error = if spotify_path.is_none() && config_path.is_some() {
@@ -304,8 +304,8 @@ pub async fn status() -> SpicetifyStatus {
         .map(|mut it| it.next().is_some())
         .unwrap_or(false);
     let applied = !cfg.backup_version.is_empty() || backup_nonempty;
-    // O CLI procura temas na pasta de config e, se não achar, na pasta do
-    // próprio executável (é onde vive o SpicetifyDefault do release).
+    // The CLI looks for themes in the config folder and, if it finds none, in the
+    // executable's own folder (where the release's SpicetifyDefault lives).
     let mut themes = config_dir
         .as_ref()
         .map(|d| list_themes(d))
@@ -344,7 +344,7 @@ pub async fn status() -> SpicetifyStatus {
     }
 }
 
-// ---------- download do release ----------
+// ---------- release download ----------
 
 fn github_client() -> anyhow::Result<reqwest::Client> {
     use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, USER_AGENT};
@@ -369,8 +369,8 @@ struct ReleaseAsset {
     digest: Option<String>,
 }
 
-/// Asset do último release cujo nome termina com `suffix`, com o `digest`
-/// que a API do GitHub publica.
+/// Asset from the latest release whose name ends with `suffix`, with the `digest`
+/// the GitHub API publishes.
 async fn latest_asset(
     client: &reqwest::Client,
     repo: &str,
@@ -380,7 +380,7 @@ async fn latest_asset(
     let response = client.get(&url).send().await?;
     if !response.status().is_success() {
         return Err(anyhow!(
-            "nao foi possivel consultar releases de {}: HTTP {}",
+            "could not query releases of {}: HTTP {}",
             repo,
             response.status()
         ));
@@ -389,7 +389,7 @@ async fn latest_asset(
     let tag = json["tag_name"].as_str().unwrap_or("").to_string();
     let assets = json["assets"]
         .as_array()
-        .ok_or_else(|| anyhow!("release de {} sem assets", repo))?;
+        .ok_or_else(|| anyhow!("release of {} without assets", repo))?;
     for asset in assets {
         let name = asset["name"].as_str().unwrap_or("");
         if pick(name) {
@@ -407,7 +407,7 @@ async fn latest_asset(
         }
     }
     Err(anyhow!(
-        "release {} de {} nao tem um asset para este sistema",
+        "release {} of {} has no asset for this system",
         tag,
         repo
     ))
@@ -420,17 +420,17 @@ async fn download_verified(
     let response = client.get(&asset.url).send().await?;
     if !response.status().is_success() {
         return Err(anyhow!(
-            "download de {} falhou: HTTP {}",
+            "download of {} failed: HTTP {}",
             asset.name,
             response.status()
         ));
     }
     let bytes = response.bytes().await?.to_vec();
-    // O GitHub publica o digest de todo asset; sem ele algo está errado na
-    // resposta, e o binário vai ser executado. Fail-closed.
+    // GitHub publishes the digest of every asset; without it something is wrong with the
+    // response, and the binary is about to be executed. Fail-closed.
     let expected = asset.digest.as_deref().ok_or_else(|| {
         anyhow!(
-            "{} veio sem digest da API do GitHub; download descartado",
+            "{} came without a digest from the GitHub API; download discarded",
             asset.name
         )
     })?;
@@ -438,7 +438,7 @@ async fn download_verified(
     Ok(bytes)
 }
 
-/// Sufixo do asset do CLI para este sistema. Linux só tem amd64 no release.
+/// CLI asset suffix for this system. Linux only has amd64 in the release.
 fn cli_asset_suffix() -> anyhow::Result<&'static str> {
     Ok(if cfg!(target_os = "windows") {
         if cfg!(target_arch = "aarch64") {
@@ -458,14 +458,14 @@ fn cli_asset_suffix() -> anyhow::Result<&'static str> {
         "linux-amd64.tar.gz"
     } else {
         return Err(anyhow!(
-            "o Spicetify nao publica binario para Linux nesta arquitetura; instale pelo gerenciador de pacotes"
+            "Spicetify does not publish a binary for Linux on this architecture; install via the package manager"
         ));
     })
 }
 
 fn unpack_zip(data: &[u8], dest: &Path) -> anyhow::Result<()> {
     let mut archive = zip::ZipArchive::new(std::io::Cursor::new(data))
-        .map_err(|e| anyhow!("zip invalido: {}", e))?;
+        .map_err(|e| anyhow!("invalid zip: {}", e))?;
     for i in 0..archive.len() {
         let mut file = archive.by_index(i)?;
         let Some(rel) = file.enclosed_name() else {
@@ -491,7 +491,7 @@ fn unpack_tar_gz(data: &[u8], dest: &Path) -> anyhow::Result<()> {
     archive.set_preserve_permissions(true);
     archive
         .unpack(dest)
-        .map_err(|e| anyhow!("tar.gz invalido: {}", e))?;
+        .map_err(|e| anyhow!("invalid tar.gz: {}", e))?;
     Ok(())
 }
 
@@ -504,19 +504,19 @@ fn make_executable(path: &Path) {
 #[cfg(not(unix))]
 fn make_executable(_path: &Path) {}
 
-/// Baixa o último release do CLI para `<app_data>/bin/spicetify-cli/`.
-/// A pasta antiga só sai depois que a nova está inteira no disco.
+/// Downloads the latest CLI release into `<app_data>/bin/spicetify-cli/`.
+/// The old folder only goes away once the new one is fully on disk.
 pub async fn install() -> anyhow::Result<PathBuf> {
     if dependencies::is_flatpak() {
         return Err(anyhow!(
-            "dentro do Flatpak o Spicetify nao consegue alterar o Spotify do sistema"
+            "inside Flatpak, Spicetify cannot change the system Spotify"
         ));
     }
     let suffix = cli_asset_suffix()?;
     let dir = managed_dir().ok_or_else(|| anyhow!("Could not determine data directory"))?;
     let client = github_client()?;
     let asset = latest_asset(&client, CLI_REPO, |n| n.ends_with(suffix)).await?;
-    tracing::info!("[spicetify] baixando {} ({})", asset.name, asset.tag);
+    tracing::info!("[spicetify] downloading {} ({})", asset.name, asset.tag);
     let data = download_verified(&client, &asset).await?;
 
     let staging = dir.with_extension("new");
@@ -538,7 +538,7 @@ pub async fn install() -> anyhow::Result<PathBuf> {
     if !exe.exists() {
         let _ = std::fs::remove_dir_all(&staging);
         return Err(anyhow!(
-            "o arquivo baixado nao contem o executavel do spicetify"
+            "the downloaded file does not contain the spicetify executable"
         ));
     }
     make_executable(&exe);
@@ -553,7 +553,7 @@ pub async fn install() -> anyhow::Result<PathBuf> {
             let _ = std::fs::rename(&old, &dir);
         }
         return Err(anyhow!(
-            "nao foi possivel mover a instalacao para o lugar: {}",
+            "could not move the installation into place: {}",
             e
         ));
     }
@@ -571,15 +571,15 @@ pub async fn install() -> anyhow::Result<PathBuf> {
         })
         .await;
     }
-    tracing::info!("[spicetify] instalado em {}", final_exe.display());
+    tracing::info!("[spicetify] installed at {}", final_exe.display());
     Ok(final_exe)
 }
 
 // ---------- Marketplace ----------
 
-/// Repete o `install.sh` oficial do Marketplace: zip do release em
-/// `CustomApps/marketplace`, registra o custom app e, sem tema ativo, usa o
-/// tema "marketplace" que o próprio Marketplace espera.
+/// Repeats the official Marketplace `install.sh`: release zip into
+/// `CustomApps/marketplace`, registers the custom app and, with no theme active, uses the
+/// "marketplace" theme the Marketplace itself expects.
 pub async fn install_marketplace(bin: &Path, config_dir: &Path) -> anyhow::Result<CmdOutput> {
     let client = github_client()?;
     let asset = latest_asset(&client, MARKETPLACE_REPO, |n| n == "marketplace.zip").await?;
@@ -640,7 +640,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn ini_le_listas_e_secoes() {
+    fn ini_reads_lists_and_sections() {
         let text = "[Setting]\ncurrent_theme = Dribbblish\ncolor_scheme = dark\n\n[AdditionalOptions]\nextensions = a.js|b.js\ncustom_apps = marketplace\n[Backup]\nversion = 1.2.3\n";
         let dir = std::env::temp_dir().join(format!("gumballz-get-spicetify-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
@@ -655,19 +655,19 @@ mod tests {
     }
 
     #[test]
-    fn ansi_e_removido() {
+    fn ansi_is_stripped() {
         assert_eq!(strip_ansi("\x1b[32msuccess\x1b[0m ok\r\n"), "success ok\n");
     }
 }
 
 #[cfg(test)]
 mod real_tests {
-    //! Roda de verdade contra o GitHub e o disco. Só com `--ignored`.
+    //! Really runs against GitHub and the disk. Only with `--ignored`.
     use super::*;
 
     #[tokio::test]
     #[ignore]
-    async fn le_status() {
+    async fn reads_status() {
         let st = status().await;
         println!("{}", serde_json::to_string_pretty(&st).unwrap());
     }

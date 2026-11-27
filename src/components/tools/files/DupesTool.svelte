@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Duplicados por hash (estudo 38): escolher pastas, revisar grupos, apagar cópias. */
+  /** Duplicates by hash (study 38): pick folders, review groups, delete copies. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";
@@ -54,7 +54,7 @@
     selected = s;
   }
 
-  /** Marca todas menos a mais antiga de cada grupo. */
+  /** Marks all but the oldest in each group. */
   function autoSelect() {
     const s = new Set<string>();
     for (const g of result?.groups ?? []) {

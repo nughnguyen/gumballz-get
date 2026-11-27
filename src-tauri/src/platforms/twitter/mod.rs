@@ -292,7 +292,7 @@ impl TwitterDownloader {
 
         if !response.status().is_success() {
             return Err(anyhow!(
-                "Falha ao obter guest token: HTTP {}",
+                "Failed to obtain guest token: HTTP {}",
                 response.status()
             ));
         }

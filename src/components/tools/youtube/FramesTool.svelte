@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Capa real do vídeo (estudo 42): os frames hq1/hq2/hq3 e todas as variantes de thumbnail do CDN. */
+  /** The video's real cover (study 42): the hq1/hq2/hq3 frames and every CDN thumbnail variant. */
   import { invoke } from "@tauri-apps/api/core";
   import { t } from "$lib/i18n";
   import { showToast } from "$lib/stores/toast-store.svelte";

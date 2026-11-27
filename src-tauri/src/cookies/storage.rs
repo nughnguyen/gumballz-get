@@ -124,8 +124,9 @@ fn safe_slug_segment(slug: &str) -> String {
 }
 
 pub fn load_registry_in(registry_path: &Path) -> CookieRegistry {
-    // Registro ilegível vai para quarentena antes de virar default: sem isso o
-    // `save_registry` seguinte apagaria todas as contas de cookie do usuário.
+    // An unreadable registry goes to quarantine before it becomes the default:
+    // without this, the next `save_registry` would wipe all of the user's cookie
+    // accounts.
     crate::core::state_file::load_or_quarantine(registry_path, "registro de cookies")
         .unwrap_or_default()
 }

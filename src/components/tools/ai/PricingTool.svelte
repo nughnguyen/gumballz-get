@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Comparar preços de modelos (estudos 14, 15): tabela do LiteLLM, por milhão de tokens. */
+  /** Compare model prices (studies 14, 15): LiteLLM table, per million tokens. */
   import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
   import { t } from "$lib/i18n";

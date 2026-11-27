@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Score offline de completude do perfil a partir do export oficial. */
+  /** Offline profile-completeness score from the official export. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

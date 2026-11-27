@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Download acelerado com aria2c (estudo 53). */
+  /** Accelerated download with aria2c (study 53). */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

@@ -1,4 +1,4 @@
-//! Ferramentas de texto da seção Tools.
+//! Text tools of the Tools section.
 
 use gumballz_core::core::tools::humanize;
 

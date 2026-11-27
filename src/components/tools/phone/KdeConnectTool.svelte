@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Enviar para o celular pelo KDE Connect (estudo 30). */
+  /** Send to the phone via KDE Connect (study 30). */
   import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
   import { t } from "$lib/i18n";

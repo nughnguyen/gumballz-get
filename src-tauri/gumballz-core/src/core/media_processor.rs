@@ -71,7 +71,7 @@ impl MediaProcessor {
             .await?;
 
         if !status.success() {
-            anyhow::bail!("FFmpeg remux falhou com status {}", status);
+            anyhow::bail!("FFmpeg remux failed with status {}", status);
         }
 
         Ok(())
@@ -88,7 +88,7 @@ impl MediaProcessor {
             .await?;
 
         if !status.success() {
-            anyhow::bail!("FFmpeg merge falhou com status {}", status);
+            anyhow::bail!("FFmpeg merge failed with status {}", status);
         }
 
         Ok(())
@@ -195,7 +195,7 @@ impl MediaProcessor {
         let _ = tokio::fs::remove_file(&list_path).await;
 
         if !status.success() {
-            anyhow::bail!("FFmpeg slideshow falhou com status {}", status);
+            anyhow::bail!("FFmpeg slideshow failed with status {}", status);
         }
 
         Ok(())
@@ -232,7 +232,7 @@ impl MediaProcessor {
             .await?;
 
         if !status.success() {
-            anyhow::bail!("FFmpeg download_direct falhou com status {}", status);
+            anyhow::bail!("FFmpeg download_direct failed with status {}", status);
         }
 
         Ok(())

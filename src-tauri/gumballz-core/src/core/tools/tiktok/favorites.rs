@@ -1,19 +1,18 @@
-//! `tt-favorites`: exportar os favoritos do usuário e a mídia do perfil dele.
+//! `tt-favorites`: export the user's favorites and their profile media.
 //!
-//! Duas fontes de listagem, porque o TikTok trata as duas de formas
-//! diferentes:
+//! Two listing sources, because TikTok treats the two differently:
 //!
-//! - **Perfil e coleção** são públicos e o yt-dlp já sabe listá-los. Uma só
-//!   chamada com `--flat-playlist -J` devolve id, autor, descrição, som, data
-//!   e contadores de todos os itens — dá o índice inteiro sem abrir um vídeo
-//!   de cada vez.
-//! - **Favoritos** (a aba do marcador) e **curtidos** são privados: só saem
-//!   com a sessão do usuário, pela API web (`/api/user/collect/item_list/` e
-//!   `/api/user/favorite/item_list/`), paginada por cursor. Sem sessão a tool
-//!   avisa e não tenta.
+//! - **Profile and collection** are public and yt-dlp already knows how to list them. One
+//!   call with `--flat-playlist -J` returns id, author, description, sound, date
+//!   and counters of all items — the whole index without opening one video
+//!   at a time.
+//! - **Favorites** (the bookmark tab) and **liked** are private: they only come out
+//!   with the user's session, via the web API (`/api/user/collect/item_list/` and
+//!   `/api/user/favorite/item_list/`), paginated by cursor. Without a session the tool
+//!   warns and does not try.
 //!
-//! A saída é sempre um índice (CSV, JSON ou os dois) e, opcionalmente, a
-//! mídia baixada — com o caminho local escrito de volta no índice.
+//! The output is always an index (CSV, JSON or both) and, optionally, the
+//! downloaded media — with the local path written back into the index.
 
 use std::path::PathBuf;
 
@@ -41,7 +40,7 @@ fn def_delay() -> u64 {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Options {
-    /// `@usuario` ou a URL do perfil. Para `collection`, a URL da coleção.
+    /// `@user` or the profile URL. For `collection`, the collection URL.
     pub user: String,
     /// "posts" | "collection" | "favorites" | "liked".
     #[serde(default = "def_source")]
@@ -50,10 +49,10 @@ pub struct Options {
     /// "csv" | "json" | "both".
     #[serde(default = "def_format")]
     pub index_format: String,
-    /// Teto de itens. 0 = sem teto.
+    /// Cap of items. 0 = no cap.
     #[serde(default = "def_limit")]
     pub limit: u32,
-    /// Baixar também a mídia de cada item.
+    /// Also download each item's media.
     #[serde(default)]
     pub download_media: bool,
     #[serde(default = "def_delay")]
@@ -66,7 +65,7 @@ pub struct Options {
     pub session_netscape: Option<String>,
 }
 
-/// Uma linha do índice.
+/// One row of the index.
 #[derive(Debug, Clone, Default, Serialize, PartialEq)]
 pub struct Entry {
     pub id: String,
@@ -84,7 +83,7 @@ pub struct Entry {
     pub comment_count: u64,
     pub view_count: u64,
     pub save_count: u64,
-    /// Preenchido quando a mídia foi baixada.
+    /// Filled in when the media was downloaded.
     pub local_path: String,
 }
 
@@ -114,7 +113,7 @@ fn u(v: &Value, key: &str) -> u64 {
     v.get(key).and_then(|x| x.as_u64()).unwrap_or(0)
 }
 
-/// Entradas do `--flat-playlist -J` do yt-dlp (perfil e coleção).
+/// Entries from yt-dlp's `--flat-playlist -J` (profile and collection).
 pub fn entries_from_list(v: &Value) -> Vec<Entry> {
     let Some(list) = v.get("entries").and_then(|x| x.as_array()) else {
         return Vec::new();
@@ -150,8 +149,8 @@ pub fn entries_from_list(v: &Value) -> Vec<Entry> {
             description: s(e, "description"),
             sound,
             sound_author,
-            // A listagem do yt-dlp não traz o id do som, então não há link
-            // honesto a inventar aqui.
+            // The yt-dlp listing does not bring the sound id, so there is no honest
+            // link to invent here.
             sound_url: String::new(),
             created: if ts > 0 { fmt_utc(ts) } else { String::new() },
             created_ts: ts,
@@ -167,8 +166,8 @@ pub fn entries_from_list(v: &Value) -> Vec<Entry> {
     out
 }
 
-/// Uma página da API web (`itemList`), usada nos favoritos e nos curtidos.
-/// Devolve as entradas, o cursor da próxima página e se ainda há mais.
+/// One page of the web API (`itemList`), used in favorites and liked.
+/// Returns the entries, the next page's cursor and whether there is more.
 pub fn entries_from_item_list(v: &Value) -> (Vec<Entry>, String, bool) {
     let cursor = match v.get("cursor") {
         Some(Value::String(c)) => c.clone(),
@@ -225,7 +224,7 @@ pub fn entries_from_item_list(v: &Value) -> (Vec<Entry>, String, bool) {
     (out, cursor, has_more)
 }
 
-/// O `secUid` do perfil, que é o que a API web pede no lugar do `@usuario`.
+/// The profile's `secUid`, which is what the web API asks for instead of `@user`.
 pub fn parse_sec_uid(html: &str) -> Option<String> {
     let key = "\"secUid\":\"";
     let at = html.find(key)? + key.len();
@@ -238,13 +237,13 @@ pub fn parse_sec_uid(html: &str) -> Option<String> {
     Some(id)
 }
 
-/// A URL da página da API. `None` quando a fonte não é privada.
+/// The API page's URL. `None` when the source is not private.
 pub fn item_list_url(source: &str, sec_uid: &str, cursor: &str, count: u32) -> Option<String> {
     let path = match source {
-        // A aba do marcador ("favoritos") é `collect` na API.
+        // The bookmark tab ("favorites") is `collect` in the API.
         "favorites" => "collect",
-        // A aba do coração ("curtidos") é `favorite` na API. Os nomes são
-        // trocados mesmo — é herança do app antigo.
+        // The heart tab ("liked") is `favorite` in the API. The names really are
+        // swapped — it is a legacy of the old app.
         "liked" => "favorite",
         _ => return None,
     };
@@ -327,12 +326,12 @@ async fn list_public(
     cookies: Option<&std::path::Path>,
 ) -> Result<Vec<Entry>> {
     let target = super::parse_target(input)
-        .ok_or_else(|| anyhow!("não reconheci esse perfil ou coleção: {}", input))?;
+        .ok_or_else(|| anyhow!("did not recognize this profile or collection: {}", input))?;
     let url = match (source, &target) {
         ("collection", super::Target::Collection { .. }) => super::canonical_url(&target),
         ("collection", _) => {
             return Err(anyhow!(
-                "cole a URL da coleção (…/@usuario/collection/nome-id)"
+                "paste the collection URL (…/@user/collection/name-id)"
             ))
         }
         _ => super::canonical_url(&super::Target::User {
@@ -355,20 +354,20 @@ async fn list_private(
         .filter(|c| !c.trim().is_empty())
         .ok_or_else(|| {
             anyhow!(
-                "os favoritos e os curtidos só saem com a sua sessão: capture os cookies do \
-                 tiktok.com pela extensão e escolha a conta aqui"
+                "favorites and liked videos only come with your session: capture the \
+                 tiktok.com cookies in the extension and pick the account here"
             )
         })?;
     let (client, _) = super::cookie_client(Some(session))?;
 
-    // O `secUid` vem da própria página do perfil, que só abre inteira para
-    // quem está logado.
+    // The `secUid` comes from the profile page itself, which only opens whole for
+    // whoever is logged in.
     pacer.wait().await;
     let profile = format!("https://www.tiktok.com/@{}", handle);
     let html = client.get(&profile).send().await?.text().await?;
     let sec_uid = parse_sec_uid(&html).ok_or_else(|| {
         anyhow!(
-            "não achei o secUid de @{} na página do perfil — a sessão pode ter expirado",
+            "could not find the secUid of @{} on the profile page — the session may have expired",
             handle
         )
     })?;
@@ -391,12 +390,12 @@ async fn list_private(
         let body = resp.text().await?;
         if body.trim().is_empty() {
             return Err(anyhow!(
-                "a API do TikTok devolveu resposta vazia — normalmente é a sessão expirada ou a \
-                 assinatura da requisição que o site passou a exigir"
+                "the TikTok API returned an empty response — usually the session expired or \
+                 the request signature the site started requiring"
             ));
         }
         let v: Value = serde_json::from_str(&body)
-            .map_err(|_| anyhow!("a resposta da API do TikTok não era JSON"))?;
+            .map_err(|_| anyhow!("the TikTok API response was not JSON"))?;
         let (page, next, has_more) = entries_from_item_list(&v);
         let vazio = page.is_empty();
         for e in page {
@@ -422,7 +421,7 @@ async fn list_private(
     }
     if out.is_empty() {
         return Err(anyhow!(
-            "a lista voltou vazia — o TikTok não entregou os favoritos para esta sessão"
+            "the list came back empty — TikTok did not deliver the favorites for this session"
         ));
     }
     Ok(out)
@@ -430,10 +429,10 @@ async fn list_private(
 
 pub async fn run(opts: &Options, progress: ProgressFn) -> Result<FavoritesResult> {
     if opts.user.trim().is_empty() {
-        return Err(anyhow!("informe o perfil (@usuario) ou a URL da coleção"));
+        return Err(anyhow!("tell me the profile (@user) or the collection URL"));
     }
     if opts.dest.trim().is_empty() {
-        return Err(anyhow!("escolha a pasta de destino"));
+        return Err(anyhow!("choose the destination folder"));
     }
     let dest = PathBuf::from(&opts.dest);
     std::fs::create_dir_all(&dest)?;
@@ -575,7 +574,7 @@ mod tests {
     fn le_a_listagem_do_ytdlp() {
         let v: Value = serde_json::from_str(LISTAGEM).unwrap_or(Value::Null);
         let e = entries_from_list(&v);
-        assert_eq!(e.len(), 2, "a entrada sem id não vira linha");
+        assert_eq!(e.len(), 2, "an entry without an id does not become a row");
         assert_eq!(e[0].id, "7683195368279985438");
         assert_eq!(e[0].author, "tiktok");
         assert_eq!(e[0].author_name, "TikTok");
@@ -587,12 +586,12 @@ mod tests {
             e[0].url,
             "https://www.tiktok.com/@tiktok/video/7683195368279985438"
         );
-        // Sem `url` na entrada, o link é montado a partir do autor e do id.
+        // Without a `url` in the entry, the link is built from the author and the id.
         assert_eq!(
             e[1].url,
             "https://www.tiktok.com/@tiktok/video/7681695065927912735"
         );
-        assert_eq!(e[1].sound_author, "Outro", "cai no campo `artist` singular");
+        assert_eq!(e[1].sound_author, "Outro", "falls back to the singular `artist` field");
         assert_eq!(e[1].created, "");
     }
 
@@ -650,7 +649,7 @@ mod tests {
             item_list_url("liked", "MS4wLjABAAAAv7iSuuXDJGDvJkmH", "123", 99).unwrap_or_default();
         assert!(l.contains("/api/user/favorite/item_list/"));
         assert!(l.contains("cursor=123"));
-        assert!(l.contains("count=30"), "o count é limitado a 30");
+        assert!(l.contains("count=30"), "count is capped at 30");
         assert_eq!(item_list_url("posts", "x", "0", 30), None);
         assert_eq!(item_list_url("favorites", "  ", "0", 30), None);
     }

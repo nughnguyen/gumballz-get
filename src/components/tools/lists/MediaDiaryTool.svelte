@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Diário único: junta os exports dos três serviços mais o do Spotify. */
+  /** Single diary: merges the exports of the three services plus Spotify's. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

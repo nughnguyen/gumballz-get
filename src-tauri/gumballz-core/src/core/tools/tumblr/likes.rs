@@ -1,9 +1,9 @@
-//! `tumblr-likes-index`: índice pesquisável dos Likes do usuário.
+//! `tumblr-likes-index`: searchable index of the user's Likes.
 //!
-//! O ponto da tool é separar o índice da mídia: um CSV/JSON com post, blog de
-//! origem, data, tipo, tags, URL do post e URLs de mídia, mais o caminho local
-//! do arquivo quando ele já foi baixado. Assim dá para procurar sem abrir a
-//! pasta de mídia.
+//! The point of the tool is to separate the index from the media: a CSV/JSON with post, source
+//! blog, date, type, tags, post URL and media URLs, plus the local
+//! path of the file when it was already downloaded. That way you can search without opening the
+//! media folder.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -18,21 +18,21 @@ pub const TOOL_ID: &str = "tumblr-likes-index";
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Options {
-    /// Nome do blog (`meublog`) ou a URL dos likes.
+    /// Blog name (`meublog`) or the likes URL.
     pub blog: String,
-    /// Onde gravar `likes.csv` / `likes.json`.
+    /// Where to write `likes.csv` / `likes.json`.
     pub out_dir: String,
-    /// Pasta de mídia já baixada, para casar arquivo com post.
+    /// Already-downloaded media folder, to match file to post.
     #[serde(default)]
     pub media_dir: Option<String>,
-    /// Máximo de itens (o gallery-dl corta com `--range`).
+    /// Maximum items (gallery-dl cuts with `--range`).
     #[serde(default)]
     pub limit: Option<u64>,
     #[serde(default = "yes")]
     pub write_csv: bool,
     #[serde(default = "yes")]
     pub write_json: bool,
-    /// Sessão da extensão em formato Netscape (os likes exigem login).
+    /// Extension session in Netscape format (likes require login).
     #[serde(default)]
     pub session_netscape: Option<String>,
     #[serde(default)]
@@ -46,7 +46,7 @@ fn yes() -> bool {
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct LikeRow {
     pub post_id: String,
-    /// Blog de origem do post (quem publicou), não quem curtiu.
+    /// Source blog of the post (who published it), not who liked it.
     pub blog: String,
     pub date: String,
     /// photo · text · video · audio · link · quote · chat · answer
@@ -68,11 +68,11 @@ pub struct LikesResult {
     pub csv_path: Option<String>,
     pub json_path: Option<String>,
     pub out_dir: String,
-    /// Primeiras linhas, só para a UI mostrar sem ler o arquivo.
+    /// First rows, just for the UI to show without reading the file.
     pub sample: Vec<LikeRow>,
 }
 
-/// `meublog` → URL dos likes. URL completa passa direto.
+/// `meublog` → likes URL. A full URL passes through directly.
 pub fn likes_url(input: &str) -> String {
     let s = input.trim().trim_end_matches('/');
     if s.is_empty() {
@@ -95,8 +95,8 @@ pub fn likes_url(input: &str) -> String {
 
 // ───────────────────── índice da pasta de mídia ─────────────────────
 
-/// Mapa da pasta local: nome de arquivo e id de post (lido dos `.json` que o
-/// `--write-metadata` grava ao lado de cada arquivo).
+/// Map of the local folder: file name and post id (read from the `.json` that
+/// `--write-metadata` writes next to each file).
 #[derive(Debug, Clone, Default)]
 pub struct LocalIndex {
     by_name: HashMap<String, Vec<String>>,
@@ -130,7 +130,7 @@ impl LocalIndex {
         self.by_name.is_empty() && self.by_post.is_empty()
     }
 
-    /// Arquivo local de uma URL de mídia, casando pelo nome do arquivo.
+    /// Local file of a media URL, matching by file name.
     pub fn file_for_url(&self, url: &str) -> Option<String> {
         let name = base_name(url).to_lowercase();
         if name.is_empty() {
@@ -139,8 +139,8 @@ impl LocalIndex {
         self.by_name.get(&name).and_then(|v| v.first().cloned())
     }
 
-    /// Arquivos locais de um post: primeiro pelo id (sidecar), senão pelo
-    /// nome do arquivo da URL de mídia.
+    /// Local files of a post: first by id (sidecar), otherwise by
+    /// the media URL's file name.
     pub fn files_for(&self, post_id: &str, media: &[String]) -> Vec<String> {
         if let Some(found) = self.by_post.get(post_id) {
             let mut out = found.clone();
@@ -161,7 +161,7 @@ impl LocalIndex {
     }
 }
 
-/// Último segmento de um caminho ou URL, sem query string.
+/// Last segment of a path or URL, without a query string.
 pub fn base_name(path: &str) -> String {
     let no_query = path.split(['?', '#']).next().unwrap_or(path);
     no_query
@@ -171,8 +171,8 @@ pub fn base_name(path: &str) -> String {
         .to_string()
 }
 
-/// Varre a pasta de mídia. Os `.json` do `--write-metadata` viram casamento
-/// por id de post; os demais arquivos, casamento por nome.
+/// Scans the media folder. The `.json` from `--write-metadata` become matches
+/// by post id; the other files, matches by name.
 pub fn index_dir(dir: &Path) -> LocalIndex {
     let mut index = LocalIndex::new();
     let mut stack = vec![dir.to_path_buf()];
@@ -222,8 +222,8 @@ fn post_id_of_sidecar(path: &Path) -> Option<String> {
 
 // ───────────────────── montagem do índice ─────────────────────
 
-/// Agrupa as mensagens do dump por post: um post de fotos vira uma linha só,
-/// com todas as URLs de mídia juntas.
+/// Groups the dump messages by post: a photo post becomes a single row,
+/// with all its media URLs together.
 pub fn rows_from_dump(entries: &[Entry]) -> Vec<LikeRow> {
     let mut order: Vec<String> = Vec::new();
     let mut rows: HashMap<String, LikeRow> = HashMap::new();
@@ -264,7 +264,7 @@ pub fn rows_from_dump(entries: &[Entry]) -> Vec<LikeRow> {
         .collect::<Vec<_>>()
 }
 
-/// Preenche `local_files` e devolve quantas linhas casaram.
+/// Fills `local_files` and returns how many rows matched.
 pub fn match_local(rows: &mut [LikeRow], index: &LocalIndex) -> u64 {
     let mut hits = 0u64;
     for row in rows.iter_mut() {
@@ -313,7 +313,7 @@ pub fn csv(rows: &[LikeRow]) -> String {
 pub async fn run(opts: &Options, progress: &super::super::ProgressFn) -> Result<LikesResult> {
     let url = likes_url(&opts.blog);
     if url.is_empty() {
-        anyhow::bail!("informe o blog dos likes");
+        anyhow::bail!("tell us the likes blog");
     }
     let cookies = match opts.session_netscape.as_deref() {
         Some(s) => gdl::write_cookies(s, &["tumblr.com"])?,
@@ -341,7 +341,7 @@ pub async fn run(opts: &Options, progress: &super::super::ProgressFn) -> Result<
     let mut rows = rows_from_dump(&entries);
     if rows.is_empty() {
         anyhow::bail!(
-            "nenhum like foi lido: os likes só aparecem com a sessão do Tumblr e com a lista pública ligada"
+            "no likes were read: likes only appear with the Tumblr session and the public list on"
         );
     }
     let media: u64 = rows.iter().map(|r| r.media_urls.len() as u64).sum();
@@ -410,14 +410,14 @@ mod tests {
     ]"#;
 
     fn rows() -> Vec<LikeRow> {
-        let entries = gdl::parse_dump(DUMP).expect("dump válido");
+        let entries = gdl::parse_dump(DUMP).expect("valid dump");
         rows_from_dump(&entries)
     }
 
     #[test]
     fn um_post_de_varias_fotos_vira_uma_linha_so() {
         let rows = rows();
-        assert_eq!(rows.len(), 2, "dois posts, não três arquivos");
+        assert_eq!(rows.len(), 2, "two posts, not three files");
         assert_eq!(rows[0].post_id, "700111222");
         assert_eq!(rows[0].media_urls.len(), 2);
         assert_eq!(rows[0].blog, "estudio");
@@ -443,7 +443,7 @@ mod tests {
         assert!(lines[1].contains("https://64.media.tumblr.com/aa/foto_1280.jpg | "));
         assert!(
             lines[2].contains("\"cena, com vírgula\""),
-            "vírgula no resumo tem que sair entre aspas: {}",
+            "comma in the summary must come out quoted: {}",
             lines[2]
         );
     }
@@ -497,7 +497,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "rede: exige gallery-dl instalado e sessão do Tumblr com likes públicos"]
+    #[ignore = "network: requires gallery-dl installed and a Tumblr session with public likes"]
     fn likes_reais_de_um_blog_com_sessao() {
         let opts = Options {
             blog: "staff".into(),

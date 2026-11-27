@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Traduzir legendas em lote: IA configurada ou servidor LibreTranslate (estudos 08, 12). */
+  /** Translate subtitles in bulk: configured AI or a LibreTranslate server (studies 08, 12). */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

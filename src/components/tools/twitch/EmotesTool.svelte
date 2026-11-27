@@ -18,9 +18,9 @@
 
 <script lang="ts">
   /**
-   * Emotes da Twitch: baixa em lote os emotes e badges nativos do canal e os
-   * de BTTV, FFZ e 7TV. Tudo público, sem login. Sai uma pasta por provedor,
-   * um index.json e um contact-sheet HTML para olhar tudo de uma vez.
+   * Twitch emotes: bulk-downloads the channel's native emotes and badges and the
+   * BTTV, FFZ and 7TV ones. All public, no login. Out comes one folder per provider,
+   * an index.json and an HTML contact sheet to see everything at once.
    */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";

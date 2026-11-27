@@ -1,5 +1,5 @@
-//! Raio-X de perfil (estudo 67): o que Black Magic / Tweet Hunter mostram,
-//! calculado a partir dos ultimos N posts publicos (FxTwitter).
+//! Profile X-ray (study 67): what Black Magic / Tweet Hunter show,
+//! computed from the last N public posts (FxTwitter).
 
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
@@ -38,7 +38,7 @@ pub struct ProfileReport {
     pub repost_share: f64,
     pub media_share: f64,
     pub link_share: f64,
-    /// Hora local (0–23).
+    /// Local time (0–23).
     pub by_hour: Vec<Slot>,
     /// 0 = domingo.
     pub by_weekday: Vec<Slot>,
@@ -56,7 +56,7 @@ pub async fn analyze(
     with_replies: bool,
 ) -> anyhow::Result<ProfileReport> {
     let handle = super::handle_from(input)
-        .ok_or_else(|| anyhow!("nao reconheci um perfil do X em: {}", input))?;
+        .ok_or_else(|| anyhow!("did not recognise an X profile in: {}", input))?;
     let user = super::fx::profile(&handle).await?;
     let mut posts: Vec<XPost> = Vec::new();
     let mut cursor: Option<String> = None;

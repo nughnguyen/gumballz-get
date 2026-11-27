@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Google Docs/Slides/Sheets públicos + Extractor y compilador vectorial 16:9 de Google Slides. */
+  /** Public Google Docs/Slides/Sheets + 16:9 vector extractor and compiler for Google Slides. */
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
   import { onDestroy, onMount } from "svelte";

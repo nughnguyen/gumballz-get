@@ -1,4 +1,4 @@
-//! Comandos da ferramenta "Spotify → Spicetify" da seção Tools.
+//! Commands for the "Spotify → Spicetify" tool in the Tools section.
 
 use gumballz_core::core::spicetify::{self, CmdOutput, SpicetifyStatus};
 
@@ -10,7 +10,7 @@ async fn bin() -> Result<std::path::PathBuf, String> {
     spicetify::locate()
         .await
         .map(|(p, _)| p)
-        .ok_or_else(|| "spicetify nao esta instalado".to_string())
+        .ok_or_else(|| "spicetify is not installed".to_string())
 }
 
 #[tauri::command]
@@ -26,8 +26,8 @@ pub async fn spicetify_install() -> Result<String, String> {
         .map_err(err)
 }
 
-/// Ações de um clique. A lista é fechada de propósito: o front não manda
-/// argumentos livres para um binário que patcha outro app.
+/// One-click actions. The list is closed on purpose: the frontend does not send
+/// free-form arguments to a binary that patches another app.
 #[tauri::command]
 pub async fn spicetify_action(action: String) -> Result<CmdOutput, String> {
     let args: &[&str] = match action.as_str() {
@@ -41,7 +41,7 @@ pub async fn spicetify_action(action: String) -> Result<CmdOutput, String> {
         "open_config_dir" => &["config-dir"],
         "block_updates" => &["spotify-updates", "block"],
         "unblock_updates" => &["spotify-updates", "unblock"],
-        other => return Err(format!("acao desconhecida: {}", other)),
+        other => return Err(format!("unknown action: {}", other)),
     };
     let bin = bin().await?;
     spicetify::run_ok(&bin, args).await.map_err(err)
@@ -53,7 +53,7 @@ pub async fn spicetify_set_theme(theme: String, scheme: String) -> Result<CmdOut
     let theme = theme.trim();
     let scheme = scheme.trim();
     if theme.contains(['/', '\\', '|']) || scheme.contains(['/', '\\', '|']) {
-        return Err("nome de tema invalido".into());
+        return Err("invalid theme name".into());
     }
     spicetify::run_ok(
         &bin,
@@ -70,14 +70,14 @@ pub async fn spicetify_set_theme(theme: String, scheme: String) -> Result<CmdOut
     spicetify::run_ok(&bin, args).await.map_err(err)
 }
 
-/// Remove uma extensão ou custom app da config (`nome-` no CLI) e reaplica.
+/// Removes an extension or custom app from the config (`name-` in the CLI) and reapplies.
 #[tauri::command]
 pub async fn spicetify_remove_addon(kind: String, name: String) -> Result<CmdOutput, String> {
     let bin = bin().await?;
     let field = match kind.as_str() {
         "extension" => "extensions",
         "custom_app" => "custom_apps",
-        _ => return Err("tipo invalido".into()),
+        _ => return Err("invalid type".into()),
     };
     let name = name.trim();
     if name.is_empty() || name.contains(['/', '\\', '|']) {
@@ -96,7 +96,7 @@ pub async fn spicetify_install_marketplace() -> Result<CmdOutput, String> {
     let status = spicetify::status().await;
     let config_dir = status
         .config_dir
-        .ok_or_else(|| "pasta de config do spicetify nao encontrada".to_string())?;
+        .ok_or_else(|| "spicetify config folder not found".to_string())?;
     spicetify::install_marketplace(&bin, std::path::Path::new(&config_dir))
         .await
         .map_err(err)

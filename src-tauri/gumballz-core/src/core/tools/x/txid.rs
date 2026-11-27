@@ -1,10 +1,10 @@
-//! `x-client-transaction-id` (estudo 67). Porte do `xclid.py` do twscrape
-//! (MIT), que por sua vez veio do XClientTransaction de @iSarabjitDhiman
-//! (MIT). O X assina cada chamada com um hash que mistura a chave de
-//! verificacao da pagina, um frame de uma animacao SVG escolhido por indices
-//! escondidos num chunk JS (`ondemand.s` / `sign.o`), o metodo, o caminho e
-//! o tempo. Sem o header a maioria das operacoes ainda responde; quando o X
-//! exige, sem ele vem 404. Se qualquer etapa falhar, o cliente segue sem.
+//! `x-client-transaction-id` (study 67). Port of twscrape's `xclid.py`
+//! (MIT), which in turn came from @iSarabjitDhiman's XClientTransaction
+//! (MIT). X signs every call with a hash that mixes the page's
+//! verification key, a frame of an SVG animation chosen by indices
+//! hidden in a JS chunk (`ondemand.s` / `sign.o`), the method, the path and
+//! the time. Without the header most operations still answer; when X
+//! requires it, without it comes a 404. If any step fails, the client carries on without it.
 
 use base64::Engine;
 use sha2::{Digest, Sha256};
@@ -202,7 +202,7 @@ fn verification_bytes(html: &str) -> anyhow::Result<Vec<u8>> {
         .captures(html)
         .or_else(|| re2.captures(html))
         .map(|c| c[1].to_string())
-        .ok_or_else(|| anyhow::anyhow!("chave de verificacao do X nao encontrada"))?;
+        .ok_or_else(|| anyhow::anyhow!("X verification key not found"))?;
     Ok(base64::engine::general_purpose::STANDARD.decode(content.as_bytes())?)
 }
 
@@ -227,7 +227,7 @@ fn anim_frames(html: &str, vk: &[u8]) -> anyhow::Result<Vec<Vec<f64>>> {
         }
     }
     if ds.is_empty() {
-        anyhow::bail!("animacao do X nao encontrada na pagina");
+        anyhow::bail!("X animation not found on the page");
     }
     let idx = (vk.get(5).copied().unwrap_or(0) as usize) % ds.len();
     let d = &ds[idx];
@@ -289,7 +289,7 @@ async fn indices(
         .cloned()
         .collect();
     if x_web.iter().any(|u| u.contains("entry-client-logged-out")) {
-        anyhow::bail!("o X serviu a versao deslogada da pagina");
+        anyhow::bail!("X served the logged-out version of the page");
     }
     let pool = if x_web.is_empty() {
         scripts.clone()
@@ -317,7 +317,7 @@ async fn indices(
             }
         }
     }
-    let url = url.ok_or_else(|| anyhow::anyhow!("chunk de assinatura do X nao encontrado"))?;
+    let url = url.ok_or_else(|| anyhow::anyhow!("X signing chunk not found"))?;
     let text = page_text(http, &url, cookie).await?;
     let re_idx = regex::Regex::new(r"\(\w\[(\d{1,2})\],\s*16\)").unwrap();
     let items: Vec<usize> = re_idx
@@ -325,14 +325,14 @@ async fn indices(
         .filter_map(|c| c[1].parse().ok())
         .collect();
     if items.is_empty() {
-        anyhow::bail!("indices de assinatura nao encontrados");
+        anyhow::bail!("signing indices not found");
     }
     Ok(items)
 }
 
 impl TxIdGen {
-    /// Precisa da sessao logada: o X so entrega a pagina com os indices para
-    /// quem esta autenticado.
+    /// Needs a logged-in session: X only serves the page with the indices to
+    /// users who are authenticated.
     pub async fn create(http: &reqwest::Client, cookie: Option<&str>) -> anyhow::Result<Self> {
         let html = page_text(http, "https://x.com/tesla", cookie).await?;
         let vk = verification_bytes(&html)?;

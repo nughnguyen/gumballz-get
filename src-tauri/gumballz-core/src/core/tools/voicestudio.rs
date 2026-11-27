@@ -1,9 +1,9 @@
-//! Ponte com o VoiceStudio (lote 2, AGPL-3 → só a API HTTP, nada copiado):
-//! o app dele sobe um backend FastAPI em `http://localhost:3900`, sem
-//! autenticação para loopback. Daqui saem clonagem de voz (`POST /profiles`
-//! kind=clone + `POST /generate`), design de voz (`POST /design/describe` →
-//! instruct → `/generate`) e isolamento vocal (`POST /clean-audio`, Demucs).
-//! Sem o VoiceStudio instalado, a tela oferece o download do release.
+//! Bridge to VoiceStudio (batch 2, AGPL-3 → only the HTTP API, nothing copied):
+//! his app brings up a FastAPI backend at `http://localhost:3900`, with no
+//! authentication for loopback. From here come voice cloning (`POST /profiles`
+//! kind=clone + `POST /generate`), voice design (`POST /design/describe` →
+//! instruct → `/generate`) and vocal isolation (`POST /clean-audio`, Demucs).
+//! Without VoiceStudio installed, the screen offers the release download.
 
 use std::path::{Path, PathBuf};
 
@@ -173,9 +173,9 @@ pub async fn profiles(base_url: &str) -> anyhow::Result<Vec<Profile>> {
         .collect())
 }
 
-/// Abre o app do VoiceStudio (que sobe o backend).
+/// Opens the VoiceStudio app (which brings up the backend).
 pub async fn launch() -> anyhow::Result<()> {
-    let app = find_app().ok_or_else(|| anyhow!("VoiceStudio nao encontrado"))?;
+    let app = find_app().ok_or_else(|| anyhow!("VoiceStudio not found"))?;
     if cfg!(target_os = "macos") {
         crate::core::process::command("open")
             .arg(&app)
@@ -199,7 +199,7 @@ async fn wav_from(resp: reqwest::Response, output: &Path) -> anyhow::Result<Path
     }
     let bytes = resp.bytes().await?;
     if bytes.len() < 100 {
-        return Err(anyhow!("resposta vazia"));
+        return Err(anyhow!("empty response"));
     }
     if let Some(parent) = output.parent() {
         std::fs::create_dir_all(parent)?;
@@ -228,16 +228,16 @@ fn out_path(output_dir: &str, name: &str) -> PathBuf {
 pub struct CloneOptions {
     #[serde(default)]
     pub base_url: String,
-    /// amostra de 3 a 15 s (qualquer formato que o backend aceite)
+    /// sample of 3 to 15 s (any format the backend accepts)
     #[serde(default)]
     pub sample: String,
-    /// o que a amostra diz (opcional, melhora a clonagem)
+    /// what the sample says (optional, improves cloning)
     #[serde(default)]
     pub sample_text: String,
-    /// usar um perfil já salvo em vez da amostra
+    /// use an already-saved profile instead of the sample
     #[serde(default)]
     pub profile_id: String,
-    /// salvar a amostra como perfil com este nome
+    /// save the sample as a profile with this name
     #[serde(default)]
     pub save_as: String,
     pub text: String,
@@ -260,7 +260,7 @@ pub struct SpeechResult {
     pub seconds: Option<f64>,
 }
 
-/// Clona a voz da amostra (ou usa o perfil) e fala o texto.
+/// Clones the voice from the sample (or uses the profile) and speaks the text.
 pub async fn clone_speak(
     opts: CloneOptions,
     progress: super::ProgressFn,
@@ -308,7 +308,7 @@ pub async fn clone_speak(
             .send()
             .await?
             .error_for_status()
-            .map_err(|e| anyhow!("criar perfil: {}", e))?
+            .map_err(|e| anyhow!("create profile: {}", e))?
             .json()
             .await?;
         profile_id = j
@@ -364,7 +364,7 @@ pub async fn clone_speak(
 pub struct DesignOptions {
     #[serde(default)]
     pub base_url: String,
-    /// "mulher idosa, voz grave, sotaque britânico, calma"
+    /// "elderly woman, deep voice, British accent, calm"
     pub description: String,
     pub text: String,
     #[serde(default)]
@@ -384,7 +384,7 @@ pub struct DesignResult {
     pub profile_id: Option<String>,
 }
 
-/// Descrição em texto → atributos → voz nova falando o texto.
+/// Text description → attributes → a new voice speaking the text.
 pub async fn design_speak(
     opts: DesignOptions,
     progress: super::ProgressFn,
@@ -478,8 +478,8 @@ pub async fn design_speak(
     })
 }
 
-/// Demucs no VoiceStudio: devolve só a voz. O instrumental é a diferença,
-/// feita aqui com o FFmpeg (voz invertida somada ao original).
+/// Demucs in VoiceStudio: returns only the voice. The instrumental is the difference,
+/// done here with FFmpeg (inverted voice added to the original).
 pub async fn isolate(
     base_url: &str,
     input: &str,

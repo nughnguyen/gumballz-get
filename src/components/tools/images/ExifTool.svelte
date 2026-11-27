@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Ver e limpar EXIF/GPS. A limpeza reescreve o contêiner, sem reencodar. */
+  /** View and strip EXIF/GPS. Stripping rewrites the container without re-encoding. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

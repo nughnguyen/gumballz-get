@@ -1,7 +1,7 @@
-//! Download de mídia de um pin: original com cadeia de fallback (o CDN às
-//! vezes dá 403 numa extensão e 200 em outra), GIF, carrossel, story pin,
-//! vídeo (MP4 direto ou HLS → MP4 pelo ffmpeg) e WebP → PNG para quem não
-//! consegue abrir WebP (iOS). Arquivo de já-baixados para sincronizar.
+//! Downloading a pin's media: original with a fallback chain (the CDN sometimes
+//! gives 403 on one extension and 200 on another), GIF, carousel, story pin,
+//! video (direct MP4 or HLS → MP4 via ffmpeg) and WebP → PNG for those who cannot
+//! open WebP (iOS). Already-downloaded file for syncing.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -14,25 +14,25 @@ use super::api::{Pin, PinClient, Video};
 #[derive(Debug, Clone, Deserialize)]
 pub struct DownloadOptions {
     pub dest: String,
-    /// baixar imagens
+    /// download images
     #[serde(default = "t")]
     pub images: bool,
-    /// baixar vídeos
+    /// download videos
     #[serde(default = "t")]
     pub videos: bool,
-    /// converter WebP para PNG
+    /// convert WebP to PNG
     #[serde(default)]
     pub convert_webp: bool,
     /// "id" | "title" | "title-id"
     #[serde(default = "default_naming")]
     pub naming: String,
-    /// gravar `<arquivo>.json` ao lado
+    /// write `<file>.json` beside it
     #[serde(default)]
     pub sidecar: bool,
-    /// pular pins já registrados em `.gumballz-get-pinterest.txt` na pasta
+    /// skip pins already recorded in `.gumballz-get-pinterest.txt` in the folder
     #[serde(default = "t")]
     pub skip_downloaded: bool,
-    /// subpasta por seção (backup de board)
+    /// subfolder per section (board backup)
     #[serde(default = "t")]
     pub section_folders: bool,
 }
@@ -76,7 +76,7 @@ pub fn append_archive(dest: &Path, id: &str) {
     }
 }
 
-/// Extensão pelo conteúdo (o CDN pode dizer .jpg e entregar WebP).
+/// Extension by content (the CDN may say .jpg and deliver WebP).
 pub fn sniff_ext(bytes: &[u8]) -> Option<&'static str> {
     if bytes.len() < 12 {
         return None;
@@ -98,7 +98,7 @@ pub fn sniff_ext(bytes: &[u8]) -> Option<&'static str> {
     }
 }
 
-/// Candidatos em ordem: a URL dada, `/originals/` nas outras extensões, 1200x, 736x.
+/// Candidates in order: the given URL, `/originals/` in the other extensions, 1200x, 736x.
 pub fn candidates(url: &str) -> Vec<String> {
     let re = regex::Regex::new(r"^(https?://i\.pinimg\.com)/(?:\d+x\d*|originals)(/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{32})\.([a-zA-Z0-9]+)$").unwrap();
     let mut out = vec![url.to_string()];
@@ -122,7 +122,7 @@ pub fn candidates(url: &str) -> Vec<String> {
     out
 }
 
-/// Baixa a melhor versão disponível de uma imagem do CDN.
+/// Downloads the best available version of an image from the CDN.
 pub async fn fetch_image(client: &PinClient, url: &str) -> anyhow::Result<(Vec<u8>, &'static str)> {
     let mut last = String::new();
     for cand in candidates(url) {
@@ -151,7 +151,7 @@ pub async fn fetch_image(client: &PinClient, url: &str) -> anyhow::Result<(Vec<u
             .to_string();
         let bytes = resp.bytes().await?.to_vec();
         if bytes.len() < 64 {
-            last = format!("resposta vazia em {}", cand);
+            last = format!("empty response at {}", cand);
             continue;
         }
         let ext = sniff_ext(&bytes).unwrap_or(if ct.contains("png") {
@@ -168,7 +168,7 @@ pub async fn fetch_image(client: &PinClient, url: &str) -> anyhow::Result<(Vec<u
         }
         return Ok((bytes, ext));
     }
-    Err(anyhow!("nao consegui baixar a imagem ({})", last))
+    Err(anyhow!("could not download the image ({})", last))
 }
 
 fn webp_to_png(bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
@@ -203,7 +203,7 @@ async fn write_bytes(path: &Path, bytes: &[u8]) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Vídeo: MP4 direto quando existe, senão HLS remuxado pelo ffmpeg.
+/// Video: direct MP4 when it exists, otherwise HLS remuxed by ffmpeg.
 pub async fn download_video(client: &PinClient, video: &Video, out: &Path) -> anyhow::Result<()> {
     if let Some(p) = out.parent() {
         std::fs::create_dir_all(p)?;
@@ -255,14 +255,14 @@ pub async fn download_video(client: &PinClient, video: &Video, out: &Path) -> an
     if !o.status.success() {
         let err = String::from_utf8_lossy(&o.stderr);
         return Err(anyhow!(
-            "ffmpeg nao converteu o video: {}",
+            "ffmpeg did not convert the video: {}",
             err.lines().last().unwrap_or("").trim()
         ));
     }
     Ok(())
 }
 
-/// Baixa tudo de um pin para `dir`. Devolve os caminhos gravados.
+/// Downloads everything from a pin into `dir`. Returns the written paths.
 pub async fn download_pin(
     client: &PinClient,
     pin: &Pin,
@@ -334,7 +334,7 @@ pub async fn download_pin(
         write_bytes(&path, serde_json::to_string_pretty(pin)?.as_bytes()).await?;
     }
     if files.is_empty() {
-        return Err(anyhow!("esse pin nao tem midia baixavel"));
+        return Err(anyhow!("this pin has no downloadable media"));
     }
     Ok(files)
 }

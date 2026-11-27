@@ -65,8 +65,8 @@ pub async fn tool_file_search(
     .map_err(err)
 }
 
-// ── Manter acordado (estudo 29, PowerToys Awake) ──
-// Guard próprio, independente da opção "impedir suspensão durante downloads".
+// ── Keep awake (study 29, PowerToys Awake) ──
+// Own guard, independent of the "prevent suspension during downloads" option.
 static AWAKE: OnceLock<Mutex<Option<keepawake::KeepAwake>>> = OnceLock::new();
 
 #[tauri::command]
@@ -98,7 +98,7 @@ pub fn tool_awake_get() -> bool {
         .unwrap_or(false)
 }
 
-// ── Apagar com sobrescrita (sys-shred) ─────────────────────────────────
+// ── Delete with overwrite (sys-shred) ─────────────────────────────────
 
 #[tauri::command]
 pub async fn tool_shred(

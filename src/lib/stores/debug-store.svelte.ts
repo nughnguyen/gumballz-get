@@ -120,10 +120,10 @@ export async function exportDiagnostics(): Promise<string> {
     }
   }
 
-  // B33: a caixa-preta do backend. Guarda as ultimas linhas de log de download
-  // ja redigidas (sem token, cookie ou caminho com nome de usuario), que e
-  // justamente o que falta quando alguem diz "parou de funcionar" e o log da
-  // interface so tem o resultado final.
+  // B33: the backend black box. Keeps the last download log lines,
+  // already redacted (no token, cookie or path with a username), which is
+  // exactly what's missing when someone says "it stopped working" and the
+  // interface log only has the final result.
   try {
     const flight = await invoke<string[]>("flight_recorder_dump");
     if (flight.length > 0) {

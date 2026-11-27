@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Corta o tempo morto da gravação, imagem e som na mesma marca. */
+  /** Cuts the dead air from the recording, picture and sound at the same mark. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

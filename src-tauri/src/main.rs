@@ -115,12 +115,13 @@ fn setup_environment() {
     }
 }
 
-/// Usa um WebView2 Fixed Version Runtime descompactado ao lado do executavel.
+/// Uses an unpacked WebView2 Fixed Version Runtime next to the executable.
 ///
-/// Issue #218. O Tauri so define `WEBVIEW2_BROWSER_EXECUTABLE_FOLDER` quando o
-/// bundle e compilado em modo `fixedRuntime` (`app.rs`), e nunca a limpa — entao
-/// definir aqui funciona, ao contrario do `WEBVIEW2_USER_DATA_FOLDER`, que o
-/// Tauri sobrescrevia (ver `core/portable.rs`). Nao mexe se o usuario ja definiu.
+/// Issue #218. Tauri only sets `WEBVIEW2_BROWSER_EXECUTABLE_FOLDER` when the
+/// bundle is compiled in `fixedRuntime` mode (`app.rs`), and never clears it — so
+/// setting it here works, unlike `WEBVIEW2_USER_DATA_FOLDER`, which Tauri
+/// would overwrite (see `core/portable.rs`). Does not touch it if the user
+/// already set it.
 #[cfg(windows)]
 fn check_fixed_webview_runtime() {
     if std::env::var_os("WEBVIEW2_BROWSER_EXECUTABLE_FOLDER").is_some() {
@@ -137,48 +138,48 @@ fn check_fixed_webview_runtime() {
     }
 }
 
-/// Loi khoi dong KHONG DUOC chet lang nua (issue v1.0.0: mo exe setup xong
-/// khong thay cua so, khong thay icon tray, khong co bao loi nao).
+/// Startup errors must NOT die silently anymore (issue v1.0.0: opened the setup
+/// exe and saw no window, no tray icon, no error message).
 ///
-/// Nguyen nhan: `run()` dung `.expect("error while building tauri
-/// application")` — neu tao cua so that bai (vd: may chua co WebView2
-/// Runtime) thi app panic. Vi `windows_subsystem = "windows"` nen khong co
-/// console de hien loi, tien trinh bien mat trong im lang.
+/// Cause: `run()` uses `.expect("error while building tauri
+/// application")` — if window creation fails (e.g. machine has no WebView2
+/// Runtime) the app panics. Since `windows_subsystem = "windows"` there is no
+/// console to show the error, the process vanishes silently.
 ///
-/// Hook nay, chi tren Windows: ghi chi tiet loi vao
-/// `%TEMP%\gumballz-get-startup-error.txt` roi hien hop thoai tieng Viet cho
-/// nguoi dung biet ly do + cach sua, thay vi tat ngam.
+/// This hook, Windows only: writes the error details to
+/// `%TEMP%\gumballz-get-startup-error.txt` then shows an English dialog so the
+/// user knows the reason + how to fix it, instead of quitting silently.
 #[cfg(windows)]
 fn install_startup_panic_hook() {
     std::panic::set_hook(Box::new(|info| {
         let message = info
             .payload_as_str()
-            .unwrap_or("lỗi không xác định")
+            .unwrap_or("unknown error")
             .to_string();
         let detail = match info.location() {
             Some(loc) => format!("{message} ({}:{}:{})", loc.file(), loc.line(), loc.column()),
             None => message.clone(),
         };
 
-        // Ghi log truoc: neu hop thoai bi tat mat thi van con file de xem.
+        // Log first: if the dialog gets dismissed, the file is still there to look at.
         let log_path = std::env::temp_dir().join("gumballz-get-startup-error.txt");
         let _ = std::fs::write(&log_path, &detail);
 
-        // Chi hien hop thoai khi panic o main thread (khoi dong app). Panic
-        // o thread phu (vd: thread kiem tra khoi dong) thi chi ghi log, de
-        // khoi lam phien nguoi dung trong khi app van chay binh thuong.
+        // Only show the dialog when the panic is on the main thread (app startup). A
+        // panic on a worker thread (e.g. the startup-check thread) only writes the log,
+        // so as not to bother the user while the app still runs fine.
         if std::thread::current().name() != Some("main") {
             return;
         }
 
         let hint = if detail.contains("WebView2") {
-            "Máy này chưa có WebView2 Runtime nên app không mở được cửa sổ. \
-             Hãy cài Microsoft Edge WebView2 Runtime rồi mở lại app."
+            "This machine has no WebView2 Runtime, so the app could not open a window. \
+             Install Microsoft Edge WebView2 Runtime and reopen the app."
         } else {
-            "Hãy gửi file lỗi bên dưới cho GumballZ để được hỗ trợ."
+            "Send the error file below to GumballZ for support."
         };
         let text = format!(
-            "GumballZ Get gặp lỗi khi khởi động nên không mở được.\n\n{hint}\n\nChi tiết lỗi:\n{detail}\n\nFile lỗi: {}",
+            "GumballZ Get hit an error while starting and could not open.\n\n{hint}\n\nError details:\n{detail}\n\nError file: {}",
             log_path.display()
         );
         show_error_dialog(&text);
@@ -194,7 +195,7 @@ fn show_error_dialog(text: &str) {
     fn to_wide(value: &str) -> Vec<u16> {
         value.encode_utf16().chain(std::iter::once(0)).collect()
     }
-    let title = to_wide("GumballZ Get không mở được");
+    let title = to_wide("GumballZ Get could not open");
     let body = to_wide(text);
     unsafe {
         MessageBoxW(

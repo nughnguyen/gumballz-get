@@ -1,15 +1,15 @@
-//! Goodreads — o "Export Library" oficial, automatizado.
+//! Goodreads — the official "Export Library", automated.
 //!
-//! A API pública do Goodreads foi desligada em 2020 e não voltou. O que
-//! sobrou é o botão "Export Library" em `/review/import`: ele manda gerar um
-//! CSV e a própria página avisa, quando o arquivo fica pronto, com um link
-//! do tipo `/review_porter/export/<id>/goodreads_export.csv`. É assíncrono e
-//! pode levar minutos numa estante grande, então aqui a gente dispara,
-//! espera com paciência e baixa — o mesmo caminho do navegador, sem raspar
-//! estante nenhuma.
+//! The public Goodreads API was switched off in 2020 and never came back. What
+//! is left is the "Export Library" button at `/review/import`: it asks for a
+//! CSV to be generated and the page itself warns, when the file is ready, with a link
+//! of the type `/review_porter/export/<id>/goodreads_export.csv`. It is asynchronous and
+//! can take minutes on a big shelf, so here we fire it,
+//! wait patiently and download — the same path as the browser, without scraping
+//! any shelf.
 //!
-//! O scraping fica só para o que o CSV não dá bem: o texto completo da
-//! review por prateleira, que sai das páginas `/review/list/<id>?shelf=…`.
+//! Scraping is left only for what the CSV does not give well: the full text of the
+//! review per shelf, which comes from the `/review/list/<id>?shelf=…` pages.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -24,8 +24,8 @@ use crate::core::tools::{report, ProgressFn};
 const TOOL_ID: &str = "gr-export";
 pub const DOMAIN: &str = "goodreads.com";
 pub const IMPORT_URL: &str = "https://www.goodreads.com/review/import";
-/// A base do "Export Library". O botão faz `POST .../export/<id do usuário>`
-/// e o arquivo pronto fica em `.../export/<id>/goodreads_export.csv`.
+/// The base of "Export Library". The button does `POST .../export/<user id>`
+/// and the ready file sits at `.../export/<id>/goodreads_export.csv`.
 pub const EXPORT_BASE: &str = "https://www.goodreads.com/review_porter/export";
 
 pub fn export_post_url(user: &str) -> String {
@@ -39,7 +39,7 @@ pub fn export_csv_url(user: &str) -> String {
 #[derive(Debug, Clone, Deserialize)]
 pub struct Options {
     pub dest: String,
-    /// CSV já baixado à mão. Vazio = dispara o export oficial.
+    /// CSV already downloaded by hand. Empty = fires the official export.
     #[serde(default)]
     pub csv_path: Option<String>,
     #[serde(default)]
@@ -48,21 +48,21 @@ pub struct Options {
     pub session_netscape: Option<String>,
     #[serde(default)]
     pub formats: Vec<String>,
-    /// Gravar um arquivo por prateleira, com as reviews.
+    /// Write one file per shelf, with the reviews.
     #[serde(default = "default_true")]
     pub by_shelf: bool,
-    /// Gerar um export novo mesmo que já exista um pronto na conta. Cuidado:
-    /// o Goodreads só deixa gerar de tempos em tempos e o novo apaga o velho.
+    /// Generate a new export even if there is already a ready one on the account. Careful:
+    /// Goodreads only lets you generate every so often and the new one erases the old.
     #[serde(default)]
     pub force: bool,
-    /// Prateleiras a visitar na web para completar reviews que o CSV cortou.
-    /// Vazio = não visita nada.
+    /// Shelves to visit on the web to complete reviews the CSV cut off.
+    /// Empty = visits nothing.
     #[serde(default)]
     pub enrich_shelves: Vec<String>,
-    /// Teto de páginas por prateleira (20 livros por página com `per_page`).
+    /// Cap on pages per shelf (20 books per page with `per_page`).
     #[serde(default = "default_pages")]
     pub max_pages: u32,
-    /// Quanto esperar, no máximo, o Goodreads gerar o CSV.
+    /// How long to wait, at most, for Goodreads to generate the CSV.
     #[serde(default = "default_wait")]
     pub wait_secs: u64,
     #[serde(default = "default_delay")]
@@ -97,9 +97,9 @@ pub struct ExportResult {
     pub entries: usize,
     pub shelves: Vec<ShelfCount>,
     pub reviews: usize,
-    /// Quantas reviews vieram das páginas de prateleira, e não do CSV.
+    /// How many reviews came from the shelf pages, not from the CSV.
     pub enriched: usize,
-    /// Quantos segundos o Goodreads levou para gerar o CSV.
+    /// How many seconds Goodreads took to generate the CSV.
     pub waited_secs: u64,
     pub requests: u32,
     pub files: Vec<String>,
@@ -107,10 +107,10 @@ pub struct ExportResult {
     pub sample: Vec<Entry>,
 }
 
-// ── CSV oficial ─────────────────────────────────────────────────────────
+// ── Official CSV ─────────────────────────────────────────────────────────
 
-/// O CSV grava ISBN como `="0439023483"` para o Excel não comer o zero à
-/// esquerda; aqui isso é só ruído.
+/// The CSV writes ISBN as `="0439023483"` so Excel does not eat the zero on the
+/// left; here that is just noise.
 fn clean_isbn(s: &str) -> String {
     s.trim()
         .trim_start_matches('=')
@@ -127,8 +127,8 @@ fn rating_10(s: &str) -> Option<f32> {
     Some((v * 2.0).clamp(0.0, 10.0))
 }
 
-/// Lê o `goodreads_library_export.csv`. As colunas são procuradas pelo nome,
-/// não pela posição: o Goodreads já acrescentou coluna no meio antes.
+/// Reads `goodreads_library_export.csv`. Columns are looked up by name,
+/// not by position: Goodreads has already added a column in the middle before.
 pub fn parse_export_csv(text: &str) -> Vec<Entry> {
     let rows = parse_csv(text);
     let Some(header) = rows.first() else {
@@ -152,8 +152,8 @@ pub fn parse_export_csv(text: &str) -> Vec<Entry> {
             &idx,
             &["original publication year", "year published"],
         ));
-        // O que interessa na linha do tempo é quando foi lido; quem só está
-        // na fila entra pela data em que entrou na fila.
+        // What matters on the timeline is when it was read; whoever is only
+        // in the queue enters by the date they joined the queue.
         e.date = iso_date(cell(row, &idx, &["date read", "date added"]));
         e.rating = rating_10(cell(row, &idx, &["my rating"]));
         e.review = strip_html(cell(row, &idx, &["my review"]));
@@ -181,11 +181,11 @@ pub fn parse_export_csv(text: &str) -> Vec<Entry> {
     out
 }
 
-// ── Disparo e espera do export ──────────────────────────────────────────
+// ── Firing and waiting for the export ──────────────────────────────────────────
 
-/// O token anti-CSRF da página. O Rails do Goodreads publica os dois: um
-/// `<meta name="csrf-token">` para o JavaScript e um `<input>` escondido nos
-/// formulários — o primeiro que aparecer serve.
+/// The page's anti-CSRF token. Goodreads' Rails publishes both: a
+/// `<meta name="csrf-token">` for JavaScript and a hidden `<input>` in the
+/// forms — the first one that shows up will do.
 pub fn csrf_token(html: &str) -> Option<String> {
     if let Some(at) = html.find("name=\"csrf-token\"") {
         let head = &html[at.saturating_sub(200)..(at + 400).min(html.len())];
@@ -200,12 +200,12 @@ pub fn csrf_token(html: &str) -> Option<String> {
     super::attr_after(window, "authenticity_token", "value").filter(|v| !v.is_empty())
 }
 
-/// O link do CSV pronto dentro da página de importação. Enquanto o Goodreads
-/// está gerando, ele simplesmente não existe.
+/// The link to the ready CSV inside the import page. While Goodreads
+/// is generating, it simply does not exist.
 pub fn export_link(html: &str) -> Option<String> {
     let marker = "review_porter/export/";
     let at = html.find(marker)?;
-    // Volta até o começo da URL.
+    // Go back to the start of the URL.
     let start = html[..at].rfind(['"', '\''])? + 1;
     let rest = &html[start..];
     let end = rest.find(['"', '\''])?;
@@ -222,9 +222,9 @@ pub fn export_link(html: &str) -> Option<String> {
     })
 }
 
-/// A página do usuário logado carrega o id numérico dele em mais de um
-/// lugar; o link do export é o mais confiável, e o `/review/list/<id>` da
-/// própria página serve de reserva.
+/// The logged-in user's page carries their numeric id in more than one
+/// place; the export link is the most reliable, and the `/review/list/<id>` of the
+/// page itself serves as a backup.
 pub fn user_id(html: &str) -> Option<String> {
     for marker in ["review_porter/export/", "/review/list/"] {
         if let Some(at) = html.find(marker) {
@@ -238,31 +238,31 @@ pub fn user_id(html: &str) -> Option<String> {
     None
 }
 
-/// Dispara o export e espera o CSV aparecer. Devolve `(csv, segundos)`.
+/// Fires the export and waits for the CSV to show up. Returns `(csv, seconds)`.
 ///
-/// O caminho é o mesmo do navegador: pegar o token anti-CSRF da página de
-/// importação, mandar o POST em `/review_porter/export/<id>` e depois ficar
-/// perguntando pelo arquivo, que responde 404 enquanto não fica pronto.
+/// The path is the same as the browser's: take the anti-CSRF token from the import
+/// page, send the POST to `/review_porter/export/<id>` and then keep
+/// asking for the file, which answers 404 while it is not ready.
 async fn trigger_and_wait(f: &Fetcher, opts: &Options, p: &ProgressFn) -> Result<(String, u64)> {
     let page = f.get_text(IMPORT_URL).await?;
     if is_signed_out(&page) {
         return Err(anyhow!(
-            "a sessão do Goodreads não está válida: capture os cookies de goodreads.com na extensão"
+            "the Goodreads session is not valid: capture the goodreads.com cookies in the extension"
         ));
     }
     let uid = user_id(&page).ok_or_else(|| {
-        anyhow!("não achei o id da sua conta na página de importação do Goodreads")
+        anyhow!("could not find your account id on the Goodreads import page")
     })?;
     let csv_url = export_csv_url(&uid);
 
-    // Se já existe um export pronto, aproveita: o Goodreads só deixa gerar um
-    // a cada poucos dias, e gerar um novo apaga o anterior.
+    // If a ready export already exists, use it: Goodreads only lets you generate one
+    // every few days, and generating a new one erases the previous.
     let ready = !opts.force && export_link(&page).is_some();
     let started = Instant::now();
     if !ready {
         let token = csrf_token(&page).ok_or_else(|| {
             anyhow!(
-                "não achei o token anti-CSRF do Goodreads; recapture os cookies e tente de novo"
+                "could not find the Goodreads anti-CSRF token; recapture the cookies and try again"
             )
         })?;
         f.pace().await;
@@ -284,13 +284,13 @@ async fn trigger_and_wait(f: &Fetcher, opts: &Options, p: &ProgressFn) -> Result
         let status = resp.status();
         if !status.is_success() && status.as_u16() != 302 {
             return Err(anyhow!(
-                "o Goodreads recusou o pedido de export (HTTP {}). Ele só deixa gerar um a cada poucos dias",
+                "Goodreads refused the export request (HTTP {}). It only lets you generate one every few days",
                 status
             ));
         }
     }
 
-    // Espera: o CSV é gerado em segundo plano e responde 404 até ficar pronto.
+    // Wait: the CSV is generated in the background and answers 404 until it is ready.
     let limit = Duration::from_secs(opts.wait_secs.clamp(30, 3600));
     loop {
         let code = f.head_status(&csv_url).await.unwrap_or(0);
@@ -299,13 +299,13 @@ async fn trigger_and_wait(f: &Fetcher, opts: &Options, p: &ProgressFn) -> Result
         }
         if code != 404 && code != 0 && code != 403 {
             return Err(anyhow!(
-                "o Goodreads respondeu HTTP {} no arquivo do export",
+                "Goodreads answered HTTP {} on the export file",
                 code
             ));
         }
         if started.elapsed() >= limit {
             return Err(anyhow!(
-                "o Goodreads ainda não gerou o CSV depois de {}s. Deixe goodreads.com/review/import aberto, espere e rode de novo — o link fica salvo lá",
+                "Goodreads has not generated the CSV after {}s. Leave goodreads.com/review/import open, wait and run again — the link stays saved there",
                 limit.as_secs()
             ));
         }
@@ -324,20 +324,20 @@ async fn trigger_and_wait(f: &Fetcher, opts: &Options, p: &ProgressFn) -> Result
     let csv = String::from_utf8_lossy(&bytes).to_string();
     if !csv.to_lowercase().contains("title") {
         return Err(anyhow!(
-            "o arquivo baixado não parece o export do Goodreads"
+            "the downloaded file does not look like the Goodreads export"
         ));
     }
     Ok((csv, started.elapsed().as_secs()))
 }
 
-/// A página devolvida quando a sessão não vale: o Goodreads responde 200 com
-/// a tela de entrada em vez de mandar para outro lugar.
+/// The page returned when the session is no good: Goodreads answers 200 with
+/// the sign-in screen instead of sending you elsewhere.
 pub fn is_signed_out(html: &str) -> bool {
     let has_form = html.contains("review_porter") || html.contains("js-LibraryExport");
     !has_form && (html.contains("/user/sign_in") || html.contains("/user/new"))
 }
 
-// ── Prateleira na web ───────────────────────────────────────────────────
+// ── Shelf on the web ───────────────────────────────────────────────────
 
 pub fn shelf_url(user: &str, shelf: &str, page: u32) -> String {
     format!(
@@ -348,13 +348,13 @@ pub fn shelf_url(user: &str, shelf: &str, page: u32) -> String {
     )
 }
 
-/// As reviews da página impressa de uma prateleira: `título -> texto`.
+/// The reviews from a shelf's printed page: `title -> text`.
 ///
-/// O HTML do Goodreads é antigo e previsível: uma `<tr id="review_<id>">` por
-/// livro, o título no atributo `title` do link (que é o nome canônico, sem o
-/// "(Série, #2)" que o texto visível carrega) e a review em **dois** spans —
-/// `freeTextContainerreview<id>` com o trecho cortado e `freeTextreview<id>`
-/// com o texto inteiro. É o segundo que interessa.
+/// Goodreads' HTML is old and predictable: one `<tr id="review_<id>">` per
+/// book, the title in the link's `title` attribute (which is the canonical name, without the
+/// "(Series, #2)" the visible text carries) and the review in **two** spans —
+/// `freeTextContainerreview<id>` with the cut excerpt and `freeTextreview<id>`
+/// with the whole text. It is the second one that matters.
 pub fn parse_shelf_html(html: &str) -> HashMap<String, String> {
     let mut out = HashMap::new();
     for row in html.split("<tr").skip(1) {
@@ -372,7 +372,7 @@ pub fn parse_shelf_html(html: &str) -> HashMap<String, String> {
     out
 }
 
-/// O título canônico da linha: o atributo `title` do link do livro.
+/// The line's canonical title: the book link's `title` attribute.
 fn row_title(row: &str) -> Option<String> {
     let at = row.find("field title")?;
     let rest = &row[at..];
@@ -384,13 +384,13 @@ fn row_title(row: &str) -> Option<String> {
             return Some(v);
         }
     }
-    // Sem o atributo, sobra o texto visível — que traz a série junto.
+    // Without the attribute, the visible text is left — which brings the series along.
     let text = strip_html(cell);
     let text = text.strip_prefix("title").unwrap_or(&text).trim();
     Some(text.to_string())
 }
 
-/// A review inteira, do span escondido; o visível é só a prévia cortada.
+/// The whole review, from the hidden span; the visible one is just the cut preview.
 fn row_review(row: &str) -> Option<String> {
     let id = row_id(row)?;
     for prefix in ["freeTextreview", "freeText"] {
@@ -405,11 +405,11 @@ fn row_review(row: &str) -> Option<String> {
             }
         }
     }
-    // Sem span de texto livre a linha não tem review nenhuma.
+    // Without a free-text span the line has no review at all.
     None
 }
 
-/// O id da review, que amarra a linha aos spans de texto (`review_123`).
+/// The review's id, which ties the row to the text spans (`review_123`).
 fn row_id(row: &str) -> Option<String> {
     let at = row.find("id=\"review_")? + "id=\"review_".len();
     let id: String = row[at..]
@@ -423,7 +423,7 @@ fn row_id(row: &str) -> Option<String> {
     }
 }
 
-// ── Saída por prateleira ────────────────────────────────────────────────
+// ── Output per shelf ────────────────────────────────────────────────
 
 pub fn shelves_of(entries: &[Entry]) -> Vec<ShelfCount> {
     let mut map: HashMap<String, ShelfCount> = HashMap::new();
@@ -456,7 +456,7 @@ pub fn shelves_of(entries: &[Entry]) -> Vec<ShelfCount> {
     out
 }
 
-/// Um Markdown por prateleira, com a review inteira embaixo de cada livro.
+/// One Markdown per shelf, with the whole review under each book.
 pub fn shelf_markdown(shelf: &str, entries: &[Entry]) -> String {
     let mut out = format!("# {}\n\n{} livros\n\n", shelf, entries.len());
     for e in entries {
@@ -504,11 +504,11 @@ fn slug(s: &str) -> String {
     }
 }
 
-// ── Execução ────────────────────────────────────────────────────────────
+// ── Execution ────────────────────────────────────────────────────────────
 
 pub async fn run(opts: &Options, p: ProgressFn) -> Result<ExportResult> {
     if opts.dest.trim().is_empty() {
-        return Err(anyhow!("escolha a pasta de destino"));
+        return Err(anyhow!("choose the destination folder"));
     }
     let dest = PathBuf::from(opts.dest.trim());
     std::fs::create_dir_all(&dest)?;
@@ -516,14 +516,14 @@ pub async fn run(opts: &Options, p: ProgressFn) -> Result<ExportResult> {
 
     let (csv, source, waited) = match opts.csv_path.as_deref().map(str::trim) {
         Some(path) if !path.is_empty() => (
-            std::fs::read_to_string(path).with_context(|| format!("não consegui ler {}", path))?,
+            std::fs::read_to_string(path).with_context(|| format!("could not read {}", path))?,
             path.to_string(),
             0,
         ),
         _ => {
             if !f.has_session() {
                 return Err(anyhow!(
-                    "sem sessão do Goodreads: capture os cookies de goodreads.com na extensão, ou aponte o goodreads_library_export.csv que você já baixou"
+                    "no Goodreads session: capture the goodreads.com cookies in the extension, or point to the goodreads_library_export.csv you already downloaded"
                 ));
             }
             let (csv, secs) = trigger_and_wait(&f, opts, &p).await?;
@@ -534,15 +534,15 @@ pub async fn run(opts: &Options, p: ProgressFn) -> Result<ExportResult> {
 
     let mut entries = parse_export_csv(&csv);
     if entries.is_empty() {
-        return Err(anyhow!("o export veio sem nenhum livro"));
+        return Err(anyhow!("the export came with no books"));
     }
 
-    // Reviews que o CSV não trouxe, buscadas na prateleira.
+    // Reviews the CSV did not bring, fetched from the shelf.
     let mut enriched = 0usize;
     if !opts.enrich_shelves.is_empty() && f.has_session() {
         let page = f.get_text(IMPORT_URL).await.unwrap_or_default();
         match user_id(&page) {
-            None => tracing::debug!("gr-export: não achei o id do usuário; pulei o enriquecimento"),
+            None => tracing::debug!("gr-export: could not find the user id; skipped the enrichment"),
             Some(uid) => {
                 let mut found: HashMap<String, String> = HashMap::new();
                 for shelf in &opts.enrich_shelves {
@@ -591,7 +591,7 @@ pub async fn run(opts: &Options, p: ProgressFn) -> Result<ExportResult> {
 
     let shelves = shelves_of(&entries);
     if opts.by_shelf {
-        let shelf_dir = dest.join("prateleiras");
+        let shelf_dir = dest.join("shelves");
         std::fs::create_dir_all(&shelf_dir)?;
         for s in &shelves {
             let books: Vec<Entry> = entries
@@ -640,7 +640,7 @@ mod tests {
     fn csv_oficial_vira_linhas_de_livro() {
         let e = parse_export_csv(CSV);
         assert_eq!(e.len(), 2);
-        // A ordem é por data decrescente: Clean Code (2023) vem antes.
+        // The order is by descending date: Clean Code (2023) comes first.
         let duna = e
             .iter()
             .find(|x| x.title == "Duna")
@@ -648,7 +648,7 @@ mod tests {
         assert_eq!(duna.title, "Duna");
         assert_eq!(duna.kind, "livro");
         assert_eq!(duna.creator, "Frank Herbert");
-        // O ano que interessa é o da obra, não o da edição.
+        // The year that matters is the work's, not the edition's.
         assert_eq!(duna.year, Some(1965));
         assert_eq!(duna.date, "2021-10-22");
         assert_eq!(duna.rating, Some(10.0));
@@ -672,7 +672,7 @@ mod tests {
         assert_eq!(clean.rating, None);
         assert_eq!(clean.review, "");
         assert_eq!(clean.date, "2023-02-14");
-        // ISBN13 vazio cai no ISBN de 10 dígitos.
+        // An empty ISBN13 falls back to the 10-digit ISBN.
         assert_eq!(clean.isbn, "0132350882");
         assert_eq!(clean.times, 1);
     }
@@ -738,9 +738,9 @@ mod tests {
     }
 
     #[test]
-    fn review_sai_do_span_inteiro_e_nao_da_previa_cortada() {
-        // Markup real: o span visível traz a prévia cortada e o escondido
-        // traz o texto inteiro. Pegar a célula toda juntaria os dois.
+    fn review_comes_from_the_full_span_not_the_cut_preview() {
+        // Real markup: the visible span brings the cut preview and the hidden one
+        // brings the whole text. Taking the whole cell would join the two.
         let html = r#"
 <table id="books"><tbody id="booksBody">
 <tr id="review_5040164738" class="bookalike review">
@@ -759,7 +759,7 @@ mod tests {
 </tbody></table>"#;
         let map = parse_shelf_html(html);
         assert_eq!(map.len(), 1);
-        // A chave é o título canônico do atributo, sem o "(Duna, #1)".
+        // The key is the canonical title from the attribute, without "(Duna, #1)".
         assert_eq!(
             map.get("duna").map(String::as_str),
             Some("Um classico que envelheceu bem. Leio de novo todo ano.")
@@ -797,7 +797,7 @@ mod tests {
             r#"<a href="/user/sign_in?returnurl=%2Freview%2Fimport">Sign in</a>"#
         ));
         assert!(is_signed_out(r#"<form action="/user/new">…</form>"#));
-        // A página de verdade tem o botão do export, mesmo mencionando login.
+        // The real page has the export button, even while mentioning login.
         assert!(!is_signed_out(
             r#"<a href="/user/sign_in">x</a><button class="js-LibraryExport">Export Library</button>"#
         ));
@@ -807,7 +807,7 @@ mod tests {
     }
 
     #[test]
-    fn prateleiras_contam_livro_review_e_nota() {
+    fn shelves_count_book_review_and_rating() {
         let e = parse_export_csv(CSV);
         let s = shelves_of(&e);
         let by = |name: &str| s.iter().find(|x| x.shelf == name).cloned();
@@ -818,7 +818,7 @@ mod tests {
         let fila = by("to-read").unwrap_or_else(|| unreachable!());
         assert_eq!(fila.books, 1);
         assert_eq!(fila.reviews, 0);
-        // A prateleira exclusiva também vira contagem.
+        // The exclusive shelf also becomes a count.
         assert!(by("read").is_some());
     }
 
@@ -843,9 +843,9 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "rede + sessão real: dispara o Export Library e espera o CSV do Goodreads"]
-    fn export_oficial_de_verdade() {
-        // O Goodreads só deixa gerar um export a cada poucos dias; exercitado
-        // à mão com uma conta logada.
+    #[ignore = "network + real session: triggers Export Library and waits for the Goodreads CSV"]
+    fn real_official_export() {
+        // Goodreads only lets you generate one export every few days; exercised
+        // by hand with a logged-in account.
     }
 }

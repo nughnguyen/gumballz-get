@@ -17,8 +17,8 @@
 -->
 
 <script lang="ts">
-  /** Contar tokens e calcular custo por modelo. O numero e sempre estimativa:
-   *  contagem exata exigiria o tokenizador de cada familia. A UI diz isso. */
+  /** Count tokens and calculate cost per model. The number is always an estimate:
+   *  an exact count would need each family's tokenizer. The UI says so. */
   import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
   import { t } from "$lib/i18n";

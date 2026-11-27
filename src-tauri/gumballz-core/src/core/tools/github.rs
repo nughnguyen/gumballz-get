@@ -1,7 +1,7 @@
-//! Releases do GitHub: escolher o asset certo para este sistema, baixar,
-//! conferir o SHA-256 que a API informa e desempacotar. É o mesmo desenho do
-//! Spicetify (`core/spicetify.rs`), generalizado para whisper.cpp,
-//! Real-ESRGAN e afins.
+//! GitHub releases: pick the right asset for this system, download it,
+//! check the SHA-256 the API reports and unpack it. It is the same design as
+//! Spicetify (`core/spicetify.rs`), generalized for whisper.cpp,
+//! Real-ESRGAN and the like.
 
 use std::path::{Path, PathBuf};
 
@@ -34,7 +34,7 @@ pub struct ReleaseAsset {
     pub digest: Option<String>,
 }
 
-/// Primeiro asset da release `tag` (ou da última) que `pick` aceitar.
+/// First asset of release `tag` (or the latest) that `pick` accepts.
 pub async fn asset(
     client: &reqwest::Client,
     repo: &str,
@@ -48,7 +48,7 @@ pub async fn asset(
     let response = client.get(&url).send().await?;
     if !response.status().is_success() {
         return Err(anyhow!(
-            "nao foi possivel consultar releases de {}: HTTP {}",
+            "could not query releases of {}: HTTP {}",
             repo,
             response.status()
         ));
@@ -57,7 +57,7 @@ pub async fn asset(
     let tag = json["tag_name"].as_str().unwrap_or("").to_string();
     let assets = json["assets"]
         .as_array()
-        .ok_or_else(|| anyhow!("release de {} sem assets", repo))?;
+        .ok_or_else(|| anyhow!("release of {} has no assets", repo))?;
     for a in assets {
         let name = a["name"].as_str().unwrap_or("");
         if pick(name) {
@@ -73,14 +73,14 @@ pub async fn asset(
         }
     }
     Err(anyhow!(
-        "release {} de {} nao tem um asset para este sistema",
+        "release {} of {} has no asset for this system",
         tag,
         repo
     ))
 }
 
-/// Baixa e confere o hash. Sem digest na API o download é aceito só se
-/// `allow_unverified` (repos antigos não publicam digest).
+/// Downloads and checks the hash. Without a digest in the API the download is accepted only if
+/// `allow_unverified` (old repos do not publish a digest).
 pub async fn download(
     client: &reqwest::Client,
     asset: &ReleaseAsset,
@@ -102,7 +102,7 @@ pub async fn download(
         }
         None => {
             return Err(anyhow!(
-                "{} veio sem digest da API do GitHub; download descartado",
+                "{} came without a digest from the GitHub API; download discarded",
                 asset.name
             ))
         }
@@ -114,7 +114,7 @@ pub fn unpack(data: &[u8], name: &str, dest: &Path) -> anyhow::Result<()> {
     std::fs::create_dir_all(dest)?;
     if name.ends_with(".zip") {
         let mut archive = zip::ZipArchive::new(std::io::Cursor::new(data))
-            .map_err(|e| anyhow!("zip invalido: {}", e))?;
+            .map_err(|e| anyhow!("invalid zip: {}", e))?;
         for i in 0..archive.len() {
             let mut file = archive.by_index(i)?;
             let Some(rel) = file.enclosed_name() else {
@@ -138,21 +138,21 @@ pub fn unpack(data: &[u8], name: &str, dest: &Path) -> anyhow::Result<()> {
         archive.set_preserve_permissions(true);
         archive
             .unpack(dest)
-            .map_err(|e| anyhow!("tar.gz invalido: {}", e))
+            .map_err(|e| anyhow!("invalid tar.gz: {}", e))
     } else if name.ends_with(".tar.xz") {
         let decoder = xz2::read::XzDecoder::new(std::io::Cursor::new(data));
         let mut archive = tar::Archive::new(decoder);
         archive.set_preserve_permissions(true);
         archive
             .unpack(dest)
-            .map_err(|e| anyhow!("tar.xz invalido: {}", e))
+            .map_err(|e| anyhow!("invalid tar.xz: {}", e))
     } else {
-        Err(anyhow!("formato de pacote desconhecido: {}", name))
+        Err(anyhow!("unknown package format: {}", name))
     }
 }
 
-/// Procura um arquivo pelo nome dentro de uma árvore (os zips do whisper.cpp
-/// e do Real-ESRGAN têm subpastas diferentes por plataforma).
+/// Looks for a file by name inside a tree (whisper.cpp and Real-ESRGAN zips
+/// have different subfolders per platform).
 pub fn find_file(root: &Path, file_name: &str) -> Option<PathBuf> {
     let mut stack = vec![root.to_path_buf()];
     while let Some(dir) = stack.pop() {
@@ -180,7 +180,7 @@ pub fn make_executable(path: &Path) {
 #[cfg(not(unix))]
 pub fn make_executable(_path: &Path) {}
 
-/// Troca `dir` pela pasta nova só depois que ela está inteira no disco.
+/// Swaps `dir` for the new folder only after it is fully on disk.
 pub fn swap_dir(staging: &Path, dir: &Path) -> anyhow::Result<()> {
     let old = dir.with_extension("old");
     let _ = std::fs::remove_dir_all(&old);
@@ -192,7 +192,7 @@ pub fn swap_dir(staging: &Path, dir: &Path) -> anyhow::Result<()> {
             let _ = std::fs::rename(&old, dir);
         }
         return Err(anyhow!(
-            "nao foi possivel mover a instalacao para o lugar: {}",
+            "could not move the install into place: {}",
             e
         ));
     }

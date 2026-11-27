@@ -63,9 +63,9 @@ impl<R: Runtime + 'static> PluginHost for PluginHostImpl<R> {
             .join(plugin_id)
             .join("data")
             .join("settings.json");
-        // Mesmo par lê-default-e-reescreve do registro de cookies: sem a
-        // quarentena, um settings.json de plugin corrompido é apagado pelo
-        // primeiro `save_settings`.
+        // Same read-default-and-rewrite pair as the cookie registry: without the
+        // quarantine, a corrupted plugin settings.json is wiped by the first
+        // `save_settings`.
         crate::core::state_file::load_or_quarantine(
             &settings_path,
             &format!("settings do plugin {}", plugin_id),

@@ -177,9 +177,9 @@ pub struct QueueItemInfo {
     pub author: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration_seconds: Option<f64>,
-    /// Fase atual (`fetching_info`, `downloading_video`, `merging`…), a mesma
-    /// que vai no evento de progresso, para a tela não depender de ter visto
-    /// o evento.
+    /// Current phase (`fetching_info`, `downloading_video`, `merging`…), the same
+    /// one that goes in the progress event, so the screen does not depend on
+    /// having seen the event.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub phase: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -194,7 +194,7 @@ pub struct QueueItemInfo {
     pub fragment_count: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub started_at_ms: Option<u64>,
-    /// Último comando yt-dlp desta tentativa (redigido), quando houve um.
+    /// Last yt-dlp command of this attempt (redacted), when there was one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub command: Option<CommandRecord>,
 }
@@ -247,7 +247,7 @@ pub struct QueueItem {
     pub fragment_index: Option<u32>,
     pub fragment_count: Option<u32>,
     pub started_at_ms: Option<u64>,
-    /// Comando completo escrito pelo usuário em "editar e tentar de novo".
+    /// Full command written by the user in "edit and try again".
     pub ytdlp_argv_override: Option<Vec<String>>,
 }
 
@@ -309,12 +309,13 @@ pub struct DownloadQueue {
     pub max_concurrent: u32,
     pub stagger_delay_ms: u64,
     pub default_max_retries: u32,
-    /// Ultimo id entregue por `next_available_id`. Sem ele, dois `download_from_url`
-    /// simultaneos (um lote colado na downloadbox dispara todos de uma vez) pegam o
-    /// mesmo timestamp em ms, soltam o lock para resolver o downloader e so depois
-    /// enfileiram — os dois entram com o mesmo id. Como todo o resto da fila acha
-    /// o item por `find(|i| i.id == id)`, o segundo item some: baixa o primeiro
-    /// duas vezes e o resto do lote nunca sai.
+    /// Last id handed out by `next_available_id`. Without it, two simultaneous
+    /// `download_from_url` calls (a batch pasted into the download box fires them
+    /// all at once) take the same timestamp in ms, release the lock to resolve
+    /// the downloader and only then enqueue — both enter with the same id. Since
+    /// everything else in the queue finds the item by `find(|i| i.id == id)`,
+    /// the second item disappears: it downloads the first one twice and the rest
+    /// of the batch never leaves.
     last_issued_id: u64,
 }
 
@@ -538,9 +539,9 @@ impl DownloadQueue {
             .collect()
     }
 
-    /// Reserva um id livre. E `&mut self` de proposito: a reserva precisa
-    /// acontecer dentro do mesmo lock da consulta, senao chamadas concorrentes
-    /// recebem o mesmo numero.
+    /// Reserves a free id. It is `&mut self` on purpose: the reservation has to
+    /// happen inside the same lock as the lookup, or concurrent calls receive
+    /// the same number.
     pub fn next_available_id(&mut self, preferred: u64) -> u64 {
         let mut id = preferred.max(self.last_issued_id.saturating_add(1));
         while self.items.iter().any(|i| i.id == id) {
@@ -563,9 +564,9 @@ impl DownloadQueue {
         }
     }
 
-    /// Estado "vivo" do download (stream atual, fragmento, plano, fase). Vem
-    /// do forwarder de progresso; separado de `update_progress` para não
-    /// engordar a assinatura de números.
+    /// The download's "live" state (current stream, fragment, plan, phase). Comes
+    /// from the progress forwarder; kept separate from `update_progress` so it
+    /// does not fatten the number signature.
     #[allow(clippy::too_many_arguments)]
     pub fn update_run_state(
         &mut self,
@@ -983,9 +984,9 @@ impl DownloadQueue {
         false
     }
 
-    /// Re-enfileira com o comando escrito pelo usuário. Só faz sentido para
-    /// item que já rodou o yt-dlp (tem `CommandRecord`); para os outros o
-    /// override é ignorado pela plataforma, então recusamos aqui.
+    /// Re-enqueues with the command written by the user. Only makes sense for
+    /// an item that already ran yt-dlp (it has a `CommandRecord`); for the others
+    /// the override is ignored by the platform, so we refuse it here.
     pub fn retry_with_command(&mut self, id: u64, argv: Vec<String>) -> Result<(), String> {
         let item = self
             .items
@@ -2227,11 +2228,11 @@ pub async fn prefetch_info(
     prefetch_info_with_emit(url, downloader, platform, ytdlp_path, None).await;
 }
 
-/// Pré-buscas de info ao mesmo tempo. Cada uma é um yt-dlp inteiro; colar
-/// uma lista de URLs disparava uma por linha e a tempestade de bootstrap
-/// (B1) derrubava o download que já estava rodando. Duas por vez; o resto
-/// espera na fila e ainda cabe no timeout, ou cai fora sem prejuízo — o
-/// download busca a info de novo quando começa.
+/// Info pre-fetches at the same time. Each one is a whole yt-dlp; pasting a
+/// list of URLs fired one per line and the bootstrap storm (B1) killed the
+/// download that was already running. Two at a time; the rest wait in the queue
+/// and still fit in the timeout, or drop out without harm — the download fetches
+/// the info again when it starts.
 fn prefetch_slots() -> &'static tokio::sync::Semaphore {
     static SLOTS: std::sync::OnceLock<tokio::sync::Semaphore> = std::sync::OnceLock::new();
     SLOTS.get_or_init(|| tokio::sync::Semaphore::new(2))
@@ -2518,9 +2519,9 @@ mod kind_tests {
 mod id_tests {
     use super::DownloadQueue;
 
-    // Regressao do lote: duas chamadas seguidas dentro do mesmo milissegundo
-    // pediam o mesmo `preferred` e recebiam o mesmo id, porque a fila ainda
-    // estava vazia nas duas consultas. O id precisa avancar mesmo assim.
+    // Batch regression: two calls in a row inside the same millisecond asked
+    // for the same `preferred` and received the same id, because the queue was
+    // still empty at both lookups. The id has to advance anyway.
     #[test]
     fn ids_never_repeat_for_the_same_preferred_value() {
         let mut q = DownloadQueue::new(3);

@@ -1,15 +1,15 @@
-//! Bulk-download de emotes e badges de um canal da Twitch.
+//! Bulk-download of emotes and badges from a Twitch channel.
 //!
-//! Quatro fontes, todas públicas e sem login:
-//! - **Twitch**: GraphQL do site (`user.subscriptionProducts.emotes`,
-//!   `user.broadcastBadges`, `emoteSet(id: "0")` e `badges` para os globais).
+//! Four sources, all public and without login:
+//! - **Twitch**: the site's GraphQL (`user.subscriptionProducts.emotes`,
+//!   `user.broadcastBadges`, `emoteSet(id: "0")` and `badges` for the globals).
 //! - **BTTV**: `api.betterttv.net/3/cached/...`
 //! - **FFZ**: `api.frankerfacez.com/v1/...`
 //! - **7TV**: `7tv.io/v3/...`
 //!
-//! Cada emote é baixado na maior resolução que o provedor oferece; animados
-//! ficam como vieram (GIF na Twitch, WebP nos outros). O resultado é uma
-//! pasta por provedor, um `index.json` e, se pedido, um contact-sheet HTML.
+//! Each emote is downloaded at the largest resolution the provider offers; animated
+//! ones stay as they came (GIF on Twitch, WebP on the others). The result is one
+//! folder per provider, an `index.json` and, if requested, an HTML contact-sheet.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -23,12 +23,12 @@ use super::super::{report, sanitize_name, ProgressFn};
 use super::gql::Gql;
 
 const ID: &str = "tw-emotes";
-/// Ordem de preferência quando o mesmo código existe em mais de um provedor.
+/// Preference order when the same code exists on more than one provider.
 const PRIORITY: [&str; 4] = ["twitch", "7tv", "bttv", "ffz"];
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Options {
-    /// Login do canal ou link; vazio baixa só os conjuntos globais.
+    /// Channel login or link; empty downloads only the global sets.
     #[serde(default)]
     pub channel: String,
     pub out_dir: String,
@@ -40,15 +40,15 @@ pub struct Options {
     pub ffz: bool,
     #[serde(default = "yes")]
     pub seventv: bool,
-    /// Inclui os conjuntos globais de cada provedor.
+    /// Includes each provider's global sets.
     #[serde(default = "yes")]
     pub global: bool,
-    /// Badges da Twitch (globais e do canal).
+    /// Twitch badges (global and channel).
     #[serde(default = "yes")]
     pub badges: bool,
     #[serde(default = "yes")]
     pub contact_sheet: bool,
-    /// Refaz o download de arquivos que já existem.
+    /// Re-downloads files that already exist.
     #[serde(default)]
     pub overwrite: bool,
 }
@@ -61,18 +61,18 @@ fn yes() -> bool {
 pub struct Emote {
     pub code: String,
     pub provider: String,
-    /// "emote" ou "badge"
+    /// "emote" or "badge"
     pub kind: String,
-    /// "channel" ou "global"
+    /// "channel" or "global"
     pub scope: String,
     pub id: String,
     pub url: String,
     pub animated: bool,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub title: String,
-    /// Caminho relativo dentro da pasta de saída (preenchido no download).
+    /// Relative path inside the output folder (filled in on download).
     pub file: String,
-    /// Outros provedores que têm o mesmo código.
+    /// Other providers that have the same code.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub also_in: Vec<String>,
 }
@@ -130,8 +130,8 @@ pub struct Result {
 
 // ───────────────────────── parsing por provedor ─────────────────────────
 
-/// `https://static-cdn.jtvnw.net/emoticons/v2/<id>/default/dark/3.0` é a
-/// maior versão; `default` devolve GIF quando o emote é animado.
+/// `https://static-cdn.jtvnw.net/emoticons/v2/<id>/default/dark/3.0` is the
+/// largest version; `default` returns a GIF when the emote is animated.
 pub fn twitch_emote_url(id: &str) -> String {
     format!(
         "https://static-cdn.jtvnw.net/emoticons/v2/{}/default/dark/3.0",
@@ -252,7 +252,7 @@ pub fn parse_bttv(v: &Value, scope: &str) -> Vec<Emote> {
     out
 }
 
-/// FFZ: `sets{ <id>: { emoticons: [...] } }` serve para sala e globais.
+/// FFZ: `sets{ <id>: { emoticons: [...] } }` serves for room and globals.
 pub fn parse_ffz(v: &Value, scope: &str) -> Vec<Emote> {
     let Some(sets) = v.get("sets").and_then(|s| s.as_object()) else {
         return Vec::new();
@@ -290,7 +290,7 @@ pub fn parse_ffz(v: &Value, scope: &str) -> Vec<Emote> {
     out
 }
 
-/// Badges de mod/VIP da sala no FFZ (quando o canal tem arte própria).
+/// Mod/VIP badges of the room on FFZ (when the channel has its own art).
 pub fn parse_ffz_room_badges(v: &Value, scope: &str) -> Vec<Emote> {
     let Some(room) = v.get("room") else {
         return Vec::new();
@@ -312,7 +312,7 @@ pub fn parse_ffz_room_badges(v: &Value, scope: &str) -> Vec<Emote> {
     out
 }
 
-/// 7TV: o objeto `emote_set` (de `/users/twitch/<id>` ou `/emote-sets/<id>`).
+/// 7TV: the `emote_set` object (from `/users/twitch/<id>` or `/emote-sets/<id>`).
 pub fn parse_7tv(set: &Value, scope: &str) -> Vec<Emote> {
     let Some(arr) = set.get("emotes").and_then(|v| v.as_array()) else {
         return Vec::new();
@@ -361,8 +361,8 @@ pub fn parse_7tv(set: &Value, scope: &str) -> Vec<Emote> {
     out
 }
 
-/// Pega o maior arquivo WebP (o formato que todo mundo abre); se não houver,
-/// o maior de qualquer formato.
+/// Takes the largest WebP file (the format everyone opens); if there is none,
+/// the largest of any format.
 pub fn best_7tv_file(files: &[Value]) -> Option<String> {
     let pick = |only_webp: bool| -> Option<(u64, String)> {
         files
@@ -393,8 +393,8 @@ fn biggest_by_number(map: &serde_json::Map<String, Value>) -> Option<String> {
 
 // ───────────────────────── dedupe e nomes ─────────────────────────
 
-/// Mantém um emote por código, na ordem de `PRIORITY`, anotando em quais
-/// outros provedores o mesmo código apareceu.
+/// Keeps one emote per code, in `PRIORITY` order, noting in which
+/// other providers the same code appeared.
 pub fn dedupe(items: Vec<Emote>) -> (Vec<Emote>, usize) {
     let rank = |p: &str| {
         PRIORITY
@@ -434,7 +434,7 @@ pub fn dedupe(items: Vec<Emote>) -> (Vec<Emote>, usize) {
     (kept, dupes)
 }
 
-/// Extensão pelo fim da URL; se a URL não disser, pelo `content-type`.
+/// Extension from the end of the URL; if the URL does not say, from the `content-type`.
 pub fn ext_from(url: &str, content_type: Option<&str>) -> String {
     let path = url.split(['?', '#']).next().unwrap_or(url);
     let tail = path.rsplit('/').next().unwrap_or("");
@@ -456,8 +456,8 @@ pub fn ext_from(url: &str, content_type: Option<&str>) -> String {
     }
 }
 
-/// Nome de arquivo único dentro da pasta do provedor (o `taken` é
-/// minúsculo porque macOS e Windows não distinguem `Kappa` de `kappa`).
+/// Unique file name inside the provider folder (the `taken` is
+/// lowercase because macOS and Windows do not tell `Kappa` from `kappa`).
 pub fn unique_name(code: &str, id: &str, ext: &str, taken: &mut HashSet<String>) -> String {
     let base = sanitize_name(code);
     let mut name = format!("{}.{}", base, ext);
@@ -475,7 +475,7 @@ pub fn unique_name(code: &str, id: &str, ext: &str, taken: &mut HashSet<String>)
     name
 }
 
-/// Contact-sheet: uma página que abre offline e mostra tudo o que baixou.
+/// Contact-sheet: a page that opens offline and shows everything downloaded.
 pub fn contact_sheet(channel: &str, items: &[Emote]) -> String {
     let mut cards = String::new();
     for e in items {
@@ -534,7 +534,7 @@ pub async fn run(opts: &Options, p: &ProgressFn) -> anyhow::Result<Result> {
     } else {
         Some(
             super::gql::parse_channel(&opts.channel)
-                .ok_or_else(|| anyhow!("não reconheci esse canal: {}", opts.channel))?,
+                .ok_or_else(|| anyhow!("did not recognize this channel: {}", opts.channel))?,
         )
     };
 
@@ -667,7 +667,7 @@ pub async fn run(opts: &Options, p: &ProgressFn) -> anyhow::Result<Result> {
             .then_with(|| a.code.to_lowercase().cmp(&b.code.to_lowercase()))
     });
 
-    // Nome de arquivo e pasta antes de baixar, para o download ser paralelo.
+    // File name and folder before downloading, so the download can be parallel.
     let root = PathBuf::from(&opts.out_dir).join(format!("{}-emotes", sanitize_name(&label)));
     let mut taken: HashMap<String, HashSet<String>> = HashMap::new();
     let mut planned: Vec<(usize, PathBuf)> = Vec::new();
@@ -679,7 +679,7 @@ pub async fn run(opts: &Options, p: &ProgressFn) -> anyhow::Result<Result> {
         };
         let ext = ext_from(&e.url, None);
         let ext = if e.provider == "twitch" && e.kind == "emote" {
-            // A CDN v2 não põe extensão na URL: animado é GIF, o resto PNG.
+            // The v2 CDN does not put an extension in the URL: animated is GIF, the rest PNG.
             if e.animated {
                 "gif".to_string()
             } else {
@@ -831,7 +831,7 @@ async fn fetch_one(http: &reqwest::Client, url: &str, path: &Path) -> anyhow::Re
         }
         let bytes = resp.bytes().await?;
         if bytes.is_empty() {
-            anyhow::bail!("arquivo vazio");
+            anyhow::bail!("empty file");
         }
         std::fs::write(path, &bytes)?;
         return Ok(());
@@ -950,7 +950,7 @@ mod tests {
         let pog = kept
             .iter()
             .find(|e| e.code == "Pog")
-            .expect("Pog no resultado");
+            .expect("Pog in the result");
         assert_eq!(pog.provider, "7tv");
         assert_eq!(pog.also_in, vec!["bttv".to_string(), "ffz".to_string()]);
     }
@@ -1017,11 +1017,11 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "rede: baixa de verdade um conjunto pequeno de emotes"]
+    #[ignore = "network: really downloads a small emote set"]
     async fn live_baixa_um_conjunto_pequeno() {
         let dir = super::super::super::temp_dir().join("tw-emotes-teste");
         let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("pasta de teste");
+        std::fs::create_dir_all(&dir).expect("test folder");
         let opts = Options {
             channel: "xqc".into(),
             out_dir: dir.to_string_lossy().to_string(),
@@ -1036,7 +1036,7 @@ mod tests {
         };
         let out = run(&opts, &super::super::super::noop_progress())
             .await
-            .expect("download dos emotes");
+            .expect("emote download");
         assert!(out.total > 0, "nenhum emote");
         assert_eq!(out.failed, 0, "algum download falhou");
         assert!(std::path::Path::new(&out.index_path).exists(), "index.json");
@@ -1048,8 +1048,8 @@ mod tests {
             }
             let path = std::path::Path::new(&out.dir)
                 .join(item.file.replace('/', std::path::MAIN_SEPARATOR_STR));
-            let meta = std::fs::metadata(&path).expect("arquivo baixado");
-            assert!(meta.len() > 0, "arquivo vazio: {}", item.file);
+            let meta = std::fs::metadata(&path).expect("downloaded file");
+            assert!(meta.len() > 0, "empty file: {}", item.file);
         }
         println!(
             "{} arquivos em {} ({} baixados)",
@@ -1059,7 +1059,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "rede: bate nas APIs públicas de BTTV/FFZ/7TV/Twitch"]
+    #[ignore = "network: hits the public BTTV/FFZ/7TV/Twitch APIs"]
     async fn live_provedores_de_emote_respondem() {
         let gql = Gql::new().expect("cliente");
         let http = super::super::super::client().expect("http");

@@ -1,16 +1,16 @@
-//! Normalização de artista/título e distância de edição. É o miolo do
-//! casamento entre uma playlist exportada e os arquivos que estão no disco:
-//! o mesmo álbum aparece como "Song (Remastered 2011)" no Spotify e como
-//! "01 - Artist - Song.mp3" na pasta, e os dois precisam virar a mesma chave.
+//! Artist/title normalization and edit distance. It is the heart of the
+//! match between an exported playlist and the files on disk:
+//! the same album shows up as "Song (Remastered 2011)" on Spotify and as
+//! "01 - Artist - Song.mp3" in the folder, and both need to become the same key.
 
 use std::sync::LazyLock;
 
 use regex::Regex;
 use unicode_normalization::UnicodeNormalization;
 
-/// Trechos entre parênteses/colchetes ou depois de " - " que só descrevem a
-/// edição da faixa, não a faixa. "live" fica de fora de propósito: descartar
-/// isso casaria a versão de estúdio com a ao vivo, que é um erro visível.
+/// Passages in parentheses/brackets or after " - " that only describe the
+/// track's edition, not the track. "live" is left out on purpose: dropping
+/// it would match the studio version with the live one, which is a visible error.
 const NOISE: &[&str] = &[
     "remaster",
     "remastered",
@@ -52,7 +52,7 @@ static TRACK_NUM_RE: LazyLock<Regex> =
 static TRACK_NUM_LOOSE_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^\s*\d{1,3}\s+").unwrap());
 
-/// Tira acentos decompondo em NFD e jogando fora as marcas combinantes.
+/// Strips accents by decomposing to NFD and throwing away the combining marks.
 pub fn strip_accents(s: &str) -> String {
     s.nfd()
         .filter(|c| !matches!(*c as u32, 0x0300..=0x036F))
@@ -70,8 +70,8 @@ fn contains_word(hay: &str, needle: &str) -> bool {
         .any(|w| w == needle_tokens.as_slice())
 }
 
-/// Um trecho é descartável quando é crédito de participação ou fala só da
-/// edição da faixa.
+/// A passage is disposable when it is a featuring credit or only talks about
+/// the track's edition.
 pub fn is_noise_chunk(chunk: &str) -> bool {
     let c = simplify(chunk);
     if c.is_empty() {
@@ -83,8 +83,8 @@ pub fn is_noise_chunk(chunk: &str) -> bool {
     NOISE.iter().any(|n| contains_word(&c, n))
 }
 
-/// Minúsculas, sem acento, sem pontuação, espaços colapsados. Não mexe na
-/// estrutura do título — quem faz isso é `clean_title`.
+/// Lowercase, no accents, no punctuation, collapsed spaces. Does not touch the
+/// title's structure — `clean_title` does that.
 pub fn simplify(s: &str) -> String {
     let s = strip_accents(s).to_lowercase();
     let s = s.replace('&', " and ").replace('’', "'");
@@ -99,10 +99,10 @@ pub fn simplify(s: &str) -> String {
     WS_RE.replace_all(out.trim(), " ").to_string()
 }
 
-/// Tira "(Remastered 2011)", "- Radio Edit" e "feat. Fulano" de um título,
-/// preservando o texto original (ainda com maiúsculas e acento).
+/// Removes "(Remastered 2011)", "- Radio Edit" and "feat. Someone" from a title,
+/// preserving the original text (still with capitals and accents).
 pub fn clean_title(title: &str) -> String {
-    // 1. parênteses e colchetes descartáveis, quantos houver.
+    // 1. disposable parentheses and brackets, however many.
     let mut cur = title.to_string();
     loop {
         let mut changed = false;
@@ -126,7 +126,7 @@ pub fn clean_title(title: &str) -> String {
         }
     }
 
-    // 2. sufixos depois de traço.
+    // 2. suffixes after a dash.
     let normalized_dash = cur.replace(" – ", " - ").replace(" — ", " - ");
     let parts: Vec<&str> = normalized_dash.split(" - ").collect();
     let mut kept: Vec<&str> = Vec::new();
@@ -137,31 +137,31 @@ pub fn clean_title(title: &str) -> String {
     }
     cur = kept.join(" - ");
 
-    // 3. "feat. X" solto, sem parênteses.
+    // 3. bare "feat. X", without parentheses.
     cur = FEAT_RE.replace(&cur, "").to_string();
 
     WS_RE.replace_all(cur.trim(), " ").to_string()
 }
 
-/// Chave de comparação de um título: limpa e simplifica.
+/// Comparison key of a title: cleans and simplifies.
 pub fn norm_title(title: &str) -> String {
     simplify(&clean_title(title))
 }
 
-/// Chave de comparação de um artista. "Artist feat. Outro" e
-/// "Artist, Outro" viram só o principal, que é o que aparece no nome do
-/// arquivo na maior parte das vezes.
+/// Comparison key of an artist. "Artist feat. Other" and
+/// "Artist, Other" become just the main one, which is what shows up in the
+/// file name most of the time.
 pub fn norm_artist(artist: &str) -> String {
     let a = FEAT_RE.replace(artist, "").to_string();
     let a = PAREN_RE.replace_all(&a, "").to_string();
     simplify(&a)
 }
 
-/// Só o primeiro artista de uma lista ("A, B & C" -> "A").
+/// Only the first artist of a list ("A, B & C" -> "A").
 pub fn primary_artist(artist: &str) -> String {
     let a = FEAT_RE.replace(artist, "").to_string();
     let a = PAREN_RE.replace_all(&a, "").to_string();
-    // O corte vem antes de `simplify`, senão a vírgula já teria sumido.
+    // The cut comes before `simplify`, otherwise the comma would already be gone.
     let lower = a.to_lowercase();
     let mut cut = lower.chars().count();
     for sep in [",", ";", "/", " & ", " and ", " x ", " vs "] {
@@ -173,18 +173,18 @@ pub fn primary_artist(artist: &str) -> String {
     simplify(&head)
 }
 
-/// Tira "01 - ", "03. " e afins do começo do nome de arquivo.
+/// Removes "01 - ", "03. " and the like from the start of a file name.
 pub fn strip_track_number(stem: &str) -> String {
     TRACK_NUM_RE.replace(stem, "").to_string()
 }
 
-/// Igual ao anterior, mas aceita "01 Song" sem separador. Usar só como
-/// candidato extra: um título como "99 Problems" perderia o número aqui.
+/// Same as the previous one, but accepts "01 Song" without a separator. Use only as an
+/// extra candidate: a title like "99 Problems" would lose its number here.
 pub fn strip_track_number_loose(stem: &str) -> String {
     TRACK_NUM_LOOSE_RE.replace(stem, "").to_string()
 }
 
-/// Distância de Levenshtein em caracteres (não em bytes).
+/// Levenshtein distance in characters (not bytes).
 pub fn levenshtein(a: &str, b: &str) -> usize {
     let a: Vec<char> = a.chars().collect();
     let b: Vec<char> = b.chars().collect();
@@ -207,8 +207,8 @@ pub fn levenshtein(a: &str, b: &str) -> usize {
     prev[b.len()]
 }
 
-/// Semelhança de 0 a 100. Igual dá 100; string contida na outra ganha um
-/// piso proporcional, para "song" achar "song extended".
+/// Similarity from 0 to 100. Equal gives 100; a string contained in the other gets a
+/// proportional floor, so "song" finds "song extended".
 pub fn similarity(a: &str, b: &str) -> u32 {
     if a.is_empty() || b.is_empty() {
         return u32::from(a == b) * 100;
@@ -251,7 +251,7 @@ mod tests {
             clean_title("Californication - Remastered 2011"),
             "Californication"
         );
-        // sufixo que não é ruído continua no título.
+        // a suffix that is not noise stays in the title.
         assert_eq!(
             clean_title("Wish You Were Here - Part 2"),
             "Wish You Were Here - Part 2"

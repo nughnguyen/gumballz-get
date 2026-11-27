@@ -18,8 +18,8 @@
 
 <script lang="ts">
   /**
-   * Publicar (foto, vídeo, reel, story, carrossel) pela sessão web ou pela
-   * API oficial (Graph, URLs públicas), agora ou agendado. `mode` =
+   * Publish (photo, video, reel, story, carousel) via the web session or the
+   * official API (Graph, public URLs), now or scheduled. `mode` =
    * "publish" | "schedule".
    */
   import { invoke } from "@tauri-apps/api/core";

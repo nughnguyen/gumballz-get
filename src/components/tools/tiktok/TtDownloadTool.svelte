@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Vídeo do TikTok sem marca d'água, em lote: lista colada, .txt ou perfil inteiro. */
+  /** TikTok video without watermark, in bulk: pasted list, .txt or whole profile. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

@@ -1,10 +1,10 @@
-//! Leitor do export oficial de dados do Reddit (reddit.com/settings/data-request).
+//! Reader of Reddit's official data export (reddit.com/settings/data-request).
 //!
-//! O Reddit manda um zip com uma pilha de CSV cujos nomes e colunas mudam de
-//! safra para safra. Aqui nada é obrigatório: lê o que existir, ignora o que
-//! faltar e devolve um resumo utilizável — totais, subs mais ativos, linha do
-//! tempo por mês, destaques e a lista de salvos com permalink. Zero rede: o
-//! arquivo é do usuário e não sai da máquina.
+//! Reddit sends a zip with a pile of CSVs whose names and columns change from
+//! batch to batch. Here nothing is mandatory: it reads what exists, ignores what
+//! is missing and returns a usable summary — totals, most active subs, timeline
+//! by month, highlights and the saved list with permalink. Zero network: the
+//! file is the user's and never leaves the machine.
 
 use std::collections::HashMap;
 use std::io::Read;
@@ -17,10 +17,10 @@ use crate::core::tools::{report, ProgressFn};
 
 const ID: &str = "rd-gdpr";
 
-// ───────────────────────── CSV à mão ─────────────────────────
+// ───────────────────────── Hand-rolled CSV ─────────────────────────
 
-/// Leitor de CSV no formato RFC 4180: aspas duplas, vírgula dentro do campo,
-/// quebra de linha dentro do campo e `""` para uma aspa literal.
+/// CSV reader in RFC 4180 format: double quotes, comma inside the field,
+/// line break inside the field and `""` for a literal quote.
 pub fn parse_csv(text: &str) -> Vec<Vec<String>> {
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
     let mut rows: Vec<Vec<String>> = Vec::new();
@@ -66,7 +66,7 @@ pub fn parse_csv(text: &str) -> Vec<Vec<String>> {
     rows
 }
 
-/// Uma tabela lida do export: cabeçalho em minúsculas e as linhas cruas.
+/// A table read from the export: lowercase header and the raw rows.
 #[derive(Debug, Clone, Default)]
 pub struct Table {
     pub headers: Vec<String>,
@@ -87,7 +87,7 @@ impl Table {
         Self { headers, rows }
     }
 
-    /// Índice da primeira coluna cujo nome bate com um dos apelidos.
+    /// Index of the first column whose name matches one of the aliases.
     pub fn index(&self, names: &[&str]) -> Option<usize> {
         names
             .iter()
@@ -117,8 +117,8 @@ const C_BODY: &[&str] = &["body", "message", "content", "text", "selftext"];
 const C_SCORE: &[&str] = &["score", "karma", "points"];
 const C_DIR: &[&str] = &["direction", "vote", "vote_direction"];
 
-/// Mês (`AAAA-MM`) de uma data do export (`2024-03-01 12:00:00 UTC`, ISO ou
-/// segundos desde a época).
+/// Month (`YYYY-MM`) of an export date (`2024-03-01 12:00:00 UTC`, ISO or
+/// seconds since the epoch).
 pub fn month_of(date: &str) -> Option<String> {
     let d = date.trim();
     if d.len() >= 7 {
@@ -207,7 +207,7 @@ pub struct GdprResult {
     pub saved: Vec<Item>,
     pub subscribed: Vec<String>,
     pub statistics: Vec<Stat>,
-    /// "score" quando a safra do export trouxe pontuação; senão "date".
+    /// "score" when the export batch brought a score; otherwise "date".
     pub ranked_by: String,
     pub first_month: String,
     pub last_month: String,
@@ -228,7 +228,7 @@ fn short_name(name: &str) -> String {
         .to_ascii_lowercase()
 }
 
-/// Lê os CSV de um zip ou de uma pasta já descompactada.
+/// Reads the CSVs of a zip or of an already-unpacked folder.
 pub fn read_source(path: &Path) -> Result<HashMap<String, String>> {
     let mut out = HashMap::new();
     if path.is_dir() {
@@ -254,12 +254,12 @@ pub fn read_source(path: &Path) -> Result<HashMap<String, String>> {
     let lower = path.to_string_lossy().to_ascii_lowercase();
     if !lower.ends_with(".zip") {
         return Err(anyhow!(
-            "escolha o zip do export do Reddit ou a pasta onde ele foi descompactado"
+            "choose the Reddit export zip or the folder where it was unpacked"
         ));
     }
     let file = std::fs::File::open(path)?;
     let mut zip =
-        zip::ZipArchive::new(file).map_err(|e| anyhow!("não foi possível abrir o zip: {}", e))?;
+        zip::ZipArchive::new(file).map_err(|e| anyhow!("could not open the zip: {}", e))?;
     for i in 0..zip.len() {
         let mut entry = match zip.by_index(i) {
             Ok(e) => e,
@@ -275,7 +275,7 @@ pub fn read_source(path: &Path) -> Result<HashMap<String, String>> {
         }
     }
     if out.is_empty() {
-        return Err(anyhow!("este zip não tem nenhum .csv do export do Reddit"));
+        return Err(anyhow!("this zip has no .csv from the Reddit export"));
     }
     Ok(out)
 }
@@ -309,7 +309,7 @@ fn item_from(t: &Table, row: &[String], kind: &str) -> Item {
     }
 }
 
-/// Lê tudo o que existir e monta o resumo.
+/// Reads everything that exists and builds the summary.
 pub fn summarize(files: &HashMap<String, String>, source: &str, top: usize) -> GdprResult {
     let mut warnings = Vec::new();
     let mut totals = Totals::default();
@@ -347,7 +347,7 @@ pub fn summarize(files: &HashMap<String, String>, source: &str, top: usize) -> G
             posts.push(item);
         }
     } else {
-        warnings.push("posts.csv não veio neste export".to_string());
+        warnings.push("posts.csv did not come in this export".to_string());
     }
 
     if let Some(text) = pick(files, "comments") {
@@ -365,7 +365,7 @@ pub fn summarize(files: &HashMap<String, String>, source: &str, top: usize) -> G
             comments.push(item);
         }
     } else {
-        warnings.push("comments.csv não veio neste export".to_string());
+        warnings.push("comments.csv did not come in this export".to_string());
     }
 
     for (stem, kind) in [
@@ -531,12 +531,12 @@ pub fn render_markdown(r: &GdprResult) -> String {
         ));
     }
     out.push_str("## Totais\n\n");
-    out.push_str("| O quê | Quantos |\n| --- | ---: |\n");
+    out.push_str("| What | How many |\n| --- | ---: |\n");
     for (label, n) in [
         ("Posts", t.posts),
-        ("Comentários", t.comments),
+        ("Comments", t.comments),
         ("Posts salvos", t.saved_posts),
-        ("Comentários salvos", t.saved_comments),
+        ("Saved comments", t.saved_comments),
         ("Votos positivos", t.votes_up),
         ("Votos negativos", t.votes_down),
         ("Subs inscritos", t.subscribed),
@@ -553,7 +553,7 @@ pub fn render_markdown(r: &GdprResult) -> String {
         }
     }
     if !r.top_subreddits.is_empty() {
-        out.push_str("\n## Subs mais ativos\n\n| Sub | Posts | Comentários | Total |\n| --- | ---: | ---: | ---: |\n");
+        out.push_str("\n## Most active subs\n\n| Sub | Posts | Comments | Total |\n| --- | ---: | ---: | ---: |\n");
         for s in &r.top_subreddits {
             out.push_str(&format!(
                 "| r/{} | {} | {} | {} |\n",
@@ -563,7 +563,7 @@ pub fn render_markdown(r: &GdprResult) -> String {
     }
     if !r.timeline.is_empty() {
         out.push_str(
-            "\n## Linha do tempo\n\n| Mês | Posts | Comentários |\n| --- | ---: | ---: |\n",
+            "\n## Timeline\n\n| Month | Posts | Comments |\n| --- | ---: | ---: |\n",
         );
         for m in &r.timeline {
             out.push_str(&format!("| {} | {} | {} |\n", m.month, m.posts, m.comments));
@@ -599,7 +599,7 @@ pub fn render_markdown(r: &GdprResult) -> String {
         }
     };
     destaque("Posts em destaque", &r.top_posts, &mut out);
-    destaque("Comentários em destaque", &r.top_comments, &mut out);
+    destaque("Featured comments", &r.top_comments, &mut out);
     if !r.saved.is_empty() {
         out.push_str(&format!("\n## Salvos ({})\n\n", r.saved.len()));
         for i in r.saved.iter().take(500) {
@@ -618,7 +618,7 @@ pub fn render_markdown(r: &GdprResult) -> String {
         out.push('\n');
     }
     if !r.warnings.is_empty() {
-        out.push_str("\n## Observações\n\n");
+        out.push_str("\n## Notes\n\n");
         for w in &r.warnings {
             out.push_str(&format!("- {}\n", w));
         }
@@ -702,7 +702,7 @@ pub fn run(opts: &Options, progress: &ProgressFn) -> Result<GdprResult> {
     report(progress, ID, "started", 0, None, None);
     let path = PathBuf::from(&opts.path);
     if !path.exists() {
-        return Err(anyhow!("não achei {}", opts.path));
+        return Err(anyhow!("could not find {}", opts.path));
     }
     let files = read_source(&path)?;
     report(
@@ -845,7 +845,7 @@ mod tests {
             formats: vec!["json".to_string(), "csv".to_string(), "md".to_string()],
             top: 10,
         };
-        let r = run(&opts, &crate::core::tools::noop_progress()).expect("pasta");
+        let r = run(&opts, &crate::core::tools::noop_progress()).expect("folder");
         assert_eq!(r.totals.posts, 2);
         assert_eq!(r.totals.comments, 3);
         assert_eq!(r.exported.len(), 5);
@@ -853,7 +853,7 @@ mod tests {
         assert!(md.contains("| Posts | 2 |"));
         assert!(md.contains("| r/rust | 1 | 2 | 3 |"));
 
-        // Agora o mesmo conteúdo dentro de um zip.
+        // Now the same content inside a zip.
         let zip_path = dir.join("export.zip");
         {
             let file = std::fs::File::create(&zip_path).expect("zip");
@@ -861,13 +861,13 @@ mod tests {
             let opt: zip::write::FileOptions<'_, ()> = zip::write::FileOptions::default()
                 .compression_method(zip::CompressionMethod::Deflated);
             use std::io::Write;
-            w.start_file("export/posts.csv", opt).expect("entrada");
-            w.write_all(POSTS.as_bytes()).expect("escreve");
-            w.start_file("export/comments.csv", opt).expect("entrada");
-            w.write_all(COMMENTS.as_bytes()).expect("escreve");
-            w.start_file("export/leia-me.txt", opt).expect("entrada");
-            w.write_all(b"nao e csv").expect("escreve");
-            w.finish().expect("fecha");
+            w.start_file("export/posts.csv", opt).expect("entry");
+            w.write_all(POSTS.as_bytes()).expect("writes");
+            w.start_file("export/comments.csv", opt).expect("entry");
+            w.write_all(COMMENTS.as_bytes()).expect("writes");
+            w.start_file("export/leia-me.txt", opt).expect("entry");
+            w.write_all(b"nao e csv").expect("writes");
+            w.finish().expect("closes");
         }
         let opts_zip = Options {
             path: zip_path.to_string_lossy().to_string(),
@@ -886,7 +886,7 @@ mod tests {
     fn recusa_arquivo_que_nao_e_export() {
         let dir = temp();
         let f = dir.join("qualquer.txt");
-        std::fs::write(&f, "nada").expect("arquivo");
+        std::fs::write(&f, "nada").expect("file");
         let opts = Options {
             path: f.to_string_lossy().to_string(),
             export_dir: None,

@@ -18,10 +18,10 @@
 
 <script lang="ts">
   /**
-   * Quadrado grande da grade de ferramentas: ícone, nome embaixo e, quando
-   * precisa, o aviso de plataforma ou de "em breve". Uma ferramenta que só
-   * roda no Windows ganha um selo no canto do ícone e a legenda "Só Windows",
-   * para ninguém clicar achando que roda no Mac.
+   * Big square in the tools grid: icon, name below and, when
+   * needed, the platform or "coming soon" notice. A tool that only
+   * runs on Windows gets a badge on the icon corner and the caption "Windows only",
+   * so nobody clicks thinking it runs on Mac.
    */
   import { t } from "$lib/i18n";
   import ToolIcon from "$components/tools/ToolIcon.svelte";

@@ -1,27 +1,27 @@
-//! Busca de vídeos por texto (YouTube/SoundCloud) via `ytsearchN:`.
+//! Text search for videos (YouTube/SoundCloud) via `ytsearchN:`.
 //!
-//! Mora no core, e não só no comando Tauri, para que a UI e o `gumballz-cli`
-//! usem a mesma busca: a CLI precisa dela para montar acervos a partir de uma
-//! lista de termos (ex.: `gumballz-get search "mir4 boss" --json > hits.ndjson`),
-//! e os filtros de duração/título ficam numa função pura testável sem rede.
+//! It lives in the core, not only in the Tauri command, so the UI and `gumballz-cli`
+//! use the same search: the CLI needs it to build archives from a
+//! list of terms (e.g. `gumballz-get search "mir4 boss" --json > hits.ndjson`),
+//! and the duration/title filters live in a pure function testable without network.
 
 use serde::Serialize;
 
-/// Teto do yt-dlp por consulta; acima disso a busca fica lenta e o YouTube
-/// começa a devolver páginas vazias.
+/// yt-dlp cap per query; above it the search gets slow and YouTube
+/// starts returning empty pages.
 pub const MAX_RESULTS: u32 = 500;
 
 #[derive(Debug, Clone, Default)]
 pub struct SearchOptions {
     pub query: String,
-    /// "youtube" (padrão) | "soundcloud"
+    /// "youtube" (default) | "soundcloud"
     pub platform: String,
     pub max_results: u32,
-    /// Descarta vídeos mais curtos que isso (segundos).
+    /// Drops videos shorter than this (seconds).
     pub min_duration: Option<f64>,
-    /// Descarta vídeos mais longos que isso (segundos).
+    /// Drops videos longer than this (seconds).
     pub max_duration: Option<f64>,
-    /// Mantém só títulos que contenham algum destes termos (sem caixa).
+    /// Keeps only titles containing one of these terms (case-insensitive).
     pub title_has: Vec<String>,
 }
 
@@ -47,7 +47,7 @@ fn search_prefix(platform: &str) -> &'static str {
     }
 }
 
-/// Roda a busca no yt-dlp e devolve os resultados já filtrados.
+/// Runs the search in yt-dlp and returns the already-filtered results.
 pub async fn search(opts: &SearchOptions) -> anyhow::Result<Vec<SearchHit>> {
     let query = opts.query.trim();
     if query.is_empty() {
@@ -121,8 +121,8 @@ fn hit_from(json: &serde_json::Value, opts: &SearchOptions) -> Option<SearchHit>
     })
 }
 
-/// Sem duração conhecida (live, estreia) o vídeo só passa quando nenhum
-/// limite foi pedido: uma live não termina e estouraria o acervo.
+/// With no known duration (live, premiere) the video only passes when no
+/// limit was asked for: a live never ends and would blow up the archive.
 fn passes(hit: &SearchHit, opts: &SearchOptions, needles: &[String]) -> bool {
     if opts.min_duration.is_some() || opts.max_duration.is_some() {
         let Some(d) = hit.duration else { return false };
@@ -140,7 +140,7 @@ fn passes(hit: &SearchHit, opts: &SearchOptions, needles: &[String]) -> bool {
     needles.iter().any(|n| title.contains(n.as_str()))
 }
 
-/// Lê o NDJSON do `--dump-json`, aplica os filtros e tira repetidos.
+/// Reads the `--dump-json` NDJSON, applies the filters and removes duplicates.
 pub fn parse_hits(stdout: &str, opts: &SearchOptions) -> Vec<SearchHit> {
     let needles: Vec<String> = opts
         .title_has
@@ -184,7 +184,7 @@ not json
     fn parses_every_hit_once_without_filters() {
         let hits = parse_hits(OUT, &opts());
         let ids: Vec<&str> = hits.iter().map(|h| h.id.as_str()).collect();
-        assert_eq!(ids, ["a1", "b2", "c3", "d4"], "repetido e sem id saem");
+        assert_eq!(ids, ["a1", "b2", "c3", "d4"], "duplicates and id-less ones are dropped");
         assert_eq!(hits[0].uploader, "Chan");
         assert_eq!(hits[0].view_count, Some(10));
         assert_eq!(hits[0].query, "mir4");
@@ -199,7 +199,7 @@ not json
             ..opts()
         };
         let ids: Vec<String> = parse_hits(OUT, &o).into_iter().map(|h| h.id).collect();
-        assert_eq!(ids, ["a1"], "60s é curto, 900s longo, live sem duração");
+        assert_eq!(ids, ["a1"], "60s is short, 900s long, live without duration");
     }
 
     #[test]
@@ -218,7 +218,7 @@ not json
         assert_eq!(search_prefix(""), "ytsearch");
     }
 
-    /// Precisa de rede e do yt-dlp.
+    /// Needs network and yt-dlp.
     /// `cargo test -p gumballz-core --lib -- --ignored live_yt_search`
     #[tokio::test]
     #[ignore]
@@ -228,7 +228,7 @@ not json
             max_results: 3,
             ..opts()
         };
-        let hits = search(&o).await.expect("a busca devia responder");
+        let hits = search(&o).await.expect("the search should have answered");
         assert!(!hits.is_empty());
         eprintln!("{:?}", hits.iter().map(|h| &h.title).collect::<Vec<_>>());
     }

@@ -1,5 +1,5 @@
-//! Ollama (estudo 18): detectar o daemon em `127.0.0.1:11434`, listar,
-//! baixar (stream NDJSON de `/api/pull`) e remover modelos.
+//! Ollama (study 18): detect the daemon at `127.0.0.1:11434`, list,
+//! download (NDJSON stream from `/api/pull`) and remove models.
 
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
@@ -60,7 +60,7 @@ pub fn recommended() -> Vec<Recommended> {
         Recommended {
             name: "qwen3:8b".into(),
             size_gb: 5.2,
-            use_case: "tradução e resumo, boa em português".into(),
+            use_case: "translation and summarization, good at Portuguese".into(),
         },
         Recommended {
             name: "gemma3:12b".into(),
@@ -70,22 +70,22 @@ pub fn recommended() -> Vec<Recommended> {
         Recommended {
             name: "llama3.2:3b".into(),
             size_gb: 2.0,
-            use_case: "máquinas fracas, rápido".into(),
+            use_case: "weak machines, fast".into(),
         },
         Recommended {
             name: "gemma3:4b".into(),
             size_gb: 3.3,
-            use_case: "equilíbrio, aceita imagens".into(),
+            use_case: "balanced, accepts images".into(),
         },
         Recommended {
             name: "qwen2.5-coder:7b".into(),
             size_gb: 4.7,
-            use_case: "código".into(),
+            use_case: "code".into(),
         },
         Recommended {
             name: "nomic-embed-text".into(),
             size_gb: 0.3,
-            use_case: "busca semântica (embeddings)".into(),
+            use_case: "semantic search (embeddings)".into(),
         },
     ]
 }

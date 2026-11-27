@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Ditado: atalho global grava o microfone, o whisper local transcreve e o texto é digitado onde o cursor estiver. */
+  /** Dictation: a global hotkey records the mic, local whisper transcribes, and the text is typed where the cursor is. */
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
   import { onDestroy, onMount } from "svelte";

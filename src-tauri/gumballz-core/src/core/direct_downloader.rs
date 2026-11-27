@@ -215,8 +215,8 @@ fn headers_for_forbidden_retry(
     headers
 }
 
-/// `Err` só quando o host não responde de jeito nenhum; resposta estranha
-/// (sem tamanho, sem Range) vira `Ok` com o que deu para saber.
+/// `Err` only when the host does not respond at all; a strange response
+/// (no size, no Range) becomes `Ok` with whatever could be learned.
 async fn probe_url(
     client: &reqwest::Client,
     url: &str,
@@ -264,9 +264,9 @@ async fn download_attempt(
                     return Err(fetch_err);
                 }
                 if fetch_err.to_string().contains("HTTP 429") {
-                    // Não cair para o stream único: o host ainda está
-                    // contando as conexões que acabaram de fechar. Espera e
-                    // deixa a tentativa seguinte rodar com menos segmentos.
+                    // Do not fall back to the single stream: the host is still
+                    // counting the connections that just closed. Wait and
+                    // let the next attempt run with fewer segments.
                     let _ = std::fs::remove_file(&part_path);
                     tokio::time::sleep(Duration::from_secs(5)).await;
                     return Err(fetch_err);
@@ -339,10 +339,10 @@ async fn run_http_fetcher(
     headers: Option<reqwest::header::HeaderMap>,
     cancel: Option<&CancellationToken>,
 ) -> anyhow::Result<u64> {
-    // B35: o numero de Config vira **teto**, nao valor fixo. Um CDN que estrangula
-    // com 8 conexoes entrega mais com 4, e so medindo da para saber qual e o caso
-    // deste host. Sem historico, o comportamento e identico ao anterior.
-    let teto = get_global_max_concurrent_segments()
+    // B35: the Config number becomes a **ceiling**, not a fixed value. A CDN that throttles
+    // with 8 connections delivers more with 4, and only measuring tells which case
+    // this host is. With no history, the behavior is identical to before.
+    let cap = get_global_max_concurrent_segments()
         .unwrap_or(MAX_PARALLEL)
         .clamp(1, 32);
     let host = host_of(url);
@@ -350,10 +350,10 @@ async fn run_http_fetcher(
         Some(h) => concurrency_tuner()
             .lock()
             .await
-            .suggest(h, teto as u32, teto as u32) as usize,
-        None => teto,
+            .suggest(h, cap as u32, cap as u32) as usize,
+        None => cap,
     };
-    let inicio = std::time::Instant::now();
+    let started = std::time::Instant::now();
     let _active = super::adaptive_concurrency::ActiveDownloadGuard::new();
     let cfg = HttpFetcherConfig {
         min_size_for_chunked: 0,
@@ -373,10 +373,10 @@ async fn run_http_fetcher(
     let result = match fetcher.download(progress_tx.clone()).await {
         Ok(r) => r,
         Err(e) => {
-            // 429 com N conexões é o host dizendo "menos": registra para o
-            // tuner cortar pela metade na próxima tentativa (o Hetzner speed
-            // server devolveu 429 três vezes seguidas com 8 segmentos e o
-            // retry cego repetia os mesmos 8).
+            // A 429 with N connections is the host saying "less": record it so the
+            // tuner halves it on the next attempt (the Hetzner speed
+            // server returned 429 three times in a row with 8 segments and the
+            // blind retry repeated the same 8).
             if e.to_string().contains("HTTP 429") {
                 if let Some(h) = &host {
                     concurrency_tuner().lock().await.record_rate_limit(h);
@@ -391,10 +391,10 @@ async fn run_http_fetcher(
         }
     };
 
-    // So conta como amostra o que durou o suficiente para a medida significar
-    // alguma coisa: um arquivo de 200 KB mede latencia, nao vazao.
+    // Only what lasted long enough for the measurement to mean something counts
+    // as a sample: a 200 KB file measures latency, not throughput.
     if let Some(h) = host {
-        let secs = inicio.elapsed().as_secs_f64();
+        let secs = started.elapsed().as_secs_f64();
         if secs >= 1.0 && result.bytes_written > 0 {
             let bps = result.bytes_written as f64 / secs;
             concurrency_tuner()
@@ -407,10 +407,10 @@ async fn run_http_fetcher(
     Ok(result.bytes_written)
 }
 
-/// Historico de vazao por host, para o B35.
+/// Throughput history per host, for B35.
 ///
-/// `tokio::sync::Mutex` e nao `std::sync::Mutex`: isto e travado dentro de
-/// codigo async.
+/// `tokio::sync::Mutex`, not `std::sync::Mutex`: this is locked inside
+/// async code.
 fn concurrency_tuner() -> &'static tokio::sync::Mutex<super::adaptive_concurrency::ConcurrencyTuner>
 {
     super::adaptive_concurrency::global()
@@ -705,9 +705,9 @@ mod tests {
     }
 
     #[test]
-    fn host_e_a_chave_do_historico_de_vazao() {
-        // O historico e por host: medir "cdn.exemplo.com" e aplicar em outro
-        // dominio seria pior que nao medir.
+    fn host_is_the_key_of_the_throughput_history() {
+        // History is per host: measuring "cdn.example.com" and applying it to another
+        // domain would be worse than not measuring.
         assert_eq!(
             host_of("https://CDN.Exemplo.com/a/b.mp4"),
             Some("cdn.exemplo.com".to_string()),
@@ -890,11 +890,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn sem_historico_o_teto_e_respeitado() {
-        // Primeira vez num host: nada medido, entao o numero de Config vale.
+    async fn with_no_history_the_ceiling_is_respected() {
+        // First time on a host: nothing measured, so the Config number stands.
         let tuner = super::super::adaptive_concurrency::ConcurrencyTuner::default();
         assert_eq!(tuner.suggest("novo.host", 8, 8), 8);
-        // E o teto e teto mesmo, nao sugestao.
+        // And the ceiling is a ceiling, not a suggestion.
         assert_eq!(tuner.suggest("novo.host", 32, 4), 4);
     }
 }

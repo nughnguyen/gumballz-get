@@ -18,9 +18,9 @@
 
 <script lang="ts">
   /**
-   * Baixar por link: post, foto, vídeo, reel, IGTV, carrossel, story ou
-   * highlight. `mode` = "post" (um link), "bulk" (vários) ou "audio"
-   * (áudio dos reels).
+   * Download by link: post, photo, video, reel, IGTV, carousel, story or
+   * highlight. `mode` = "post" (one link), "bulk" (many) or "audio"
+   * (reel audio).
    */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
@@ -50,7 +50,7 @@
       const clip = await navigator.clipboard.readText();
       if (mode !== "bulk" && !url && /instagram\.com\//.test(clip)) url = clip.trim();
     } catch {
-      /* sem permissão */
+      /* no permission */
     }
   });
   onDestroy(() => unlisten?.());

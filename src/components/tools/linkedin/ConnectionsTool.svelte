@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Tabela filtravel do Connections.csv, com duplicados e exportacao do filtrado. */
+  /** Filterable table from Connections.csv, with duplicates and export of the filtered rows. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

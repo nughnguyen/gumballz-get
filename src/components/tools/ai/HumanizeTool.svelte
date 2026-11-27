@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Humanizar texto: o skill blader/humanizer (MIT) rodando na IA configurada. */
+  /** Humanize text: the blader/humanizer skill (MIT) running on the configured AI. */
   import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
   import { t } from "$lib/i18n";

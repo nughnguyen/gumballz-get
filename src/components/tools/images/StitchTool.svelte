@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Costura prints numa imagem longa, com detecção de sobreposição. */
+  /** Stitches screenshots into one long image, with overlap detection. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

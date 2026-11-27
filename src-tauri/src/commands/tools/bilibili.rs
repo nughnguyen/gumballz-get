@@ -1,6 +1,6 @@
-//! Comandos da categoria Bilibili: export dos comentários flutuantes
-//! (danmaku) e queima do ASS num clipe. O motor mora em
-//! `crate::platforms::bilibili::danmaku`; aqui só entra a ponte com o Tauri.
+//! Commands of the Bilibili category: export of the floating comments (danmaku)
+/// and burning the ASS into a clip. The engine lives in
+/// `crate::platforms::bilibili::danmaku`; only the bridge to Tauri comes in here.
 
 use crate::platforms::bilibili::danmaku::{burn, export};
 

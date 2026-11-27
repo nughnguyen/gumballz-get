@@ -1634,15 +1634,15 @@ pub async fn remove_download(
     }
 }
 
-/// Último comando yt-dlp rodado para este download (argv redigido). `None`
-/// quando o item nunca chegou a rodar o yt-dlp (arquivo direto, torrent…).
+/// Last yt-dlp command run for this download (redacted argv). `None` when the
+/// item never got to run yt-dlp (direct file, torrent…).
 #[tauri::command]
 pub fn get_download_command(download_id: u64) -> Option<gumballz_core::core::ytdlp::CommandRecord> {
     gumballz_core::core::ytdlp::get_command(download_id)
 }
 
-/// "Editar e tentar de novo": recebe o comando como texto, tokeniza como um
-/// shell faria (sem rodar shell nenhum) e re-enfileira o item com esse argv.
+/// "Edit and try again": takes the command as text, tokenizes it the way a
+/// shell would (without running any shell) and re-enqueues the item with that argv.
 #[tauri::command]
 pub async fn retry_download_with_command(
     app: tauri::AppHandle,

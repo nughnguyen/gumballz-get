@@ -1,7 +1,7 @@
-//! Texto para voz pelo serviço de leitura em voz alta do Microsoft Edge,
-//! reimplementação em Rust do protocolo documentado no estudo 09 (rany2/edge-tts).
-//! Grátis, sem chave, precisa de internet. Devolve MP3 24 kHz e os limites
-//! de palavra (WordBoundary), que viram legenda sincronizada.
+//! Text to speech via Microsoft Edge's read-aloud service, a Rust
+//! reimplementation of the protocol documented in study 09 (rany2/edge-tts).
+//! Free, no key, needs internet. Returns 24 kHz MP3 and word
+//! boundaries (WordBoundary), which become synchronized subtitles.
 
 use std::sync::Mutex;
 
@@ -17,15 +17,15 @@ const TRUSTED_CLIENT_TOKEN: &str = "6A5AA1D4EAFF4E9FB37E23D68491D6F4";
 const BASE_URL: &str = "speech.platform.bing.com/consumer/speech/synthesize/readaloud";
 const CHROMIUM_FULL_VERSION: &str = "130.0.2849.68";
 const WIN_EPOCH: u64 = 11_644_473_600;
-/// Limite conservador de bytes de texto por requisição (o edge-tts calcula
-/// a partir do cabeçalho; 3 000 bytes fica bem abaixo do teto).
+/// Conservative cap on text bytes per request (edge-tts computes it
+/// from the header; 3,000 bytes sits well below the ceiling).
 const CHUNK_BYTES: usize = 3000;
 
 fn chromium_major() -> &'static str {
     CHROMIUM_FULL_VERSION.split('.').next().unwrap_or("130")
 }
 
-/// `Sec-MS-GEC`: SHA-256 de (ticks Windows arredondados a 5 min + token).
+/// `Sec-MS-GEC`: SHA-256 of (Windows ticks rounded to 5 min + token).
 fn sec_ms_gec(clock_skew_secs: i64) -> String {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -90,7 +90,7 @@ pub async fn list_voices() -> anyhow::Result<Vec<Voice>> {
         .await?;
     if !resp.status().is_success() {
         return Err(anyhow!(
-            "lista de vozes do Edge indisponivel: HTTP {}",
+            "Edge voice list unavailable: HTTP {}",
             resp.status()
         ));
     }
@@ -160,7 +160,7 @@ fn date_string() -> String {
         .to_string()
 }
 
-/// Divide por frases sem passar de `CHUNK_BYTES`, sem cortar UTF-8.
+/// Splits by sentence without exceeding `CHUNK_BYTES`, without cutting UTF-8.
 pub fn split_text(text: &str) -> Vec<String> {
     let mut chunks = Vec::new();
     let mut current = String::new();
@@ -169,7 +169,7 @@ pub fn split_text(text: &str) -> Vec<String> {
             chunks.push(std::mem::take(&mut current));
         }
         if sentence.len() > CHUNK_BYTES {
-            // frase gigante: corta em espaços
+            // huge sentence: split on spaces
             for word in sentence.split(' ') {
                 if current.len() + word.len() + 1 > CHUNK_BYTES && !current.trim().is_empty() {
                     chunks.push(std::mem::take(&mut current));
@@ -252,7 +252,7 @@ async fn synth_chunk(text: &str, opts: &TtsOptions, skew: i64) -> anyhow::Result
     );
     let (mut ws, _) = tokio_tungstenite::connect_async(req)
         .await
-        .map_err(|e| anyhow!("Edge TTS: conexao recusada ({})", e))?;
+        .map_err(|e| anyhow!("Edge TTS: connection refused ({})", e))?;
 
     let cfg = format!(
         "X-Timestamp:{}\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n{{\"context\":{{\"synthesis\":{{\"audio\":{{\"metadataoptions\":{{\"sentenceBoundaryEnabled\":\"false\",\"wordBoundaryEnabled\":\"true\"}},\"outputFormat\":\"audio-24khz-48kbitrate-mono-mp3\"}}}}}}}}\r\n",
@@ -314,12 +314,12 @@ async fn synth_chunk(text: &str, opts: &TtsOptions, skew: i64) -> anyhow::Result
     }
     let _ = ws.close(None).await;
     if !got_audio {
-        return Err(anyhow!("Edge TTS nao devolveu audio (o servico pode ter mudado o token; tente de novo mais tarde)"));
+        return Err(anyhow!("Edge TTS returned no audio (the service may have changed the token; try again later)"));
     }
     Ok(ChunkOut { audio, words })
 }
 
-/// Agrupa palavras em legendas curtas (até 8 palavras, corta em pausas).
+/// Groups words into short subtitles (up to 8 words, split on pauses).
 pub fn words_to_cues(words: &[WordBoundary]) -> Vec<Cue> {
     let mut cues = Vec::new();
     let mut buf: Vec<&WordBoundary> = Vec::new();
@@ -355,7 +355,7 @@ pub fn words_to_cues(words: &[WordBoundary]) -> Vec<Cue> {
     cues
 }
 
-/// Sintetiza `opts.text` inteiro em `audio_path` (MP3) e escreve o SRT ao lado.
+/// Synthesizes all of `opts.text` into `audio_path` (MP3) and writes the SRT next to it.
 pub async fn synthesize(
     opts: TtsOptions,
     audio_path: &std::path::Path,
@@ -363,7 +363,7 @@ pub async fn synthesize(
 ) -> anyhow::Result<TtsResult> {
     let chunks = split_text(&opts.text);
     if chunks.is_empty() {
-        return Err(anyhow!("texto vazio"));
+        return Err(anyhow!("empty text"));
     }
     let id = format!("tts:{}", audio_path.display());
     let mut audio = Vec::new();
@@ -382,8 +382,8 @@ pub async fn synthesize(
         let out = match synth_chunk(chunk, &opts, skew).await {
             Ok(o) => o,
             Err(e) => {
-                // 403 por relógio fora: o edge-tts corrige lendo o header Date; aqui
-                // tentamos uma vez com deslocamento de 5 min para frente e para trás.
+                // 403 from a skewed clock: edge-tts fixes it by reading the Date header; here
+                // we try once with a 5 min offset forwards and backwards.
                 let msg = e.to_string();
                 if msg.contains("403") || msg.contains("recusada") {
                     skew = if skew == 0 { 300 } else { -300 };
@@ -404,7 +404,7 @@ pub async fn synthesize(
             words.push(w);
         }
         audio.extend_from_slice(&out.audio);
-        // O edge-tts soma o fim da última palavra mais ~0,9 s entre pedaços.
+        // edge-tts adds the end of the last word plus ~0.9 s between chunks.
         offset_ms += last_end + 875;
     }
     if let Some(parent) = audio_path.parent() {

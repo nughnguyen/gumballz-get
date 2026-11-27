@@ -18,9 +18,9 @@
 
 <script lang="ts">
   /**
-   * Quem não me segue de volta, fãs (me seguem, eu não sigo), mútuos e
-   * lista branca. Ações em massa (deixar de seguir, remover seguidor)
-   * com ritmo humano, teto diário e cancelamento.
+   * Who doesn't follow me back, fans (they follow me, I don't follow them), mutuals and
+   * whitelist. Bulk actions (unfollow, remove follower)
+   * at a human pace, with a daily cap and cancellation.
    */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
@@ -58,7 +58,7 @@
       whitelist = (await invoke<{ users: MiniUser[] }>("tool_ig_whitelist_get", { slug: slugArg() })).users;
       today = await invoke<number>("tool_ig_actions_today", { slug: slugArg() });
     } catch {
-      /* sem sessão */
+      /* no session */
     }
   }
 

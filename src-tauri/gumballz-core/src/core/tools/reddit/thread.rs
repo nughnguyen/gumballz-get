@@ -1,10 +1,10 @@
-//! Backup de uma thread do Reddit: post + árvore de comentários, offline.
+//! Backup of a Reddit thread: post + comment tree, offline.
 //!
-//! Tudo sai do JSON público (`<permalink>.json`). Os galhos que a página
-//! esconde atrás de "carregar mais" viram uma chamada a
-//! `api/morechildren.json`; os "continuar esta conversa" viram um novo GET no
-//! permalink do próprio nó. A saída é Markdown, HTML de arquivo único
-//! (colapsa, expande e reordena sem servidor) e o JSON normalizado.
+//! Everything comes from the public JSON (`<permalink>.json`). The branches the page
+//! hides behind "load more" become a call to
+//! `api/morechildren.json`; the "continue this conversation" ones become a new GET on
+//! the node's own permalink. The output is Markdown, single-file HTML
+//! (collapses, expands and reorders without a server) and the normalized JSON.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -55,8 +55,8 @@ pub struct Comment {
     pub replies: Vec<Comment>,
 }
 
-/// Um galho que o Reddit não mandou: ou uma lista de ids, ou o marcador de
-/// "continuar esta conversa" (`id == "_"`, sem ids).
+/// A branch Reddit did not send: either a list of ids, or the "continue this
+/// conversation" marker (`id == "_"`, without ids).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MoreRef {
     pub parent_id: String,
@@ -141,8 +141,8 @@ fn parse_comment(data: &Value) -> Comment {
     }
 }
 
-/// Achata `[{kind, data}, …]` — serve tanto para o `children` de um Listing
-/// quanto para o `things` do morechildren.
+/// Flattens `[{kind, data}, …]` — it serves both for a Listing's `children`
+/// and for morechildren's `things`.
 pub fn parse_things(children: &Value, out: &mut Vec<Comment>, mores: &mut Vec<MoreRef>) {
     let Some(list) = children.as_array() else {
         return;
@@ -186,15 +186,15 @@ pub fn parse_things(children: &Value, out: &mut Vec<Comment>, mores: &mut Vec<Mo
     }
 }
 
-/// A resposta de um permalink é `[listing do post, listing dos comentários]`.
+/// A permalink's response is `[post listing, comments listing]`.
 pub fn parse_thread_json(root: &Value) -> Result<(Post, Vec<Comment>, Vec<MoreRef>)> {
     let arr = root
         .as_array()
-        .ok_or_else(|| anyhow!("resposta inesperada do Reddit (não é a lista de dois listings)"))?;
+        .ok_or_else(|| anyhow!("unexpected Reddit response (not the list of two listings)"))?;
     let post_data = arr
         .first()
         .and_then(|l| l.pointer("/data/children/0/data"))
-        .ok_or_else(|| anyhow!("o post não veio na resposta (removido, privado ou apagado?)"))?;
+        .ok_or_else(|| anyhow!("the post did not come in the response (removed, private or deleted?)"))?;
     let post = parse_post(post_data);
     let mut flat = Vec::new();
     let mut mores = Vec::new();
@@ -204,7 +204,7 @@ pub fn parse_thread_json(root: &Value) -> Result<(Post, Vec<Comment>, Vec<MoreRe
     Ok((post, flat, mores))
 }
 
-/// O `things` de `api/morechildren.json`.
+/// The `things` of `api/morechildren.json`.
 pub fn parse_more_json(root: &Value) -> (Vec<Comment>, Vec<MoreRef>) {
     let mut flat = Vec::new();
     let mut mores = Vec::new();
@@ -219,8 +219,8 @@ pub fn parse_more_json(root: &Value) -> (Vec<Comment>, Vec<MoreRef>) {
 
 // ───────────────────────── árvore ─────────────────────────
 
-/// Monta a árvore a partir da lista achatada. Nós órfãos (o pai não veio)
-/// entram na raiz para nada se perder.
+/// Builds the tree from the flattened list. Orphan nodes (the parent did not come)
+/// go to the root so nothing is lost.
 pub fn build_tree(flat: Vec<Comment>, post_id: &str) -> Vec<Comment> {
     let root = format!("t3_{}", post_id);
     let mut map: HashMap<String, Comment> = HashMap::new();
@@ -250,8 +250,8 @@ pub fn build_tree(flat: Vec<Comment>, post_id: &str) -> Vec<Comment> {
         kids.entry(parent).or_default().push(key.clone());
     }
     let mut built: HashMap<String, Comment> = HashMap::new();
-    // De baixo para cima: a ordem inversa de descoberta garante que os filhos
-    // já estão prontos quando o pai é montado.
+    // Bottom-up: the reverse discovery order guarantees the children
+    // are already ready when the parent is assembled.
     for key in order.iter().rev() {
         let child_keys = kids.remove(key).unwrap_or_default();
         let replies: Vec<Comment> = child_keys.iter().filter_map(|k| built.remove(k)).collect();
@@ -271,7 +271,7 @@ pub fn count_tree(list: &[Comment]) -> usize {
     list.iter().map(|c| 1 + count_tree(&c.replies)).sum()
 }
 
-/// `score` (mais votados primeiro), `new` (recentes primeiro) ou `old`.
+/// `score` (most voted first), `new` (most recent first) or `old`.
 pub fn sort_tree(list: &mut [Comment], by: &str) {
     match by {
         "new" => list.sort_by(|a, b| {
@@ -351,7 +351,7 @@ pub fn render_markdown(t: &Thread) -> String {
     let mut out = String::new();
     out.push_str(&format!("# {}\n\n", p.title));
     out.push_str(&format!(
-        "r/{} · u/{} · {} pts · {} comentários · {}\n\n",
+        "r/{} · u/{} · {} pts · {} comments · {}\n\n",
         p.subreddit, p.author, p.score, p.num_comments, p.created
     ));
     out.push_str(&format!("<{}>\n\n", p.permalink));
@@ -366,13 +366,13 @@ pub fn render_markdown(t: &Thread) -> String {
         out.push_str("\n\n");
     }
     out.push_str("---\n\n");
-    out.push_str(&format!("## Comentários ({})\n\n", t.total));
+    out.push_str(&format!("## Comments ({})\n\n", t.total));
     for c in &t.comments {
         md_comment(c, 0, &mut out);
     }
     if t.missing > 0 {
         out.push_str(&format!(
-            "\n> {} comentários não vieram (o Reddit cortou o galho).\n",
+            "\n> {} comments did not come (Reddit cut the branch).\n",
             t.missing
         ));
     }
@@ -381,9 +381,9 @@ pub fn render_markdown(t: &Thread) -> String {
 
 // ───────────────────────── HTML ─────────────────────────
 
-/// Markdown do Reddit em HTML, no essencial: parágrafo, citação, bloco de
-/// código, código curto, negrito, itálico, link e URL solta. Tudo escapado
-/// antes — nada do que veio do Reddit vira marcação de verdade.
+/// Reddit Markdown to HTML, in essence: paragraph, quote, code block, inline code,
+/// bold, italic, link and bare URL. Everything escaped
+/// first — nothing that came from Reddit becomes real markup.
 pub fn md_to_html(body: &str) -> String {
     let mut out = String::new();
     let mut in_code = false;
@@ -458,7 +458,7 @@ fn inline_md(text: &str) -> String {
     wrap_pairs(&with_bold, '*', "<em>", "</em>")
 }
 
-/// `[texto](url)` e URL solta viram âncora.
+/// `[text](url)` and a bare URL become an anchor.
 fn link_md(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let chars: Vec<char> = s.chars().collect();
@@ -513,7 +513,7 @@ fn read_link(chars: &[char], start: usize) -> Option<(String, String, usize)> {
     Some((label, href, end + 1))
 }
 
-/// Troca pares de um mesmo caractere pelo par de tags.
+/// Swaps pairs of the same character for the tag pair.
 fn wrap_pairs(s: &str, marker: char, open: &str, close: &str) -> String {
     let count = s.chars().filter(|c| *c == marker).count();
     if count < 2 {
@@ -684,7 +684,7 @@ pub fn render_html(t: &Thread) -> String {
     ));
     out.push_str(&format!("<h1>{}</h1>", esc(&p.title)));
     out.push_str(&format!(
-        "<div class=\"meta\">r/{} · u/{} · {} pts · {} comentários · {}<br><a href=\"{}\" rel=\"noreferrer\">{}</a></div>",
+        "<div class=\"meta\">r/{} · u/{} · {} pts · {} comments · {}<br><a href=\"{}\" rel=\"noreferrer\">{}</a></div>",
         esc(&p.subreddit),
         esc(&p.author),
         p.score,
@@ -717,10 +717,10 @@ pub fn render_html(t: &Thread) -> String {
     }
     out.push_str("</div>");
     out.push_str(&format!(
-        "<div class=\"foot\">{} comentários salvos{} · arquivo gerado pelo GumballZ Get</div>",
+        "<div class=\"foot\">{} comments saved{} · file generated by GumballZ Get</div>",
         t.total,
         if t.missing > 0 {
-            format!(" · {} não vieram", t.missing)
+            format!(" · {} did not come", t.missing)
         } else {
             String::new()
         }
@@ -751,11 +751,11 @@ fn def_delay() -> u64 {
 pub struct Options {
     pub url: String,
     pub dest: String,
-    /// Ordem que o Reddit usa para escolher o que mandar: top, confidence,
+    /// Order Reddit uses to choose what to send: top, confidence,
     /// new, old, controversial, qa.
     #[serde(default = "def_sort")]
     pub sort: String,
-    /// Ordem da saída: score, new, old.
+    /// Output order: score, new, old.
     #[serde(default = "def_order")]
     pub order: String,
     #[serde(default = "def_true")]
@@ -764,18 +764,18 @@ pub struct Options {
     pub html: bool,
     #[serde(default)]
     pub json: bool,
-    /// Teto de requisições extras para abrir os "carregar mais".
+    /// Cap of extra requests to open the "load more" ones.
     #[serde(default = "def_requests")]
     pub max_requests: u32,
     #[serde(default = "def_delay")]
     pub delay_ms: u64,
-    /// Conta do gerenciador de cookies a usar (None = `_default`). Com a
-    /// sessão da extensão o Reddit responde como responde ao navegador do
-    /// usuário; sem ela, cai no modo anônimo com o desafio de JavaScript.
+    /// Cookie-manager account to use (None = `_default`). With the
+    /// extension session Reddit responds as it responds to the user's
+    /// browser; without it, it falls into anonymous mode with the JavaScript challenge.
     #[serde(default)]
     pub account_slug: Option<String>,
-    /// Conteúdo Netscape do bucket `reddit.com`. Quem preenche é o comando
-    /// Tauri, nunca o front — daí o `skip`.
+    /// Netscape content of the `reddit.com` bucket. The Tauri command fills it,
+    /// never the frontend — hence the `skip`.
     #[serde(skip)]
     pub session_netscape: Option<String>,
 }
@@ -791,28 +791,28 @@ pub struct ThreadResult {
     pub requests: u32,
     pub files: Vec<String>,
     pub dest: String,
-    /// Se o arquivamento saiu com a sessão do usuário ou anônimo.
+    /// Whether the archiving went out with the user's session or anonymous.
     pub used_session: bool,
 }
 
 async fn resolve_post(fetcher: &Fetcher, url: &str) -> Result<(String, Option<String>)> {
     let mut target = super::parse_target(url)
-        .ok_or_else(|| anyhow!("cole o link de um post do Reddit (ou o id dele)"))?;
+        .ok_or_else(|| anyhow!("paste the link of a Reddit post (or its id)"))?;
     if let Target::Short { url } = &target {
         let final_url = fetcher.resolve(url).await?;
         target = super::parse_target(&final_url)
-            .ok_or_else(|| anyhow!("o link curto não levou a um post ({})", final_url))?;
+            .ok_or_else(|| anyhow!("the short link did not lead to a post ({})", final_url))?;
     }
     match target {
         Target::Post { id, subreddit, .. } => Ok((id, subreddit)),
         _ => Err(anyhow!(
-            "isto não é um post: cole o link de uma thread (com /comments/ no meio)"
+            "this is not a post: paste a thread link (with /comments/ in the middle)"
         )),
     }
 }
 
-/// Abre os "carregar mais" até o teto de requisições. Devolve quantos
-/// comentários ficaram de fora.
+/// Opens the "load more" ones up to the request cap. Returns how many
+/// comments were left out.
 async fn expand(
     fetcher: &Fetcher,
     post_id: &str,
@@ -835,7 +835,7 @@ async fn expand(
             continue;
         }
         let (new_flat, new_mores) = if more.children.is_empty() {
-            // "continuar esta conversa": o galho inteiro vem do permalink do nó.
+            // "continue this conversation": the whole branch comes from the node's permalink.
             let parent = more.parent_id.trim_start_matches("t1_");
             if parent.is_empty() || more.parent_id.starts_with("t3_") {
                 continue;
@@ -889,7 +889,7 @@ async fn expand(
             "progress",
             flat.len() as u64,
             None,
-            Some(format!("{} comentários", flat.len())),
+            Some(format!("{} comments", flat.len())),
         );
     }
     missing
@@ -965,7 +965,7 @@ pub async fn run(opts: &Options, progress: ProgressFn) -> Result<ThreadResult> {
         files.push(path.to_string_lossy().to_string());
     }
     if files.is_empty() {
-        return Err(anyhow!("escolha pelo menos um formato de saída"));
+        return Err(anyhow!("choose at least one output format"));
     }
     report(
         &progress,
@@ -993,8 +993,8 @@ pub async fn run(opts: &Options, progress: ProgressFn) -> Result<ThreadResult> {
 mod tests {
     use super::*;
 
-    /// Uma thread de mentira com a mesma forma da de verdade: dois listings,
-    /// resposta aninhada, um `more` com ids e um "continuar esta conversa".
+    /// A fake thread with the same shape as a real one: two listings,
+    /// a nested reply, a `more` with ids and a "continue this conversation".
     const FIXTURE: &str = r#"[
       {"kind":"Listing","data":{"children":[{"kind":"t3","data":{
         "id":"1abcdef","title":"Como o Reddit serve video e audio separados",
@@ -1050,7 +1050,7 @@ mod tests {
         );
         assert_eq!(t.total, 3);
         assert_eq!(t.comments.len(), 2);
-        // Ordenado por score: ana (50) antes de carla (2).
+        // Ordered by score: ana (50) before carla (2).
         assert_eq!(t.comments[0].author, "ana");
         assert_eq!(t.comments[0].replies.len(), 1);
         assert_eq!(t.comments[0].replies[0].author, "bruno");
@@ -1122,7 +1122,7 @@ mod tests {
         assert!(md.contains("- **u/ana** · 50 pts"));
         assert!(md.contains("  - **u/bruno** · 10 pts"));
         assert!(md.contains("    Resposta com [link](https://exemplo.com)"));
-        assert!(md.contains("2 comentários não vieram"));
+        assert!(md.contains("2 comments did not come"));
     }
 
     #[test]
@@ -1166,7 +1166,7 @@ mod tests {
             md_to_html("veja https://exemplo.com/a").contains("<a href=\"https://exemplo.com/a\"")
         );
         assert!(md_to_html("[texto](https://exemplo.com)").contains(">texto</a>"));
-        // Asterisco solto não pode virar tag aberta.
+        // A loose asterisk cannot become an open tag.
         assert_eq!(md_to_html("2 * 3"), "<p>2 * 3</p>");
     }
 
@@ -1186,14 +1186,14 @@ mod tests {
         let de_volta: Value = serde_json::from_str(
             &std::fs::read_to_string(out_path(&dir, base, "json")).expect("le"),
         )
-        .expect("json valido");
+        .expect("valid json");
         assert_eq!(de_volta["post"]["subreddit"], "rust");
         assert_eq!(de_volta["comments"][0]["author"], "ana");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[tokio::test]
-    #[ignore = "rede: baixa uma thread publica de verdade do Reddit"]
+    #[ignore = "network: really downloads a public Reddit thread"]
     async fn baixa_uma_thread_publica_de_verdade() {
         let dir = std::env::temp_dir().join("gumballz-get-rdthread-live");
         let _ = std::fs::create_dir_all(&dir);
@@ -1214,7 +1214,7 @@ mod tests {
             .await
             .expect("thread real");
         println!(
-            "r/{} · {} · {} comentários · {} requisições · {:?}",
+            "r/{} · {} · {} comments · {} requests · {:?}",
             r.subreddit, r.title, r.comments, r.requests, r.files
         );
         assert!(r.comments > 0);

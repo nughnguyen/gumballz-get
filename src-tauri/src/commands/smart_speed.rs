@@ -1,15 +1,15 @@
-//! Mapa de silencio de uma aula, para o player pular durante a reproducao.
+//! A lesson's silence map, for the player to skip during playback.
 //!
-//! B52. O `core::silence_map` sabe onde estao os silencios e para onde saltar;
-//! o que faltava era computar o mapa e guardar.
+//! B52. `core::silence_map` knows where the silences are and where to jump;
+//! what was missing was computing the map and keeping it.
 //!
-//! Pular na reproducao, e nao cortar o arquivo, e a diferenca que importa: o
-//! B36 cortava com `silenceremove` e pagava dois precos — residuo de padding e
-//! saida obrigatoriamente em audio, porque filtro de audio dessincroniza video.
-//! Aqui o video continua video e o padding vira decisao reversivel.
+//! Skipping during playback, instead of cutting the file, is the difference that
+//! matters: B36 cut with `silenceremove` and paid two prices — padding residue
+//! and output forced to audio, because an audio filter desyncs video. Here the
+//! video stays a video and the padding becomes a reversible decision.
 //!
-//! A sonda e cara (uma passada de ffmpeg no arquivo inteiro), entao roda uma vez
-//! e o mapa fica em disco. Nada e reprocessado ao assistir de novo.
+//! The probe is expensive (one ffmpeg pass over the whole file), so it runs once
+//! and the map stays on disk. Nothing is reprocessed when watching again.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -51,10 +51,10 @@ fn save(map: &BTreeMap<String, SilenceMap>) {
     }
 }
 
-/// Duracao total do arquivo, lida da mesma saida do ffmpeg.
+/// Total duration of the file, read from the same ffmpeg output.
 ///
-/// Precisa vir junto porque um `silence_start` sem `silence_end` so pode ser
-/// interpretado sabendo onde o arquivo acaba.
+/// It has to come along because a `silence_start` without a `silence_end` can
+/// only be interpreted knowing where the file ends.
 fn parse_duration_secs(stderr: &str) -> Option<f64> {
     let idx = stderr.find("Duration:")?;
     let resto = &stderr[idx + "Duration:".len()..];
@@ -69,13 +69,13 @@ fn parse_duration_secs(stderr: &str) -> Option<f64> {
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SilenceMapInfo {
     pub map: SilenceMap,
-    /// Quanto tempo o pulo economiza, em segundos.
+    /// How much time the jump saves, in seconds.
     pub savings_secs: f64,
-    /// `true` quando o mapa veio do cache, sem sondar de novo.
+    /// `true` when the map came from the cache, without probing again.
     pub from_cache: bool,
 }
 
-/// Computa (ou reaproveita) o mapa de silencio de um arquivo.
+/// Computes (or reuses) a file's silence map.
 #[tauri::command]
 pub async fn compute_silence_map(
     path: String,
@@ -84,13 +84,13 @@ pub async fn compute_silence_map(
     let force = force.unwrap_or(false);
     let arquivo = PathBuf::from(&path);
     if !arquivo.is_file() {
-        return Err("O arquivo nao existe".to_string());
+        return Err("The file does not exist".to_string());
     }
 
     if !force {
         if let Some(cached) = load().get(&path) {
-            // `needs_recompute` compara a versao do algoritmo: um mapa gravado
-            // com outros parametros de sonda descreve outra coisa.
+            // `needs_recompute` compares the algorithm version: a map recorded
+            // with other probe parameters describes something else.
             if !needs_recompute(cached) {
                 return Ok(SilenceMapInfo {
                     savings_secs: savings_secs(cached),
@@ -103,7 +103,7 @@ pub async fn compute_silence_map(
 
     let ffmpeg = crate::core::dependencies::find_tool("ffmpeg")
         .await
-        .ok_or_else(|| "FFmpeg nao encontrado. Instale em Config → Plugins.".to_string())?;
+        .ok_or_else(|| "FFmpeg not found. Install it in Settings → Plugins.".to_string())?;
 
     let alvo = arquivo.clone();
     let stderr = tokio::task::spawn_blocking(move || {
@@ -123,7 +123,7 @@ pub async fn compute_silence_map(
 
     let texto = String::from_utf8_lossy(&stderr.stderr);
     let duracao = parse_duration_secs(&texto)
-        .ok_or_else(|| "Nao foi possivel ler a duracao do arquivo".to_string())?;
+        .ok_or_else(|| "Could not read the file's duration".to_string())?;
 
     let mapa = SilenceMap {
         version: CURRENT_VERSION,
@@ -142,18 +142,18 @@ pub async fn compute_silence_map(
     })
 }
 
-/// Para onde saltar, se a posicao atual cai dentro de um silencio.
+/// Where to jump, if the current position falls inside a silence.
 ///
-/// Chamada pelo player a cada atualizacao de tempo. Fica no backend em vez de
-/// duplicar a regra em TypeScript: uma segunda implementacao do mesmo calculo
-/// divergiria no primeiro ajuste de padding.
+/// Called by the player on every time update. It lives in the backend instead of
+/// duplicating the rule in TypeScript: a second implementation of the same
+/// calculation would diverge at the first padding change.
 #[tauri::command]
 pub fn silence_skip_target(path: String, position_secs: f64) -> Option<f64> {
     let mapa = load();
     skip_target(mapa.get(&path)?, position_secs)
 }
 
-/// Esquece o mapa de um arquivo.
+/// Forgets a file's map.
 #[tauri::command]
 pub fn forget_silence_map(path: String) {
     let mut todos = load();
@@ -166,7 +166,7 @@ pub fn forget_silence_map(path: String) {
 mod tests {
     use super::*;
 
-    /// stderr real do ffmpeg, recortado.
+    /// Real ffmpeg stderr, trimmed.
     const STDERR: &str = "\
 Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'aula.mp4':
   Duration: 00:41:03.52, start: 0.000000, bitrate: 1200 kb/s
@@ -176,10 +176,10 @@ Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'aula.mp4':
 
     #[test]
     fn a_duracao_sai_do_mesmo_stderr_da_sonda() {
-        // Sem ela, um silencio que vai ate o fim do arquivo nao tem como ser
-        // medido — e uma passada extra so para isso dobraria o custo.
-        let d = parse_duration_secs(STDERR).expect("le duracao");
-        assert!((d - 2463.52).abs() < 0.01, "41:03.52 = 2463.52s, veio {d}");
+        // Without it, a silence that runs to the end of the file has no way to be
+        // measured — and an extra pass just for that would double the cost.
+        let d = parse_duration_secs(STDERR).expect("reads duration");
+        assert!((d - 2463.52).abs() < 0.01, "41:03.52 = 2463.52s, got {d}");
     }
 
     #[test]
@@ -190,14 +190,15 @@ Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'aula.mp4':
     #[test]
     fn duracao_com_horas_e_lida_certo() {
         let s = "  Duration: 02:05:30.00, start: 0.0";
-        let d = parse_duration_secs(s).expect("le");
-        assert!((d - 7530.0).abs() < 0.01, "2h05m30s = 7530s, veio {d}");
+        let d = parse_duration_secs(s).expect("reads");
+        assert!((d - 7530.0).abs() < 0.01, "2h05m30s = 7530s, got {d}");
     }
 
     #[test]
     fn mapa_de_versao_antiga_e_recomputado() {
-        // O ponto do campo `version`: um mapa gravado com outros parametros de
-        // sonda descreve outra coisa, e reaproveitar seria pular no lugar errado.
+        // The point of the `version` field: a map recorded with other probe
+        // parameters describes something else, and reusing it would jump in the
+        // wrong place.
         let antigo = SilenceMap {
             version: 0,
             media_duration_secs: 100.0,

@@ -1,7 +1,7 @@
-//! Quem nao me segue de volta (estudo 67): `Following` × `Followers` da
-//! sessao, whitelist, unfollow com jitter (15–40 s como o
-//! Twitter-X-Mass-Unfollow), limite diario e botao de parar. Nunca deixa
-//! de seguir sem o usuario ver a lista antes.
+//! Who does not follow me back (study 67): `Following` × `Followers` from the
+//! session, whitelist, unfollow with jitter (15–40 s like
+//! Twitter-X-Mass-Unfollow), daily limit and a stop button. Never stops
+//! following anyone without the user seeing the list first.
 
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
@@ -76,7 +76,7 @@ fn bump_today() {
 pub async fn me(client: &XClient) -> anyhow::Result<XUser> {
     let uid = client
         .user_id()
-        .ok_or_else(|| anyhow!("cookie twid ausente: entre de novo no X"))?;
+        .ok_or_else(|| anyhow!("twid cookie missing: sign in to X again"))?;
     let v = client
         .gql_get(
             "UserByRestId",
@@ -87,7 +87,7 @@ pub async fn me(client: &XClient) -> anyhow::Result<XUser> {
         .await?;
     v.pointer("/data/user/result")
         .and_then(super::parse::parse_user)
-        .ok_or_else(|| anyhow!("nao consegui ler o perfil da sessao"))
+        .ok_or_else(|| anyhow!("could not read the session profile"))
 }
 
 async fn list(

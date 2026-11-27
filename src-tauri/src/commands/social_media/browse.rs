@@ -88,16 +88,16 @@ fn browse_session(platform: &str) -> Result<BrowseSession, String> {
     let resolved = resolve_active_cookies(&platform, None, Some("auto"), &social_dir);
     let Some(sb) = resolved.sandbox.as_ref() else {
         return Err(
-            "Không đọc được cookie phiên — hãy bắt cookie bằng tiện ích hoặc đăng nhập trong app (Cài đặt → Cookies → Đăng nhập trong app), rồi thử lại."
+            "Could not read the session cookie — capture cookies with the extension or sign in in the app (Cài đặt → Cookies → Đăng nhập trong app), then try again."
                 .to_string(),
         );
     };
     let content = fs::read_to_string(sb.path())
-        .map_err(|e| format!("Không đọc được tệp cookie: {}", e))?;
+        .map_err(|e| format!("Could not read the cookie file: {}", e))?;
     let pairs = parse_netscape_cookies(&content, Some(domain));
     if pairs.is_empty() {
         return Err(format!(
-            "Không có cookie {} trong kho — hãy đăng nhập lại (Cài đặt → Cookies → Đăng nhập trong app).",
+            "No {} cookie in the store — sign in again (Cài đặt → Cookies → Đăng nhập trong app).",
             platform
         ));
     }
@@ -105,7 +105,7 @@ fn browse_session(platform: &str) -> Result<BrowseSession, String> {
     for name in session_names {
         if !cookies.contains_key(*name) {
             return Err(format!(
-                "Phiên {} đã hết (thiếu cookie {}) — hãy đăng nhập lại (Cài đặt → Cookies → Đăng nhập trong app).",
+                "The {} session has expired (missing cookie {}) — sign in again (Cài đặt → Cookies → Đăng nhập trong app).",
                 platform, name
             ));
         }
@@ -131,7 +131,7 @@ fn api_client() -> Result<reqwest::Client, String> {
 
 fn cookie_header_value(header: &str) -> Result<reqwest::header::HeaderValue, String> {
     reqwest::header::HeaderValue::from_str(header)
-        .map_err(|_| "Cookie phiên chứa ký tự không hợp lệ — hãy đăng nhập lại.".to_string())
+        .map_err(|_| "The session cookie contains invalid characters — sign in again.".to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -151,25 +151,25 @@ async fn ig_get(
         .header(reqwest::header::COOKIE, cookie_header_value(cookie)?)
         .send()
         .await
-        .map_err(|e| format!("Không gọi được Instagram: {}", e))?;
+        .map_err(|e| format!("Could not reach Instagram: {}", e))?;
     let status = resp.status();
     let text = resp
         .text()
         .await
-        .map_err(|e| format!("Không đọc được trả lời từ Instagram: {}", e))?;
+        .map_err(|e| format!("Could not read the reply from Instagram: {}", e))?;
     if !status.is_success() {
         return Err(format!(
-            "Instagram trả về HTTP {} — có thể phiên đã hết hoặc tài khoản bị kiểm tra, hãy đăng nhập lại.",
+            "Instagram returned HTTP {} — the session may have expired or the account may be under check, sign in again.",
             status.as_u16()
         ));
     }
     let value: serde_json::Value =
-        serde_json::from_str(&text).map_err(|_| "Instagram trả về dữ liệu lạ (không phải JSON).".to_string())?;
+        serde_json::from_str(&text).map_err(|_| "Instagram returned strange data (not JSON).".to_string())?;
     if value.get("status").and_then(|s| s.as_str()) == Some("fail") {
         let msg = value
             .get("message")
             .and_then(|m| m.as_str())
-            .unwrap_or("yêu cầu bị từ chối");
+            .unwrap_or("request rejected");
         return Err(format!("Instagram: {}", msg));
     }
     Ok(value)
@@ -298,7 +298,7 @@ async fn browse_ig_friends(session: &BrowseSession) -> Result<Vec<BrowsePerson>,
                 .and_then(|p| p.as_u64())
                 .map(|n| n.to_string())
                 .ok_or_else(|| {
-                    "Instagram không trả về tài khoản hiện tại — hãy đăng nhập lại.".to_string()
+                    "Instagram did not return the current account — sign in again.".to_string()
                 })?
         }
     };
@@ -312,7 +312,7 @@ async fn browse_ig_friends(session: &BrowseSession) -> Result<Vec<BrowsePerson>,
         &session.cookie_header,
     )
     .await
-    .map_err(|e| format!("Không tải được danh sách đang theo dõi: {}", e))?;
+    .map_err(|e| format!("Could not load the following list: {}", e))?;
     let mut people = parse_ig_people(&following, "following");
 
     let followers = ig_get(
@@ -324,7 +324,7 @@ async fn browse_ig_friends(session: &BrowseSession) -> Result<Vec<BrowsePerson>,
         &session.cookie_header,
     )
     .await
-    .map_err(|e| format!("Không tải được danh sách người theo dõi: {}", e))?;
+    .map_err(|e| format!("Could not load the followers list: {}", e))?;
     people.extend(parse_ig_people(&followers, "followers"));
 
     people.truncate(MAX_FRIENDS);
@@ -342,7 +342,7 @@ async fn browse_ig_posts(session: &BrowseSession, person_id: &str) -> Result<Vec
         &session.cookie_header,
     )
     .await
-    .map_err(|e| format!("Không tải được bài đăng: {}", e))?;
+    .map_err(|e| format!("Could not load the posts: {}", e))?;
     let mut posts = parse_ig_posts(&feed);
     posts.truncate(MAX_POSTS);
     Ok(posts)
@@ -557,22 +557,22 @@ async fn fb_fetch(
         .header(reqwest::header::COOKIE, cookie_header_value(cookie)?)
         .send()
         .await
-        .map_err(|e| format!("Không gọi được Facebook: {}", e))?;
+        .map_err(|e| format!("Could not reach Facebook: {}", e))?;
     let final_url = resp.url().to_string();
     let status = resp.status();
     let text = resp
         .text()
         .await
-        .map_err(|e| format!("Không đọc được trả lời từ Facebook: {}", e))?;
+        .map_err(|e| format!("Could not read the reply from Facebook: {}", e))?;
     if !status.is_success() {
         return Err(format!(
-            "Facebook trả về HTTP {} — có thể phiên đã hết, hãy đăng nhập lại.",
+            "Facebook returned HTTP {} — the session may have expired, sign in again.",
             status.as_u16()
         ));
     }
     if fb_is_login_wall(&final_url, &text) {
         return Err(
-            "Facebook yêu cầu đăng nhập lại (phiên đã hết hoặc bị kiểm tra) — hãy đăng nhập trong app (Cài đặt → Cookies → Đăng nhập trong app)."
+            "Facebook requires signing in again (session expired or under check) — sign in in the app (Cài đặt → Cookies → Đăng nhập trong app)."
                 .to_string(),
         );
     }
@@ -586,7 +586,7 @@ async fn browse_fb_friends(session: &BrowseSession) -> Result<Vec<BrowsePerson>,
         .map(|s| s.trim().to_string())
         .unwrap_or_default();
     if uid.is_empty() {
-        return Err("Thiếu cookie c_user — hãy đăng nhập Facebook lại.".to_string());
+        return Err("Missing c_user cookie — sign in to Facebook again.".to_string());
     }
     let client = api_client()?;
     let base = "https://mbasic.facebook.com";
@@ -618,7 +618,7 @@ async fn browse_fb_posts(session: &BrowseSession, person_id: &str) -> Result<Vec
     let client = api_client()?;
     let person_id = person_id.trim();
     if person_id.is_empty() {
-        return Err("Thiếu ID người dùng Facebook.".to_string());
+        return Err("Missing Facebook user ID.".to_string());
     }
     let url = if person_id.chars().all(|c| c.is_ascii_digit()) {
         format!("https://mbasic.facebook.com/profile.php?id={}", person_id)

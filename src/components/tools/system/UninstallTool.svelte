@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Desinstalador (estudo 10, Kudu): lista, desinstala e manda as sobras para a lixeira. */
+  /** Uninstaller (study 10, Kudu): lists, uninstalls and sends leftovers to the trash. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

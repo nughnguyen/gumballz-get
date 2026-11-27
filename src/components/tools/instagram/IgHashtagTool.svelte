@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Hashtag: total de posts, recentes ou populares, com download. */
+  /** Hashtag: total posts, recent or popular, with download. */
   import { invoke } from "@tauri-apps/api/core";
   import { t } from "$lib/i18n";
   import { showToast } from "$lib/stores/toast-store.svelte";

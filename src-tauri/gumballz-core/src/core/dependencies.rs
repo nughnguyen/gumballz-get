@@ -11,11 +11,11 @@ pub fn managed_bin_dir() -> Option<PathBuf> {
     Some(crate::core::paths::app_data_dir()?.join("bin"))
 }
 
-/// Verificação de integridade dos binários gerenciados.
+/// Integrity verification for managed binaries.
 ///
-/// Regra: **fail-closed**. Se a origem publica um hash e ele não confere, ou
-/// se o hash esperado não pôde ser obtido de uma origem que sabidamente o
-/// publica, o binário é descartado.
+/// Rule: **fail-closed**. If the source publishes a hash and it does not match, or
+/// if the expected hash could not be obtained from a source known to
+/// publish it, the binary is discarded.
 pub mod integrity {
     use anyhow::anyhow;
 
@@ -34,18 +34,18 @@ pub mod integrity {
         candidate.len() == 64 && candidate.bytes().all(|b| b.is_ascii_hexdigit())
     }
 
-    /// Lê um arquivo estilo `sha256sum`: `<64-hex><espaços>[*]<nome>`.
+    /// Reads a `sha256sum`-style file: `<64-hex><spaces>[*]<name>`.
     ///
-    /// O `SHA2-256SUMS` do yt-dlp não é um por linha: é uma lista separada
-    /// por vírgula que quebra de linha no meio (`<hash> <nome>, <hash>
-    /// <nome>, ...`). A versão anterior só olhava os dois primeiros tokens
-    /// de cada linha, então nenhum asset do meio da linha era achado — e o
-    /// fallback devolvia o hash do primeiro asset (`yt-dlp`), que falhava a
-    /// verificação de todos os outros. Todo install fresco sem Python perdia
-    /// o yt-dlp por isso. O scan aqui é por tokens (espaço ou vírgula) e se
-    /// ressincroniza a cada hash válido, então tanto o formato do yt-dlp
-    /// quanto o clássico um-por-linha funcionam; linha em branco ou token
-    /// malformado é pulado sem interromper a busca.
+    /// yt-dlp's `SHA2-256SUMS` is not one per line: it is a comma-separated list
+    /// that wraps mid-line (`<hash> <name>, <hash>
+    /// <name>, ...`). The previous version only looked at the first two tokens
+    /// of each line, so no asset in the middle of a line was ever found — and the
+    /// fallback returned the hash of the first asset (`yt-dlp`), which failed
+    /// verification for all the others. Every fresh install without Python lost
+    /// yt-dlp because of this. The scan here is token-based (space or comma) and
+    /// resyncs at each valid hash, so both the yt-dlp format
+    /// and the classic one-per-line format work; a blank line or malformed
+    /// token is skipped without interrupting the search.
     pub fn parse_sha256sums(text: &str, asset: &str) -> Option<String> {
         let mut tokens = text
             .split(|c: char| c.is_whitespace() || c == ',')
@@ -65,10 +65,10 @@ pub mod integrity {
         None
     }
 
-    /// Hash de um arquivo de sums de um asset só (o Deno publica um
-    /// `.sha256sum` por asset). `None` quando o arquivo lista vários assets
-    /// — nesse caso o chamador deve exigir o asset pelo nome, nunca usar o
-    /// primeiro hash como se fosse dele.
+    /// Hash from a sums file for a single asset (Deno publishes one
+    /// `.sha256sum` per asset). `None` when the file lists several assets
+    /// — in that case the caller must require the asset by name, never use the
+    /// first hash as if it were its own.
     pub fn single_asset_hash(text: &str) -> Option<String> {
         let mut found: Option<String> = None;
         for token in text.split(|c: char| c.is_whitespace() || c == ',') {
@@ -82,7 +82,7 @@ pub mod integrity {
         found
     }
 
-    /// `digest` da API de releases do GitHub, no formato `sha256:<hex>`.
+    /// `digest` from the GitHub releases API, in `sha256:<hex>` format.
     pub fn parse_github_digest(digest: &str) -> Option<String> {
         let hex = digest.trim().strip_prefix("sha256:")?;
         is_sha256(hex).then(|| hex.to_lowercase())
@@ -91,19 +91,19 @@ pub mod integrity {
     pub fn verify_sha256(bytes: &[u8], expected: &str, label: &str) -> anyhow::Result<()> {
         let actual = sha256_hex(bytes);
         if actual == expected.to_lowercase() {
-            tracing::info!("[integrity] {} verificado (sha256 confere)", label);
+            tracing::info!("[integrity] {} verified (sha256 matches)", label);
             return Ok(());
         }
         Err(anyhow!(
-            "{}: hash nao confere — esperado {}, obtido {}. Download descartado.",
+            "{}: hash does not match — expected {}, got {}. Download discarded.",
             label,
             expected,
             actual
         ))
     }
 
-    /// Busca o hash esperado num arquivo de sums remoto. `Err` quando a origem
-    /// publica sums mas não conseguimos obtê-los — o chamador deve abortar.
+    /// Fetches the expected hash from a remote sums file. `Err` when the source
+    /// publishes sums but we could not obtain them — the caller must abort.
     pub async fn expected_from_sums_url(
         client: &reqwest::Client,
         sums_url: &str,
@@ -113,10 +113,10 @@ pub mod integrity {
             .get(sums_url)
             .send()
             .await
-            .map_err(|e| anyhow!("nao foi possivel buscar {}: {}", sums_url, e))?;
+            .map_err(|e| anyhow!("could not fetch {}: {}", sums_url, e))?;
         if !response.status().is_success() {
             return Err(anyhow!(
-                "nao foi possivel buscar {}: HTTP {}",
+                "could not fetch {}: HTTP {}",
                 sums_url,
                 response.status()
             ));
@@ -127,7 +127,7 @@ pub mod integrity {
             .map_err(|e| anyhow!("corpo ilegivel de {}: {}", sums_url, e))?;
         parse_sha256sums(&text, asset)
             .or_else(|| single_asset_hash(&text))
-            .ok_or_else(|| anyhow!("{} nao esta listado em {}", asset, sums_url))
+            .ok_or_else(|| anyhow!("{} is not listed in {}", asset, sums_url))
     }
 }
 
@@ -139,8 +139,8 @@ pub fn bin_name(tool: &str) -> String {
     }
 }
 
-/// Traduz o nome interno da ferramenta para o nome que a UI e o arquivo de
-/// overrides usam. `find_tool` recebe "ffmpeg"; a tabela mostra "FFmpeg".
+/// Translates the tool's internal name to the name the UI and the overrides file
+/// use. `find_tool` receives "ffmpeg"; the table shows "FFmpeg".
 fn override_name(tool: &str) -> &str {
     match tool {
         "ffmpeg" => "FFmpeg",
@@ -156,15 +156,15 @@ pub async fn find_tool(tool: &str) -> Option<PathBuf> {
 /// Like `find_tool` but also returns a source tag: "flatpak", "managed", or "system".
 /// Returns `None` if the tool is not found anywhere.
 pub async fn find_tool_with_source(tool: &str) -> Option<(PathBuf, &'static str)> {
-    // Issue #222. Antes de tudo: o caminho que o usuario escolheu. "custom" e
-    // uma origem propria para a tabela de dependencias poder mostrar de onde o
-    // binario veio, em vez de mentir "managed".
+    // Issue #222. First of all: the path the user chose. "custom" is
+    // its own origin so the dependencies table can show where the
+    // binary came from, instead of lying "managed".
     if let Some(custom) = crate::core::binary_overrides::get(override_name(tool)) {
         return Some((custom, "custom"));
     }
-    // yt-dlp tem resolução própria (zipapp + Python, onefile, PATH) e o
-    // resultado fica em cache: rodar `--version` no onefile aqui custava um
-    // bootstrap de 12 s a cada abertura da tela de dependências.
+    // yt-dlp has its own resolution (zipapp + Python, onefile, PATH) and the
+    // result is cached: running `--version` on the onefile here cost a
+    // 12 s bootstrap every time the dependencies screen was opened.
     if tool == "yt-dlp" {
         if let Some(path) = crate::core::ytdlp::find_ytdlp_cached().await {
             let managed = managed_bin_dir()
@@ -299,9 +299,9 @@ fn version_flag_for(tool: &str) -> &'static str {
 /// Read the version string from a tool binary at a known path.
 /// This avoids re-running tool discovery when the path is already known.
 pub async fn check_version_at_path(path: &std::path::Path, tool: &str) -> Option<String> {
-    // `yt-dlp --version` custa um bootstrap inteiro do PyInstaller (72 MB
-    // extraídos); com a fila cheia isso levou 13 a 94 s. A versão só muda
-    // quando o arquivo muda, então (caminho, mtime) é uma chave segura.
+    // `yt-dlp --version` costs a whole PyInstaller bootstrap (72 MB
+    // extracted); with a full queue that took 13 to 94 s. The version only changes
+    // when the file changes, so (path, mtime) is a safe key.
     let mtime = std::fs::metadata(path).ok().and_then(|m| m.modified().ok());
     let key = (path.to_path_buf(), mtime);
     if let Ok(cache) = version_cache().lock() {
@@ -911,7 +911,7 @@ pub async fn download_gallerydl() -> anyhow::Result<PathBuf> {
     #[cfg(target_os = "macos")]
     let url = "https://github.com/gdl-org/builds/releases/latest/download/gallery-dl_macos";
     #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
-    return Err(anyhow!("gallery-dl nao tem binario para este sistema"));
+    return Err(anyhow!("gallery-dl has no binary for this system"));
 
     let client = crate::core::http_client::apply_global_proxy(reqwest::Client::builder())
         .timeout(std::time::Duration::from_secs(180))
@@ -1081,23 +1081,23 @@ mod integrity_tests {
     const VAZIO: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
     #[test]
-    fn sha256_de_vetor_conhecido() {
+    fn sha256_of_known_vector() {
         assert_eq!(sha256_hex(b""), VAZIO);
     }
 
     #[test]
-    fn verify_sha256_recusa_binario_adulterado() {
+    fn verify_sha256_rejects_tampered_binary() {
         assert!(verify_sha256(b"", VAZIO, "t").is_ok());
         assert!(verify_sha256(b"", &VAZIO.to_uppercase(), "t").is_ok());
-        let erro = verify_sha256(b"binario trocado", VAZIO, "yt-dlp").unwrap_err();
-        assert!(erro.to_string().contains("yt-dlp"));
+        let err = verify_sha256(b"binario trocado", VAZIO, "yt-dlp").unwrap_err();
+        assert!(err.to_string().contains("yt-dlp"));
     }
 
     #[test]
-    fn linha_em_branco_nao_interrompe_a_busca_no_sums() {
-        // Regressao: a versao anterior usava `?` dentro do laco, entao a
-        // primeira linha vazia ou de um token so abortava a funcao inteira e o
-        // asset seguinte nunca era encontrado -> instalacao sem verificacao.
+    fn blank_line_does_not_interrupt_the_sums_search() {
+        // Regression: the previous version used `?` inside the loop, so the
+        // first empty or single-token line aborted the whole function and the
+        // next asset was never found -> install without verification.
         let sums = format!(
             "\n\ncomentario\n{}  yt-dlp.exe\n\n{}  yt-dlp_macos\n",
             VAZIO,
@@ -1115,7 +1115,7 @@ mod integrity_tests {
     }
 
     #[test]
-    fn sums_aceita_marcador_binario_e_recusa_hash_invalido() {
+    fn sums_accepts_binary_marker_and_rejects_invalid_hash() {
         let bin = format!("{} *ffmpeg.zip\n", VAZIO);
         assert_eq!(parse_sha256sums(&bin, "ffmpeg.zip").as_deref(), Some(VAZIO));
         assert_eq!(parse_sha256sums("abc  yt-dlp.exe\n", "yt-dlp.exe"), None);
@@ -1126,13 +1126,13 @@ mod integrity_tests {
     }
 
     #[test]
-    fn sums_formato_virgula_do_ytdlp() {
-        // Regressao: o SHA2-256SUMS real do yt-dlp e uma lista separada por
-        // virgula que quebra de linha no meio, nao um asset por linha. O
-        // parser antigo so lia os dois primeiros tokens de cada linha, entao
-        // `yt-dlp.exe` nunca era achado e o fallback devolvia o hash do
-        // `yt-dlp` — a verificacao falhava e o binario era descartado em
-        // todo install fresco sem Python.
+    fn sums_comma_format_of_ytdlp() {
+        // Regression: the real yt-dlp SHA2-256SUMS is a comma-separated list
+        // that wraps mid-line, not one asset per line. The
+        // old parser only read the first two tokens of each line, so
+        // `yt-dlp.exe` was never found and the fallback returned the hash of
+        // `yt-dlp` — verification failed and the binary was discarded on
+        // every fresh install without Python.
         let hash_exe = "622ed48023cac1daa52a3bf3a6ac38f03514de214b5f0fa069389fd0f6d17e5c";
         let hash_macos = "1111111111111111111111111111111111111111111111111111111111111111";
         let sums = format!(
@@ -1152,7 +1152,7 @@ mod integrity_tests {
     }
 
     #[test]
-    fn single_asset_hash_so_vale_para_um_hash() {
+    fn single_asset_hash_only_counts_for_one_hash() {
         let one = format!("{VAZIO}  deno.zip\n");
         assert_eq!(single_asset_hash(&one).as_deref(), Some(VAZIO));
         let many = format!("{VAZIO}  a\n{}  b\n", "1".repeat(64));
@@ -1161,7 +1161,7 @@ mod integrity_tests {
     }
 
     #[test]
-    fn digest_da_api_do_github() {
+    fn digest_from_the_github_api() {
         assert_eq!(
             parse_github_digest(&format!("sha256:{}", VAZIO)).as_deref(),
             Some(VAZIO)

@@ -1,8 +1,8 @@
-//! Playlist exportada -> `.m3u8` / `.pls` apontando para os arquivos que o
-//! usuário tem no disco. O trabalho de verdade é o casamento: o CSV do
-//! Exportify traz "Song - Remastered 2011" e a pasta tem
-//! "03 - Artist - Song.flac". O que não casar volta numa lista separada, que
-//! é justamente o que o usuário quer ver.
+//! Exported playlist -> `.m3u8` / `.pls` pointing at the files the
+//! user has on disk. The real work is the matching: the Exportify CSV brings
+//! "Song - Remastered 2011" and the folder has
+//! "03 - Artist - Song.flac". Whatever does not match comes back in a separate list, which
+//! is exactly what the user wants to see.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -26,23 +26,23 @@ const TOOL_ID: &str = "music-playlist";
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct PlaylistOptions {
-    /// CSV/JSON/TXT com a lista de faixas.
+    /// CSV/JSON/TXT with the track list.
     pub source: String,
-    /// Pastas onde procurar os arquivos de áudio.
+    /// Folders to search for the audio files.
     pub music_dirs: Vec<String>,
-    /// Onde escrever os playlists.
+    /// Where to write the playlists.
     pub out_dir: String,
     #[serde(default = "default_name")]
     pub name: String,
-    /// Caminho relativo ao playlist em vez de absoluto.
+    /// Path relative to the playlist instead of absolute.
     #[serde(default)]
     pub relative: bool,
     #[serde(default = "default_true")]
     pub write_pls: bool,
-    /// Semelhança mínima (0-100) para aceitar um quase-igual.
+    /// Minimum similarity (0-100) to accept a near-match.
     #[serde(default = "default_threshold")]
     pub threshold: u32,
-    /// Copiar as faixas casadas para esta pasta.
+    /// Copy the matched tracks to this folder.
     #[serde(default)]
     pub copy_to: Option<String>,
 }
@@ -72,7 +72,7 @@ pub struct MatchedTrack {
     pub artist: String,
     pub title: String,
     pub path: String,
-    /// 100 = chave idêntica; abaixo disso é o quase-igual.
+    /// 100 = identical key; below that is the near-match.
     pub score: u32,
     pub duration_secs: Option<u64>,
     pub copied_to: Option<String>,
@@ -89,9 +89,9 @@ pub struct PlaylistResult {
     pub copied: usize,
 }
 
-// ── Leitura da lista de faixas ──────────────────────────────────────────
+// ── Reading the track list ──────────────────────────────────────────
 
-/// Divisor de CSV que respeita aspas e `""` escapado.
+/// CSV splitter that respects quotes and escaped `""`.
 pub fn split_csv_line(line: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut cur = String::new();
@@ -133,7 +133,7 @@ fn find_col(header: &[String], names: &[&str]) -> Option<usize> {
     None
 }
 
-/// CSV do Exportify e parecidos: acha as colunas pelo nome do cabeçalho.
+/// Exportify CSV and similar: finds the columns by header name.
 pub fn parse_csv(text: &str) -> Vec<Track> {
     let mut lines = text.lines().filter(|l| !l.trim().is_empty());
     let Some(head) = lines.next() else {
@@ -185,7 +185,7 @@ pub fn parse_csv(text: &str) -> Vec<Track> {
     out
 }
 
-/// Aceita segundos ("213"), milissegundos ("213000") e "3:33".
+/// Accepts seconds ("213"), milliseconds ("213000") and "3:33".
 pub fn parse_duration(raw: &str) -> Option<u64> {
     let raw = raw.trim();
     if raw.is_empty() {
@@ -200,7 +200,7 @@ pub fn parse_duration(raw: &str) -> Option<u64> {
     if n <= 0.0 {
         return None;
     }
-    // Acima de 10 mil é quase certo que veio em milissegundos.
+    // Above 10 thousand it is almost certainly in milliseconds.
     Some(if n > 10_000.0 {
         (n / 1000.0).round() as u64
     } else {
@@ -242,10 +242,10 @@ fn json_str(v: &Value, keys: &[&str]) -> String {
     String::new()
 }
 
-/// JSON de export do Spotify, da API, do Exportify ou uma lista simples de
-/// objetos. Desce por `items`/`tracks`/`track` sozinho.
+/// Spotify export JSON, from the API, from Exportify or a simple list of
+/// objects. Descends through `items`/`tracks`/`track` on its own.
 pub fn parse_json(text: &str) -> Result<Vec<Track>> {
-    let v: Value = serde_json::from_str(text).context("JSON inválido")?;
+    let v: Value = serde_json::from_str(text).context("Invalid JSON")?;
     let arr = find_array(&v).unwrap_or_default();
     let mut out = Vec::new();
     for item in arr {
@@ -326,7 +326,7 @@ fn find_array(v: &Value) -> Option<Vec<Value>> {
     }
 }
 
-/// Uma faixa por linha, "Artista - Título" (ou só o título).
+/// One track per line, "Artist - Title" (or just the title).
 pub fn parse_lines(text: &str) -> Vec<Track> {
     let mut out = Vec::new();
     for line in text.lines() {
@@ -351,7 +351,7 @@ pub fn parse_lines(text: &str) -> Vec<Track> {
     out
 }
 
-/// Escolhe o leitor pelo conteúdo, não só pela extensão.
+/// Picks the reader by content, not just by extension.
 pub fn parse_source(text: &str, ext: &str) -> Result<Vec<Track>> {
     let trimmed = text.trim_start();
     if ext.eq_ignore_ascii_case("json") || trimmed.starts_with('[') || trimmed.starts_with('{') {
@@ -366,16 +366,16 @@ pub fn parse_source(text: &str, ext: &str) -> Result<Vec<Track>> {
     Ok(parse_lines(text))
 }
 
-// ── Índice dos arquivos de áudio ────────────────────────────────────────
+// ── Audio file index ────────────────────────────────────────
 
 #[derive(Debug, Clone)]
 pub struct AudioFile {
     pub path: PathBuf,
-    /// Chaves "artista título" candidatas.
+    /// Candidate "artist title" keys.
     pub full_keys: Vec<String>,
-    /// Chaves só de título.
+    /// Title-only keys.
     pub title_keys: Vec<String>,
-    /// Onde procurar o artista: nome do arquivo mais as duas pastas acima.
+    /// Where to look for the artist: the file name plus the two folders above.
     pub hay: String,
 }
 
@@ -404,7 +404,7 @@ impl AudioFile {
                 let key = format!("{} {}", norm_artist(a), norm_title(t));
                 push_uniq(&mut full_keys, key.trim().to_string());
                 push_uniq(&mut title_keys, norm_title(t));
-                // Alguns arquivos vêm "Título - Artista".
+                // Some files come as "Title - Artist".
                 let flip = format!("{} {}", norm_artist(t), norm_title(a));
                 push_uniq(&mut full_keys, flip.trim().to_string());
             } else {
@@ -462,9 +462,9 @@ pub fn index_dirs(dirs: &[String]) -> Vec<AudioFile> {
     out
 }
 
-// ── Casamento ───────────────────────────────────────────────────────────
+// ── Matching ───────────────────────────────────────────────────────────
 
-/// Chaves de busca de uma faixa da playlist.
+/// Search keys for a playlist track.
 #[derive(Debug, Clone)]
 pub struct Wanted {
     pub full: String,
@@ -485,8 +485,8 @@ pub fn wanted_keys(t: &Track) -> Wanted {
     }
 }
 
-/// Corta antes de calcular Levenshtein: a diferença de tamanho já é um piso
-/// da distância, então dá para descartar sem contar.
+/// Cuts off before computing Levenshtein: the size difference is already a floor
+/// of the distance, so it can be discarded without counting.
 fn too_different(a: &str, b: &str, threshold: u32) -> bool {
     let la = a.chars().count();
     let lb = b.chars().count();
@@ -498,15 +498,15 @@ fn too_different(a: &str, b: &str, threshold: u32) -> bool {
     ((max - diff) as f64 / max as f64) * 100.0 < threshold as f64
 }
 
-/// Só aceitamos casar por título quando o artista aparece em algum lugar do
-/// caminho — senão "Song.mp3" de qualquer pasta casaria com tudo.
+/// We only accept matching by title when the artist appears somewhere in the
+/// path — otherwise "Song.mp3" from any folder would match everything.
 pub fn artist_ok(w: &Wanted, f: &AudioFile) -> bool {
     w.artist.is_empty()
         || f.hay.contains(&w.artist)
         || (!w.primary.is_empty() && f.hay.contains(&w.primary))
 }
 
-/// Semelhança de uma faixa com um arquivo, de 0 a 100.
+/// Similarity of a track with a file, from 0 to 100.
 pub fn score(w: &Wanted, f: &AudioFile, threshold: u32) -> u32 {
     let mut best = 0u32;
     for k in &f.full_keys {
@@ -530,15 +530,15 @@ pub fn score(w: &Wanted, f: &AudioFile, threshold: u32) -> u32 {
     best
 }
 
-/// Casa cada faixa com o melhor arquivo ainda livre. Devolve, na ordem da
-/// playlist, o índice do arquivo e a nota — `None` para o que não achou.
+/// Matches each track with the best still-free file. Returns, in playlist order,
+/// the file index and the score — `None` for what it did not find.
 pub fn match_tracks(
     tracks: &[Track],
     files: &[AudioFile],
     threshold: u32,
     p: &ProgressFn,
 ) -> Vec<Option<(usize, u32)>> {
-    // Índice exato: a maioria casa aqui, sem nenhuma conta de distância.
+    // Exact index: most match here, with no distance math at all.
     let mut exact: HashMap<&str, Vec<usize>> = HashMap::new();
     for (i, f) in files.iter().enumerate() {
         for k in f.full_keys.iter().chain(f.title_keys.iter()) {
@@ -603,9 +603,9 @@ pub fn match_tracks(
     out
 }
 
-// ── Escrita dos playlists ───────────────────────────────────────────────
+// ── Writing the playlists ───────────────────────────────────────────────
 
-/// Caminho de `to` visto de dentro de `from_dir`, com barra normal.
+/// Path of `to` seen from inside `from_dir`, with a normal slash.
 pub fn relative_path(from_dir: &Path, to: &Path) -> String {
     let from: Vec<_> = from_dir.components().collect();
     let dest: Vec<_> = to.components().collect();
@@ -624,7 +624,7 @@ pub fn relative_path(from_dir: &Path, to: &Path) -> String {
     parts.join("/")
 }
 
-/// Uma linha do playlist já pronta para escrever.
+/// One playlist line already ready to write.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entry {
     pub path: String,
@@ -633,8 +633,8 @@ pub struct Entry {
     pub duration_secs: Option<u64>,
 }
 
-/// `.m3u8` em UTF-8. Duração desconhecida vira `-1`, que é o combinado do
-/// formato.
+/// `.m3u8` in UTF-8. Unknown duration becomes `-1`, which is the format's
+/// agreed value.
 pub fn build_m3u(entries: &[Entry]) -> String {
     let mut s = String::from("#EXTM3U\n");
     for e in entries {
@@ -678,14 +678,14 @@ pub fn run(opts: &PlaylistOptions, p: &ProgressFn) -> Result<PlaylistResult> {
     report(p, TOOL_ID, "started", 0, None, None);
     let src = PathBuf::from(&opts.source);
     let text = std::fs::read_to_string(&src)
-        .with_context(|| format!("não consegui ler {}", src.display()))?;
+        .with_context(|| format!("could not read {}", src.display()))?;
     let ext = src
         .extension()
         .map(|e| e.to_string_lossy().to_string())
         .unwrap_or_default();
     let tracks = parse_source(&text, &ext)?;
     if tracks.is_empty() {
-        anyhow::bail!("não achei nenhuma faixa em {}", src.display());
+        anyhow::bail!("could not find any track in {}", src.display());
     }
 
     report(
@@ -694,7 +694,7 @@ pub fn run(opts: &PlaylistOptions, p: &ProgressFn) -> Result<PlaylistResult> {
         "progress",
         0,
         Some(tracks.len() as u64),
-        Some("lendo a pasta".to_string()),
+        Some("reading the folder".to_string()),
     );
     let files = index_dirs(&opts.music_dirs);
     let threshold = opts.threshold.min(100);

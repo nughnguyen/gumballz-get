@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Seguidores fantasmas: seguem, mas não curtiram nem comentaram os últimos posts. */
+  /** Ghost followers: they follow but haven't liked or commented on recent posts. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

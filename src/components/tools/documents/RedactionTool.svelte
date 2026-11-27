@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Confere se a tarja do PDF escondeu texto ou só pintou por cima. */
+  /** Checks whether the PDF redaction bar hid text or just painted over it. */
   import { invoke } from "@tauri-apps/api/core";
   import { t } from "$lib/i18n";
   import { showToast } from "$lib/stores/toast-store.svelte";

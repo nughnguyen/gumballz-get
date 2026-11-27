@@ -1,7 +1,7 @@
-//! Ditado (VoiceStudio, lote 2): um atalho global começa a gravar o microfone
-//! com o FFmpeg, o segundo aperto para, o whisper.cpp local transcreve e o
-//! texto é digitado onde o cursor estiver (via `enigo`) ou colado pela área de
-//! transferência. Nada sai da máquina. O atalho em si mora no app (hotkey.rs).
+//! Dictation (VoiceStudio, batch 2): a global shortcut starts recording the microphone
+//! with FFmpeg, a second press stops it, the local whisper.cpp transcribes it and the
+//! text is typed where the cursor is (via `enigo`) or pasted via the
+//! clipboard. Nothing leaves the machine. The shortcut itself lives in the app (hotkey.rs).
 
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -12,18 +12,18 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DictationOptions {
-    /// id do modelo GGML do whisper (ver tools.whisper)
+    /// whisper GGML model id (see tools.whisper)
     #[serde(default = "base")]
     pub model: String,
     #[serde(default = "auto")]
     pub language: String,
-    /// dispositivo de entrada (índice avfoundation, nome dshow, nome pulse); vazio = padrão
+    /// input device (avfoundation index, dshow name, pulse name); empty = default
     #[serde(default)]
     pub device: String,
-    /// "type" (digitar) | "paste" (colar) | "clipboard" (só copiar)
+    /// "type" (type it) | "paste" (paste it) | "clipboard" (copy only)
     #[serde(default = "type_mode")]
     pub output: String,
-    /// espaço/nova linha ao final
+    /// trailing space/newline
     #[serde(default)]
     pub trailing_space: bool,
 }
@@ -104,7 +104,7 @@ pub fn options() -> DictationOptions {
         .unwrap_or_else(|| serde_json::from_str("{}").unwrap())
 }
 
-/// Dispositivos de entrada de áudio que o FFmpeg enxerga.
+/// Audio input devices that FFmpeg can see.
 pub async fn devices() -> Vec<AudioDevice> {
     let Ok(ffmpeg) = crate::core::dependencies::ensure_ffmpeg().await else {
         return vec![];
@@ -234,7 +234,7 @@ pub async fn start(progress: super::ProgressFn) -> anyhow::Result<()> {
     {
         let rec = REC.lock().unwrap_or_else(|e| e.into_inner());
         if rec.is_some() {
-            return Err(anyhow!("ja esta gravando"));
+            return Err(anyhow!("already recording"));
         }
     }
     let ffmpeg = crate::core::dependencies::ensure_ffmpeg().await?;
@@ -260,11 +260,11 @@ pub async fn start(progress: super::ProgressFn) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Para a gravação, transcreve e entrega o texto. Devolve o texto.
+/// Stops the recording, transcribes it and delivers the text. Returns the text.
 pub async fn stop(progress: super::ProgressFn) -> anyhow::Result<String> {
     let rec = REC.lock().unwrap_or_else(|e| e.into_inner()).take();
     let Some(mut rec) = rec else {
-        return Err(anyhow!("nao esta gravando"));
+        return Err(anyhow!("not recording"));
     };
     set_phase("transcribing");
     super::report(&progress, "dictation", "transcribing", 0, None, None);
@@ -290,7 +290,7 @@ pub async fn stop(progress: super::ProgressFn) -> anyhow::Result<String> {
                 let _ = e.read_to_string(&mut err).await;
             }
             return Err(anyhow!(
-                "nada foi gravado (microfone/permissao?) {}",
+                "nothing was recorded (microphone/permission?) {}",
                 err.trim()
             ));
         }
@@ -315,7 +315,7 @@ pub async fn stop(progress: super::ProgressFn) -> anyhow::Result<String> {
         let _ = std::fs::remove_dir_all(&out_dir);
         let mut text = t.text.split_whitespace().collect::<Vec<_>>().join(" ");
         if text.is_empty() {
-            return Err(anyhow!("nao entendi nada"));
+            return Err(anyhow!("could not understand anything"));
         }
         if opts.trailing_space {
             text.push(' ');
@@ -357,21 +357,21 @@ pub fn is_recording() -> bool {
     REC.lock().unwrap_or_else(|e| e.into_inner()).is_some()
 }
 
-/// Digita o texto onde o cursor estiver.
+/// Types the text where the cursor is.
 pub fn type_text(text: &str) -> anyhow::Result<()> {
     use enigo::{Enigo, Keyboard, Settings};
     let mut enigo = Enigo::new(&Settings::default())
-        .map_err(|e| anyhow!("teclado: {} (macOS: permissao de Acessibilidade)", e))?;
-    // Um instante para o usuário soltar o atalho antes de digitar.
+        .map_err(|e| anyhow!("keyboard: {} (macOS: Accessibility permission)", e))?;
+    // A moment for the user to release the shortcut before typing.
     std::thread::sleep(std::time::Duration::from_millis(150));
-    enigo.text(text).map_err(|e| anyhow!("digitar: {}", e))?;
+    enigo.text(text).map_err(|e| anyhow!("typing: {}", e))?;
     Ok(())
 }
 
-/// Cmd+V / Ctrl+V (o app coloca o texto na área de transferência antes).
+/// Cmd+V / Ctrl+V (the app puts the text on the clipboard first).
 pub fn press_paste() -> anyhow::Result<()> {
     use enigo::{Direction, Enigo, Key, Keyboard, Settings};
-    let mut enigo = Enigo::new(&Settings::default()).map_err(|e| anyhow!("teclado: {}", e))?;
+    let mut enigo = Enigo::new(&Settings::default()).map_err(|e| anyhow!("keyboard: {}", e))?;
     std::thread::sleep(std::time::Duration::from_millis(150));
     let modifier = if cfg!(target_os = "macos") {
         Key::Meta

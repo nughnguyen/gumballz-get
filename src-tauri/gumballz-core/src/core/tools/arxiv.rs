@@ -1,12 +1,12 @@
-//! arXiv → Markdown com a matemática preservada (tool `ai-arxiv-md`).
-//! Referência de desenho: timf34/arxiv2md (MIT).
+//! arXiv → Markdown with the math preserved (tool `ai-arxiv-md`).
+//! Design reference: timf34/arxiv2md (MIT).
 //!
-//! Metadados saem da API pública e documentada do arXiv
-//! (`http://export.arxiv.org/api/query?id_list=`, Atom XML) — que pede
-//! gentileza na frequência, então é uma requisição por chamada.
-//! O corpo vem, em ordem: do **source LaTeX** (`arxiv.org/e-print/<id>`, um
-//! tar.gz), do HTML do LaTeXML (`arxiv.org/html/<id>`) e, por último, só do
-//! resumo. Matemática nunca é renderizada: `$…$` e `$$…$$` saem intactos.
+//! Metadata comes from arXiv's public, documented API
+//! (`http://export.arxiv.org/api/query?id_list=`, Atom XML) — which asks
+//! for gentle request frequency, so it is one request per call.
+//! The body comes, in order: from the **LaTeX source** (`arxiv.org/e-print/<id>`, a
+//! tar.gz), from the LaTeXML HTML (`arxiv.org/html/<id>`) and, lastly, only from the
+//! abstract. Math is never rendered: `$…$` and `$$…$$` come out intact.
 
 use std::collections::HashMap;
 
@@ -18,17 +18,17 @@ use super::{report, ProgressFn};
 const ID: &str = "ai-arxiv-md";
 const API: &str = "https://export.arxiv.org/api/query?id_list=";
 
-// ── Identificador ──────────────────────────────────────────────────────
+// ── Identifier ──────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ArxivRef {
-    /// Sem versão: `2401.12345` ou `hep-th/9901001`.
+    /// Without a version: `2401.12345` or `hep-th/9901001`.
     pub id: String,
     pub version: Option<u32>,
 }
 
 impl ArxivRef {
-    /// Com versão quando o usuário pediu uma.
+    /// With a version when the user asked for one.
     pub fn full(&self) -> String {
         match self.version {
             Some(v) => format!("{}v{}", self.id, v),
@@ -47,14 +47,14 @@ impl ArxivRef {
     pub fn html_url(&self) -> String {
         format!("https://arxiv.org/html/{}", self.full())
     }
-    /// Nome de arquivo seguro.
+    /// Safe filename.
     pub fn slug(&self) -> String {
         self.full().replace('/', "_")
     }
 }
 
-/// Aceita `2401.12345`, `2401.12345v2`, `arXiv:2401.12345`, URLs de
-/// `abs/`, `pdf/`, `html/`, `e-print/` e o formato antigo `hep-th/9901001`.
+/// Accepts `2401.12345`, `2401.12345v2`, `arXiv:2401.12345`, `abs/`,
+/// `pdf/`, `html/`, `e-print/` URLs and the old `hep-th/9901001` format.
 pub fn parse_id(input: &str) -> Option<ArxivRef> {
     static NEW: std::sync::OnceLock<Option<regex::Regex>> = std::sync::OnceLock::new();
     static OLD: std::sync::OnceLock<Option<regex::Regex>> = std::sync::OnceLock::new();
@@ -86,7 +86,7 @@ pub fn parse_id(input: &str) -> Option<ArxivRef> {
     Some(r)
 }
 
-// ── XML mínimo (o Atom do arXiv é previsível) ──────────────────────────
+// ── Minimal XML (arXiv's Atom is predictable) ──────────────────────────
 
 fn unescape(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
@@ -132,7 +132,7 @@ fn squeeze(s: &str) -> String {
     s.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-/// Conteúdo do primeiro `<tag>` a partir de `from`, com o índice do fim.
+/// Content of the first `<tag>` from `from`, with the end index.
 fn tag_at(xml: &str, tag: &str, from: usize) -> Option<(String, usize)> {
     let open = format!("<{}", tag);
     let close = format!("</{}>", tag);
@@ -140,7 +140,7 @@ fn tag_at(xml: &str, tag: &str, from: usize) -> Option<(String, usize)> {
     let after_name = start + open.len();
     let c = xml.as_bytes().get(after_name)?;
     if c.is_ascii_alphanumeric() || *c == b'-' || *c == b':' {
-        // era outra tag com o mesmo prefixo (`<title>` vs `<titlepage>`)
+        // it was another tag with the same prefix (`<title>` vs `<titlepage>`)
         return tag_at(xml, tag, after_name);
     }
     let gt = xml[start..].find('>')? + start;
@@ -165,7 +165,7 @@ fn tags(xml: &str, name: &str) -> Vec<String> {
     out
 }
 
-/// Valor de um atributo em todas as tags `<name ...>` do XML.
+/// Value of an attribute in every `<name ...>` tag in the XML.
 fn attrs(xml: &str, name: &str, attr: &str) -> Vec<String> {
     let open = format!("<{} ", name);
     let needle = format!("{}=\"", attr);
@@ -188,7 +188,7 @@ fn attrs(xml: &str, name: &str, attr: &str) -> Vec<String> {
     out
 }
 
-// ── Metadados ──────────────────────────────────────────────────────────
+// ── Metadata ──────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct Meta {
@@ -208,9 +208,9 @@ pub struct Meta {
     pub pdf_url: String,
 }
 
-/// Lê o Atom da API do arXiv. Sem crate de XML: o formato é fixo.
+/// Reads the arXiv API's Atom. No XML crate: the format is fixed.
 pub fn parse_atom(xml: &str) -> anyhow::Result<Meta> {
-    let entry = tag(xml, "entry").ok_or_else(|| anyhow!("resposta do arXiv sem <entry>"))?;
+    let entry = tag(xml, "entry").ok_or_else(|| anyhow!("arXiv response without <entry>"))?;
     let raw_id = tag(&entry, "id").unwrap_or_default();
     let title = squeeze(&unescape(&tag(&entry, "title").unwrap_or_default()));
     if title.eq_ignore_ascii_case("error") || raw_id.contains("api/errors") {
@@ -283,7 +283,7 @@ fn yaml_str(s: &str) -> String {
     format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
-/// Front-matter YAML com título, autores, categorias, data, DOI e resumo.
+/// YAML front-matter with title, authors, categories, date, DOI and abstract.
 pub fn front_matter(meta: &Meta) -> String {
     let mut out = String::from("---\n");
     out.push_str(&format!("title: {}\n", yaml_str(&meta.title)));
@@ -338,7 +338,7 @@ pub fn front_matter(meta: &Meta) -> String {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct SourceBundle {
-    /// O `.tex` principal, com os `\input`/`\include` já resolvidos.
+    /// The main `.tex` file, with the `\input`/`\include` already resolved.
     pub main: String,
     pub files: Vec<String>,
 }
@@ -358,10 +358,10 @@ fn gunzip(b: &[u8]) -> anyhow::Result<Vec<u8>> {
     Ok(out)
 }
 
-/// Aceita o tar.gz do `e-print`, um tar cru, um `.tex` gzipado ou o `.tex` solto.
+/// Accepts the `e-print` tar.gz, a raw tar, a gzipped `.tex` or a bare `.tex`.
 pub fn extract_source(bytes: &[u8]) -> anyhow::Result<SourceBundle> {
     if bytes.starts_with(b"%PDF") {
-        return Err(anyhow!("o source deste arXiv e um PDF, nao tem LaTeX"));
+        return Err(anyhow!("this arXiv source is a PDF, it has no LaTeX"));
     }
     let raw = if is_gzip(bytes) {
         gunzip(bytes)?
@@ -371,7 +371,7 @@ pub fn extract_source(bytes: &[u8]) -> anyhow::Result<SourceBundle> {
     if !is_tar(&raw) {
         let text = String::from_utf8_lossy(&raw).to_string();
         if !text.contains('\\') {
-            return Err(anyhow!("source do arXiv nao parece LaTeX"));
+            return Err(anyhow!("arXiv source does not look like LaTeX"));
         }
         return Ok(SourceBundle {
             main: text,
@@ -396,11 +396,11 @@ pub fn extract_source(bytes: &[u8]) -> anyhow::Result<SourceBundle> {
         texts.insert(path, String::from_utf8_lossy(&buf).to_string());
     }
     if texts.is_empty() {
-        return Err(anyhow!("o tar do arXiv nao tem nenhum .tex"));
+        return Err(anyhow!("the arXiv tar has no .tex file"));
     }
 
     let main_key =
-        pick_main(&texts).ok_or_else(|| anyhow!("nenhum .tex com \\begin{{document}}"))?;
+        pick_main(&texts).ok_or_else(|| anyhow!("no .tex file with \\begin{{document}}"))?;
     let main = texts.get(&main_key).cloned().unwrap_or_default();
     let main = resolve_inputs(&main, &texts, 0);
     names.sort();
@@ -438,7 +438,7 @@ fn pick_main(texts: &HashMap<String, String>) -> Option<String> {
     best.map(|(_, _, k)| k)
 }
 
-/// Cola o conteúdo de `\input{}` / `\include{}` no lugar, até 4 níveis.
+/// Pastes the content of `\input{}` / `\include{}` in place, up to 4 levels.
 fn resolve_inputs(tex: &str, texts: &HashMap<String, String>, depth: usize) -> String {
     if depth > 4 {
         return tex.to_string();
@@ -497,7 +497,7 @@ fn find_from(s: &str, needle: &str, from: usize) -> Option<usize> {
     s.get(from..).and_then(|t| t.find(needle)).map(|i| i + from)
 }
 
-/// Igual a `find_from`, mas ignora delimitador escapado com `\`.
+/// Like `find_from`, but ignores a delimiter escaped with `\`.
 fn find_unescaped(s: &str, needle: &str, from: usize) -> Option<usize> {
     let b = s.as_bytes();
     let mut i = from;
@@ -524,8 +524,8 @@ fn math_env(env: &str, body: &str) -> String {
     }
 }
 
-/// Separa o texto da matemática. A matemática sai já em Markdown
-/// (`$…$` / `$$…$$`) e **não** é tocada por nenhuma outra regra.
+/// Separates the text from the math. The math comes out already in Markdown
+/// (`$…$` / `$$…$$`) and is **not** touched by any other rule.
 pub fn split_math(tex: &str) -> Vec<Span> {
     let b = tex.as_bytes();
     let mut out: Vec<Span> = Vec::new();
@@ -568,7 +568,7 @@ pub fn split_math(tex: &str) -> Vec<Span> {
                     }
                 }
             }
-            // Barra escapando alguma coisa: copia sem interpretar.
+            // A backslash escaping something: copy without interpreting.
             buf.push('\\');
             i += 1;
             if let Some(c) = tex[i..].chars().next() {
@@ -603,7 +603,7 @@ pub fn split_math(tex: &str) -> Vec<Span> {
     out
 }
 
-/// Tira os comentários `%` (respeitando `\%`), preservando as quebras de linha.
+/// Removes `%` comments (respecting `\%`), preserving line breaks.
 pub fn strip_comments(tex: &str) -> String {
     let mut out = String::with_capacity(tex.len());
     for line in tex.split('\n') {
@@ -627,7 +627,7 @@ pub fn strip_comments(tex: &str) -> String {
     out
 }
 
-/// Só o miolo do documento, quando há preâmbulo.
+/// Only the middle of the document, when there is a preamble.
 pub fn document_body(tex: &str) -> String {
     let Some(start) = tex.find("\\begin{document}") else {
         return tex.to_string();
@@ -640,7 +640,7 @@ pub fn document_body(tex: &str) -> String {
     tex[from..end].to_string()
 }
 
-/// Conteúdo de `{...}` balanceado começando em `pos`.
+/// Content of `{...}` balanced starting at `pos`.
 fn braced(s: &str, pos: usize) -> Option<(String, usize)> {
     let b = s.as_bytes();
     if b.get(pos) != Some(&b'{') {
@@ -668,7 +668,7 @@ fn braced(s: &str, pos: usize) -> Option<(String, usize)> {
     None
 }
 
-/// Substitui `\cmd[opt]{arg}` pelo que a função devolver.
+/// Replaces `\cmd[opt]{arg}` with what the function returns.
 fn map_cmd(s: &str, name: &str, f: &dyn Fn(&str) -> String) -> String {
     let pat = format!("\\{}", name);
     let bytes = s.as_bytes();
@@ -677,7 +677,7 @@ fn map_cmd(s: &str, name: &str, f: &dyn Fn(&str) -> String) -> String {
     while let Some(rel) = s.get(i..).and_then(|t| t.find(&pat)) {
         let at = i + rel;
         let after = at + pat.len();
-        // Não pode ser prefixo de outro comando (`\in` dentro de `\input`).
+        // It cannot be a prefix of another command (`\in` inside `\input`).
         if bytes
             .get(after)
             .map(|c| c.is_ascii_alphabetic())
@@ -720,7 +720,7 @@ fn drop_cmd(s: &str, name: &str) -> String {
     map_cmd(s, name, &|_| String::new())
 }
 
-/// Tira `\cmd` sem argumento (`\noindent`, `\centering`…).
+/// Removes `\cmd` without an argument (`\noindent`, `\centering`…).
 fn drop_bare(s: &str, name: &str) -> String {
     let pat = format!("\\{}", name);
     let mut out = String::with_capacity(s.len());
@@ -765,7 +765,7 @@ fn inline_rules(s: &str) -> String {
     t = map_cmd(&t, "mbox", &|a| a.to_string());
     t = map_cmd(&t, "caption", &|a| format!("\n\n*{}*\n\n", squeeze(a)));
     t = map_cmd(&t, "url", &|a| format!("<{}>", a.trim()));
-    // \href{url}{texto}: o primeiro argumento vira o alvo do segundo.
+    // \href{url}{text}: the first argument becomes the second's target.
     t = href(&t);
     for c in ["citep", "citet", "citeauthor", "citeyear", "cite"] {
         t = map_cmd(&t, c, &|a| {
@@ -880,7 +880,7 @@ fn env_name(line: &str, kind: &str) -> Option<String> {
     Some(line[from..end].to_string())
 }
 
-/// Listas, ambientes e limpeza final, linha a linha.
+/// Lists, environments and final cleanup, line by line.
 fn block_rules(s: &str) -> String {
     let mut out: Vec<String> = Vec::new();
     let mut lists: Vec<&'static str> = Vec::new();
@@ -998,8 +998,8 @@ fn collapse_blanks(s: &str) -> String {
     out.trim().to_string()
 }
 
-/// LaTeX → Markdown. A matemática é isolada antes de qualquer regra de texto,
-/// então `$…$`, `$$…$$`, `\[…\]` e `equation`/`align` chegam intactos no fim.
+/// LaTeX → Markdown. Math is isolated before any text rule,
+/// so `$…$`, `$$…$$`, `\[…\]` and `equation`/`align` arrive intact at the end.
 pub fn latex_to_markdown(tex: &str) -> String {
     let clean = strip_comments(tex);
     let body = document_body(&clean);
@@ -1048,8 +1048,8 @@ fn restore_math(md: &str, math: &[String]) -> String {
     collapse_blanks(&out)
 }
 
-/// O HTML do LaTeXML guarda o LaTeX original em `alttext`; trocamos o bloco
-/// `<math>` por `$…$` antes de converter, senão a fórmula vira sopa de letra.
+/// LaTeXML's HTML keeps the original LaTeX in `alttext`; we swap the block
+/// `<math>` for `$…$` before converting, otherwise the formula turns into alphabet soup.
 pub fn mathml_to_tex(html: &str) -> String {
     let mut out = String::with_capacity(html.len());
     let mut rest = html;
@@ -1090,16 +1090,16 @@ pub fn mathml_to_tex(html: &str) -> String {
     out
 }
 
-// ── Fluxo ──────────────────────────────────────────────────────────────
+// ── Flow ──────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Options {
-    /// ID ou URL do arXiv.
+    /// arXiv ID or URL.
     pub input: String,
-    /// Pasta de saída; vazio = não grava.
+    /// Output folder; empty = do not write.
     #[serde(default)]
     pub output_dir: String,
-    /// `auto` (source → html → resumo), `source`, `html` ou `abstract`.
+    /// `auto` (source → html → abstract), `source`, `html` or `abstract`.
     #[serde(default)]
     pub prefer: String,
     #[serde(default)]
@@ -1110,13 +1110,13 @@ pub struct Options {
 pub struct ArxivDoc {
     pub meta: Meta,
     pub markdown: String,
-    /// `latex`, `html` ou `abstract`.
+    /// `latex`, `html` or `abstract`.
     pub body_source: String,
     pub path: Option<String>,
     pub chars: u64,
     pub math_blocks: u64,
     pub source_files: Vec<String>,
-    /// Por que caiu para uma fonte pior, quando caiu.
+    /// Why it fell back to a worse source, when it did.
     pub fallback_reason: Option<String>,
 }
 
@@ -1129,7 +1129,7 @@ fn count_math(md: &str) -> u64 {
 
 pub async fn fetch(opts: Options, p: ProgressFn) -> anyhow::Result<ArxivDoc> {
     let r = parse_id(&opts.input)
-        .ok_or_else(|| anyhow!("nao reconheci um id de arXiv em: {}", opts.input.trim()))?;
+        .ok_or_else(|| anyhow!("did not recognize an arXiv id in: {}", opts.input.trim()))?;
     report(&p, ID, "started", 0, Some(3), Some(r.full()));
 
     let client = super::client()?;
@@ -1352,7 +1352,7 @@ recurrent or convolutional neural networks &amp; attention.
         assert!(fm.contains("abstract: |"));
     }
 
-    // ── matemática ──
+    // ── math ──
 
     #[test]
     fn separa_matematica_do_texto() {
@@ -1395,7 +1395,7 @@ Tamb\'em vale \[ e^{i\pi} + 1 = 0 \] e \(x \to \infty\).";
         assert!(md.contains("$$"), "{}", md);
         assert!(md.contains("\\begin{align}"), "{}", md);
         assert!(md.contains("a &= b"), "{}", md);
-        // A regra de `\\` -> quebra de linha nao pode entrar na matematica.
+        // The rule of `\\` -> line-break rule must not enter the math.
         assert!(!md.contains("a &= b  \n"), "{}", md);
     }
 
@@ -1444,7 +1444,7 @@ Veja \cite{silva2020,souza2021} e \href{https://x.dev}{o site}.
         assert!(!out.contains("<math"), "{}", out);
     }
 
-    // ── tar.gz do source ──
+    // ── source tar.gz ──
 
     fn tar_gz(files: &[(&str, &str)]) -> Vec<u8> {
         let mut tar = tar::Builder::new(Vec::new());

@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Normalizar loudness (duas passagens) e tirar ruído. `mode` escolhe qual. */
+  /** Normalize loudness (two passes) and remove noise. `mode` picks which. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

@@ -18,9 +18,9 @@
 
 <script lang="ts">
   /**
-   * Vimeo privado / unlisted: o link com hash já abre sozinho; o vídeo com
-   * senha usa a senha que o dono passou para o usuário. Uma tentativa por
-   * clique — senha errada volta como erro e para por aí.
+   * Private / unlisted Vimeo: the hashed link already opens on its own; the video
+   * with a password uses the password the owner gave the user. One attempt per
+   * click — a wrong password comes back as an error and stops there.
    */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";

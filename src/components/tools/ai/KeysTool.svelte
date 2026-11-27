@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Chaves de API (estudo 24, All API Hub): cofre local, teste, saldo, exportação. */
+  /** API keys (study 24, All API Hub): local vault, test, balance, export. */
   import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
   import { t } from "$lib/i18n";

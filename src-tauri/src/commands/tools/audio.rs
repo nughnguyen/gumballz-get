@@ -1,5 +1,5 @@
-//! Tools de áudio: normalizar loudness (EBU R128), tirar ruído e etiquetar
-//! metadados de música (ID3 / Vorbis / MP4).
+//! Audio tools: normalize loudness (EBU R128), remove noise and tag music
+//! metadata (ID3 / Vorbis / MP4).
 
 use gumballz_core::core::tools::{audio_clean, audio_tag};
 
@@ -13,9 +13,9 @@ pub async fn tool_audio_clean(
     audio_clean::run(opts, progress(&app)).await.map_err(err)
 }
 
-// ── Etiquetas de música (ID3 / Vorbis / MP4), via lofty ──────────────────
+// ── Music tags (ID3 / Vorbis / MP4), via lofty ──────────────────
 
-/// Lê as tags de uma pasta ou lista de arquivos e já devolve o diagnóstico.
+/// Reads the tags of a folder or a list of files and already returns the diagnosis.
 #[tauri::command]
 pub async fn tool_audio_tag_scan(
     app: tauri::AppHandle,
@@ -28,8 +28,8 @@ pub async fn tool_audio_tag_scan(
         .map_err(err)
 }
 
-/// Aplica a edição em lote. Com `dry_run` (o padrão) devolve só o diff, sem
-/// tocar em nenhum arquivo.
+/// Applies the batch edit. With `dry_run` (the default) it only returns the diff,
+/// without touching any file.
 #[tauri::command]
 pub async fn tool_audio_tag_write(
     app: tauri::AppHandle,
@@ -42,7 +42,7 @@ pub async fn tool_audio_tag_write(
         .map_err(err)
 }
 
-/// Capa embutida de um arquivo, em `data:` URL, para a miniatura da UI.
+/// Embedded cover of a file, as a `data:` URL, for the UI thumbnail.
 #[tauri::command]
 pub async fn tool_audio_tag_cover(path: String) -> Result<Option<String>, String> {
     tokio::task::spawn_blocking(move || audio_tag::cover_data_url(&path))

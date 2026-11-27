@@ -230,8 +230,8 @@ pub struct AdvancedSettings {
     pub twitter_manual_cookie: String,
     #[serde(default)]
     pub user_agent: String,
-    /// Desliga a verificação de certificado TLS do yt-dlp. Default `false`:
-    /// só existe para rede corporativa com TLS interceptado.
+    /// Turns off yt-dlp's TLS certificate verification. Default `false`:
+    /// it only exists for corporate networks with intercepted TLS.
     #[serde(default)]
     pub insecure_tls: bool,
 }
@@ -557,12 +557,12 @@ mod backcompat_tests {
     use super::*;
 
     #[test]
-    fn settings_da_v0_7_6_carregam_com_tls_verificado() {
-        // settings.json de uma instalacao 0.7.6, antes de `insecure_tls`
-        // existir. O campo ausente precisa virar `false` (certificado
-        // verificado) sem derrubar a desserializacao nem tocar em nenhuma
-        // outra preferencia de `advanced`. Essa e a categoria de bug que ja
-        // zerou as preferencias de usuarios neste projeto.
+    fn settings_from_v0_7_6_load_with_verified_tls() {
+        // settings.json from a 0.7.6 install, before `insecure_tls`
+        // existed. The missing field has to become `false` (verified
+        // certificate) without breaking deserialization or touching any
+        // other `advanced` preference. This is the category of bug that has
+        // already zeroed users' preferences in this project.
         let json = serde_json::json!({
             "max_concurrent_segments": 20,
             "max_retries": 3,
@@ -600,31 +600,31 @@ mod backcompat_tests {
         assert!(back.insecure_tls);
     }
 
-    // A #220 adicionou `accessibility` ao AppSettings sem teste de migracao.
-    // Um settings.json escrito antes da 0.8.0 nao tem esse campo; se ele perder
-    // o `serde(default)` num refactor, todo usuario existente perde a
-    // configuracao inteira, em silencio, no primeiro boot depois do update.
+    // #220 added `accessibility` to AppSettings with no migration test.
+    // A settings.json written before 0.8.0 lacks this field; if it loses
+    // its `serde(default)` in a refactor, every existing user loses the
+    // whole configuration, silently, on the first boot after the update.
     //
-    // Em vez de escrever um JSON antigo a mao (que envelhece e vira ficcao),
-    // este teste serializa o default atual e *remove* a chave nova — que e
-    // exatamente a forma de um arquivo gravado antes de o campo existir.
+    // Instead of hand-writing an old JSON (which ages and becomes fiction),
+    // this test serializes the current default and *removes* the new key — which is
+    // exactly the shape of a file written before the field existed.
     #[test]
-    fn settings_json_sem_accessibility_ainda_abre() {
-        let atual = serde_json::to_value(AppSettings::default()).expect("serializa");
-        let mut anterior = atual.clone();
-        let obj = anterior.as_object_mut().expect("objeto");
-        let removida = obj.remove("accessibility");
+    fn settings_json_without_accessibility_still_opens() {
+        let current = serde_json::to_value(AppSettings::default()).expect("serializes");
+        let mut previous = current.clone();
+        let obj = previous.as_object_mut().expect("object");
+        let removed = obj.remove("accessibility");
         assert!(
-            removida.is_some(),
-            "o campo tem que existir hoje, senao o teste nao prova nada"
+            removed.is_some(),
+            "the field has to exist today, otherwise the test proves nothing"
         );
 
         let parsed: AppSettings =
-            serde_json::from_value(anterior).expect("arquivo pre-0.8.0 tem que abrir");
+            serde_json::from_value(previous).expect("a pre-0.8.0 file has to open");
 
         assert!(!parsed.accessibility.reduce_motion);
         assert!(!parsed.accessibility.reduce_transparency);
-        // E o que o usuario ja tinha nao pode sumir junto.
+        // And what the user already had must not vanish with it.
         assert_eq!(
             parsed.appearance.theme,
             AppSettings::default().appearance.theme
@@ -633,12 +633,12 @@ mod backcompat_tests {
     }
 
     #[test]
-    fn acessibilidade_ligada_sobrevive_ao_round_trip() {
+    fn accessibility_on_survives_the_round_trip() {
         let mut s = AppSettings::default();
         s.accessibility.reduce_motion = true;
         s.accessibility.reduce_transparency = true;
-        let round = serde_json::to_value(&s).expect("serializa");
-        let back: AppSettings = serde_json::from_value(round).expect("volta");
+        let round = serde_json::to_value(&s).expect("serializes");
+        let back: AppSettings = serde_json::from_value(round).expect("round-trips");
         assert!(back.accessibility.reduce_motion);
         assert!(back.accessibility.reduce_transparency);
     }

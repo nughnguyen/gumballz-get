@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Busca avançada e trends (estudo 67): monta a query com os operadores do X e roda no FxTwitter. */
+  /** Advanced search and trends (study 67): builds the query with X operators and runs it on FxTwitter. */
   import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
   import { t } from "$lib/i18n";

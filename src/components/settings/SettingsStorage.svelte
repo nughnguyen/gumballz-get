@@ -69,8 +69,8 @@
     return `${m}min ${sec}s`;
   }
 
-  // O que o dedupe já evitou de ocupar. Cada link extra é uma cópia que não foi
-  // feita — se for zero, dizemos zero em vez de esconder a linha.
+  // What dedupe has already avoided occupying. Each extra link is a copy that
+  // was never made — if it is zero, we say zero instead of hiding the row.
   let saved = $derived(
     stats ? Math.max(0, stats.bytes_without_dedupe - stats.bytes_on_disk) : 0,
   );
@@ -113,15 +113,15 @@
           }) as string,
         );
       } else {
-        // Sem medição, dizer quantos foram ligados é verdade; dizer quanto
-        // economizou não seria.
+        // Without a measurement, saying how many were linked is true; saying how much
+        // was saved would not be.
         showToast(
           "success",
           $t("settings.storage.dedupe_done_unmeasured", { count: rep.deduplicated }) as string,
         );
       }
-      // Erros não podem sumir: um arquivo ilegível é exatamente o que o usuário
-      // precisa saber que ficou de fora.
+      // Errors must not vanish: an unreadable file is exactly what the user
+      // needs to know was left out.
       if (rep.errors.length > 0) {
         showToast("error", $t("settings.storage.dedupe_errors", { count: rep.errors.length }) as string);
       }
@@ -179,8 +179,8 @@
         </div>
       </div>
 
-      <!-- O modo portatil nao cobre o WebView no macOS, e o usuario que leva o
-           pendrive para outra maquina precisa saber disso antes, nao depois. -->
+      <!-- Portable mode doesn't cover the WebView on macOS, and the user who carries
+           the flash drive to another machine needs to know that before, not after. -->
       {#if portable.macos_webview_notice}
         <div class="divider"></div>
         <div class="setting-row">
@@ -203,8 +203,8 @@
               saved: humanBytes(saved),
             })}
           {:else if stats && stats.objects > 0}
-            <!-- Windows não sabe contar links. Dizer "0 economizado" seria dar
-                 cara de medição a algo que não foi medido. -->
+            <!-- Windows can't count links. Saying "0 saved" would make
+                 something unmeasured look measured. -->
             {$t("settings.storage.dedupe_unmeasurable", { objects: stats.objects })}
           {:else}
             {$t("settings.storage.dedupe_empty")}
@@ -235,8 +235,8 @@
     margin-bottom: var(--padding);
   }
 
-  /* O caminho de dados e o aviso do macOS sao frases inteiras, nao rotulos:
-     sem isto ficam numa linha so e sao cortados. */
+  /* The data path and the macOS notice are whole sentences, not labels:
+     without this they sit on one line and get cut off. */
   .wrap {
     white-space: normal;
     word-break: break-word;

@@ -1,10 +1,10 @@
-//! Histórico completo do export do Spotify — o que o Wrapped não mostra.
+//! Full history from the Spotify export — what Wrapped does not show.
 //!
-//! Dois formatos chegam na caixa do usuário: `StreamingHistory_music_*.json`
-//! (últimos 12 meses, campos curtos) e `Streaming_History_Audio_*.json` do
-//! pacote estendido (a vida inteira, com `ms_played`, `skipped`, `shuffle`,
-//! `platform` e companhia). Lemos os dois, de um zip ou de uma pasta.
-//! Zero rede: é tudo arquivo local.
+//! Two formats land in the user's inbox: `StreamingHistory_music_*.json`
+//! (last 12 months, short fields) and `Streaming_History_Audio_*.json` from the
+//! extended package (whole life, with `ms_played`, `skipped`, `shuffle`,
+//! `platform` and company). We read both, from a zip or a folder.
+//! Zero network: it is all local files.
 
 use std::collections::{HashMap, HashSet};
 use std::io::Read;
@@ -22,12 +22,12 @@ const DAY: i64 = 86_400;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct HistoryOptions {
-    /// Zip do export, pasta descompactada ou os `.json` soltos.
+    /// Zip of the export, unzipped folder or the loose `.json` files.
     pub inputs: Vec<String>,
-    /// Abaixo disso conta como pulada (o padrão do Spotify é 30 s).
+    /// Below this counts as skipped (Spotify's default is 30 s).
     #[serde(default = "default_min_ms")]
     pub min_ms: u64,
-    /// Onde gravar os arquivos de export. Vazio = não exporta.
+    /// Where to write the export files. Empty = do not export.
     #[serde(default)]
     pub out_dir: Option<String>,
     /// "json", "csv", "md".
@@ -44,7 +44,7 @@ fn default_top() -> usize {
     25
 }
 
-/// Uma escuta, já no mesmo formato venha de que arquivo vier.
+/// One listen, already in the same format whichever file it came from.
 #[derive(Debug, Clone, Serialize)]
 pub struct Play {
     pub ts: i64,
@@ -123,25 +123,25 @@ pub struct HistoryResult {
     pub last_ts: String,
     pub by_year: Vec<Bucket>,
     pub by_month: Vec<Bucket>,
-    /// Índice 0 = segunda-feira.
+    /// Index 0 = Monday.
     pub by_weekday: Vec<Bucket>,
     pub by_hour: Vec<Bucket>,
     pub top_artists: Vec<ArtistStat>,
     pub top_tracks: Vec<TrackStat>,
     pub top_albums: Vec<TrackStat>,
     pub year_top: Vec<YearTop>,
-    /// Quem você mais pula, entre os artistas com escuta relevante.
+    /// Who you skip most, among artists with relevant listening.
     pub skipped_artists: Vec<ArtistStat>,
-    /// Descobertas recentes: a primeira vez que ouvi cada artista, do mais
-    /// novo para o mais antigo.
+    /// Recent discoveries: the first time I heard each artist, from the
+    /// newest to the oldest.
     pub firsts: Vec<ArtistStat>,
     pub streaks: Streaks,
-    /// Sumiram: ouvia muito no ano anterior e quase nada no último.
+    /// Dropped: listened a lot the previous year and almost nothing in the last.
     pub dropped: Vec<Dropped>,
     pub exports: Vec<String>,
 }
 
-// ── Leitura ─────────────────────────────────────────────────────────────
+// ── Reading ─────────────────────────────────────────────────────────────
 
 fn parse_ts(v: &Value) -> Option<i64> {
     let s = v.as_str()?;
@@ -163,8 +163,8 @@ fn s_of(v: &Value, key: &str) -> Option<String> {
         .filter(|s| !s.is_empty())
 }
 
-/// Lê um arquivo de histórico nos dois formatos. Podcasts (sem
-/// `master_metadata_track_name`) ficam de fora: aqui é música.
+/// Reads a history file in both formats. Podcasts (without
+/// `master_metadata_track_name`) stay out: this is music.
 pub fn parse_history(text: &str, min_ms: u64) -> Vec<Play> {
     let Ok(v) = serde_json::from_str::<Value>(text) else {
         return Vec::new();
@@ -227,8 +227,8 @@ fn looks_like_history(name: &str) -> bool {
             || n.contains("audio"))
 }
 
-/// Junta o conteúdo dos arquivos de histórico de zips, pastas e `.json`
-/// soltos. Devolve (nome mostrado, conteúdo).
+/// Joins the content of history files from zips, folders and loose `.json`
+/// files. Returns (display name, content).
 pub fn collect_sources(inputs: &[String]) -> Result<Vec<(String, String)>> {
     let mut out = Vec::new();
     for input in inputs {
@@ -254,7 +254,7 @@ pub fn collect_sources(inputs: &[String]) -> Result<Vec<(String, String)>> {
             .unwrap_or(false)
         {
             let file = std::fs::File::open(&p)
-                .with_context(|| format!("não consegui abrir {}", p.display()))?;
+                .with_context(|| format!("could not open {}", p.display()))?;
             let mut zip = zip::ZipArchive::new(file)?;
             for i in 0..zip.len() {
                 let mut e = zip.by_index(i)?;
@@ -276,7 +276,7 @@ pub fn collect_sources(inputs: &[String]) -> Result<Vec<(String, String)>> {
     Ok(out)
 }
 
-// ── Análise ─────────────────────────────────────────────────────────────
+// ── Analysis ─────────────────────────────────────────────────────────────
 
 fn iso(ts: i64) -> String {
     Utc.timestamp_opt(ts, 0)
@@ -308,8 +308,8 @@ struct Acc {
     first_track: String,
 }
 
-/// Todas as contas do histórico. Recebe as escutas já normalizadas para o
-/// teste poder montar dados sintéticos sem tocar em arquivo.
+/// All the accounts in the history. Takes the already-normalized listens so the
+/// test can build synthetic data without touching a file.
 pub fn analyze(plays: &[Play], top: usize) -> HistoryResult {
     let mut by_year: HashMap<String, (u64, u64)> = HashMap::new();
     let mut by_month: HashMap<String, (u64, u64)> = HashMap::new();
@@ -401,7 +401,7 @@ pub fn analyze(plays: &[Play], top: usize) -> HistoryResult {
     let mut top_artists: Vec<ArtistStat> = artists.iter().map(|(n, a)| stat(n, a)).collect();
     top_artists.sort_by(|a, b| b.ms.cmp(&a.ms).then_with(|| a.name.cmp(&b.name)));
 
-    // Pulados: só quem tem escuta suficiente para o número dizer algo.
+    // Skipped: only those with enough listening for the number to mean something.
     let mut skipped_artists: Vec<ArtistStat> = top_artists
         .iter()
         .filter(|a| a.plays >= 10)
@@ -450,7 +450,7 @@ pub fn analyze(plays: &[Play], top: usize) -> HistoryResult {
     top_albums.sort_by(|a, b| b.ms.cmp(&a.ms).then_with(|| a.track.cmp(&b.track)));
     top_albums.truncate(top);
 
-    // Campeão de cada ano.
+    // Champion of each year.
     let mut best_a: HashMap<String, (String, u64)> = HashMap::new();
     for ((y, a), ms) in year_artist {
         let e = best_a.entry(y).or_insert_with(|| (a.clone(), 0));
@@ -478,7 +478,7 @@ pub fn analyze(plays: &[Play], top: usize) -> HistoryResult {
 
     let streaks = streaks_of(&days);
 
-    // Sumiram: comparação dos últimos 365 dias com os 365 anteriores.
+    // Dropped: comparing the last 365 days with the 365 before them.
     let mut dropped: Vec<Dropped> = Vec::new();
     if last_ts > i64::MIN {
         let cut = last_ts - 365 * DAY;
@@ -563,7 +563,7 @@ pub fn analyze(plays: &[Play], top: usize) -> HistoryResult {
     result
 }
 
-/// Dias seguidos com pelo menos uma escuta.
+/// Consecutive days with at least one listen.
 pub fn streaks_of(days: &HashSet<i64>) -> Streaks {
     let mut v: Vec<i64> = days.iter().copied().collect();
     v.sort_unstable();
@@ -581,7 +581,7 @@ pub fn streaks_of(days: &HashSet<i64>) -> Streaks {
             best = (cur, start, *d);
         }
     }
-    // A sequência corrente é a que termina no último dia com escuta.
+    // The current streak is the one ending on the last day with a listen.
     let mut current = 0u64;
     for (i, d) in v.iter().enumerate().rev() {
         if i + 1 == v.len() || v[i + 1] == *d + 1 {
@@ -622,7 +622,7 @@ fn hours(ms: u64) -> f64 {
 }
 
 pub fn artists_csv(r: &HistoryResult) -> String {
-    let mut s = String::from("artista,plays,horas,pulos,skip_rate,primeira,ultima\n");
+    let mut s = String::from("artist,plays,hours,skips,skip_rate,first,last\n");
     for a in &r.top_artists {
         s.push_str(&format!(
             "{},{},{},{},{},{},{}\n",
@@ -639,7 +639,7 @@ pub fn artists_csv(r: &HistoryResult) -> String {
 }
 
 pub fn tracks_csv(r: &HistoryResult) -> String {
-    let mut s = String::from("faixa,artista,plays,horas\n");
+    let mut s = String::from("track,artist,plays,hours\n");
     for t in &r.top_tracks {
         s.push_str(&format!(
             "{},{},{},{}\n",
@@ -653,19 +653,19 @@ pub fn tracks_csv(r: &HistoryResult) -> String {
 }
 
 pub fn months_csv(r: &HistoryResult) -> String {
-    let mut s = String::from("mes,plays,horas\n");
+    let mut s = String::from("month,plays,hours\n");
     for b in &r.by_month {
         s.push_str(&format!("{},{},{}\n", b.key, b.plays, hours(b.ms)));
     }
     s
 }
 
-/// Relatório em Markdown para o usuário guardar ou colar em algum lugar.
+/// Markdown report for the user to keep or paste somewhere.
 pub fn report_markdown(r: &HistoryResult) -> String {
     let mut s = String::new();
-    s.push_str("# Histórico do Spotify\n\n");
+    s.push_str("# Spotify History\n\n");
     s.push_str(&format!(
-        "- Período: {} a {}\n- Escutas: {}\n- Horas: {}\n- Artistas: {}\n- Faixas: {}\n- Dias com música: {} (maior sequência: {} dias)\n\n",
+        "- Period: {} to {}\n- Plays: {}\n- Hours: {}\n- Artists: {}\n- Tracks: {}\n- Days with music: {} (longest streak: {} days)\n\n",
         r.first_ts, r.last_ts, r.plays, hours(r.total_ms), r.distinct_artists, r.distinct_tracks,
         r.streaks.active_days, r.streaks.longest_days
     ));
@@ -695,7 +695,7 @@ pub fn report_markdown(r: &HistoryResult) -> String {
         ));
     }
     if !r.dropped.is_empty() {
-        s.push_str("\n## Sumiram\n\n| Artista | Antes (h) | Depois (h) | Última vez |\n| --- | ---: | ---: | --- |\n");
+        s.push_str("\n## Gone\n\n| Artist | Before (h) | After (h) | Last time |\n| --- | ---: | ---: | --- |\n");
         for d in &r.dropped {
             s.push_str(&format!(
                 "| {} | {} | {} | {} |\n",
@@ -747,7 +747,7 @@ pub fn run(opts: &HistoryOptions, p: &ProgressFn) -> Result<HistoryResult> {
     report(p, TOOL_ID, "started", 0, None, None);
     let sources = collect_sources(&opts.inputs)?;
     if sources.is_empty() {
-        anyhow::bail!("não achei nenhum StreamingHistory_*.json / Streaming_History_Audio_*.json");
+        anyhow::bail!("could not find any StreamingHistory_*.json / Streaming_History_Audio_*.json");
     }
     let total = sources.len() as u64;
     let mut plays = Vec::new();
@@ -768,7 +768,7 @@ pub fn run(opts: &HistoryOptions, p: &ProgressFn) -> Result<HistoryResult> {
         }
     }
     if plays.is_empty() {
-        anyhow::bail!("os arquivos não tinham nenhuma escuta de música");
+        anyhow::bail!("the files had no music plays");
     }
     plays.sort_by_key(|x| x.ts);
 
@@ -783,17 +783,17 @@ pub fn run(opts: &HistoryOptions, p: &ProgressFn) -> Result<HistoryResult> {
     Ok(result)
 }
 
-/// Conveniência para a UI: quantas horas um bloco representa.
+/// Convenience for the UI: how many hours one block represents.
 pub fn ms_to_hours(ms: u64) -> f64 {
     hours(ms)
 }
 
-/// Data (YYYY-MM-DD) de um timestamp, exposta para os testes e para o front.
+/// Date (YYYY-MM-DD) of a timestamp, exposed for the tests and the front end.
 pub fn day_string(ts: i64) -> String {
     iso(ts)
 }
 
-/// Timestamp de uma data ISO, para montar fixture sem depender de fuso.
+/// Timestamp of an ISO date, to build fixtures without depending on timezone.
 pub fn ts_of(date: &str, hour: u32) -> i64 {
     NaiveDate::parse_from_str(date, "%Y-%m-%d")
         .ok()
@@ -833,7 +833,7 @@ mod tests {
         assert_eq!(plays[0].artist, "Radiohead");
         assert_eq!(plays[0].ms, 238_000);
         assert!(!plays[0].skipped);
-        // Sem o campo `skipped`, o corte é o tempo tocado.
+        // Without the `skipped` field, the cut is the played time.
         assert!(plays[1].skipped);
         assert_eq!(day_string(plays[0].ts), "2021-05-13");
     }
@@ -856,7 +856,7 @@ mod tests {
            "episode_name":"Podcast qualquer"}
         ]"#;
         let plays = parse_history(json, 30_000);
-        // O podcast (sem nome de faixa) fica de fora.
+        // The podcast (no track name) stays out.
         assert_eq!(plays.len(), 2);
         assert_eq!(plays[0].album, "OK Computer");
         assert_eq!(plays[0].country.as_deref(), Some("BR"));
@@ -865,12 +865,12 @@ mod tests {
     }
 
     #[test]
-    fn metricas_com_dados_sinteticos() {
-        // 2 dias seguidos + 1 dia solto depois.
+    fn metrics_with_synthetic_data() {
+        // 2 days in a row + 1 loose day later.
         let plays = vec![
             play("2023-01-02", 8, "A", "a1", 200_000, false), // segunda
             play("2023-01-02", 9, "A", "a2", 100_000, false),
-            play("2023-01-03", 8, "B", "b1", 300_000, false), // terça
+            play("2023-01-03", 8, "B", "b1", 300_000, false), // Tuesday
             play("2023-01-10", 22, "A", "a1", 400_000, true),
         ];
         let r = analyze(&plays, 10);
@@ -884,13 +884,13 @@ mod tests {
         assert_eq!(r.by_year[0].key, "2023");
         assert_eq!(r.by_year[0].ms, 1_000_000);
         assert_eq!(r.by_month[0].key, "2023-01");
-        // Segunda = índice 0. 2023-01-03 e 2023-01-10 caem numa terça.
+        // Monday = index 0. 2023-01-03 and 2023-01-10 fall on a Tuesday.
         assert_eq!(r.by_weekday[0].plays, 2);
         assert_eq!(r.by_weekday[1].plays, 2);
         assert_eq!(r.by_weekday[2].plays, 0);
         assert_eq!(r.by_hour[8].plays, 2);
         assert_eq!(r.by_hour[22].plays, 1);
-        // A é o artista com mais tempo.
+        // A is the artist with the most time.
         assert_eq!(r.top_artists[0].name, "A");
         assert_eq!(r.top_artists[0].ms, 700_000);
         assert_eq!(r.top_artists[0].plays, 3);
@@ -910,9 +910,9 @@ mod tests {
     }
 
     #[test]
-    fn artistas_que_sumiram() {
+    fn artists_that_disappeared() {
         let mut plays = Vec::new();
-        // Ouvia muito em 2022, nada em 2023.
+        // Listened a lot in 2022, nothing in 2023.
         for d in 1..=20 {
             plays.push(play(
                 &format!("2022-03-{d:02}"),
@@ -923,7 +923,7 @@ mod tests {
                 false,
             ));
         }
-        // E continua ouvindo o outro.
+        // And keeps listening to the other one.
         for d in 1..=20 {
             plays.push(play(
                 &format!("2023-06-{d:02}"),
@@ -965,12 +965,12 @@ mod tests {
         let plays = vec![play("2023-01-02", 8, "A, Inc", "a\"1", 200_000, false)];
         let r = analyze(&plays, 10);
         let csv = artists_csv(&r);
-        assert!(csv.starts_with("artista,plays,horas,pulos,skip_rate,primeira,ultima\n"));
+        assert!(csv.starts_with("artist,plays,hours,skips,skip_rate,first,last\n"));
         assert!(csv.contains("\"A, Inc\""));
         assert!(tracks_csv(&r).contains("\"a\"\"1\""));
         assert!(months_csv(&r).contains("2023-01,1,0.1"));
         let md = report_markdown(&r);
-        assert!(md.contains("# Histórico do Spotify"));
+        assert!(md.contains("# Spotify History"));
         assert!(md.contains("| 2023 |"));
     }
 

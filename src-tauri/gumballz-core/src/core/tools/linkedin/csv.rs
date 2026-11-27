@@ -1,13 +1,13 @@
-//! Parser de CSV escrito a mao para os exports do LinkedIn. O projeto nao tem
-//! o crate `csv` e esta rodada nao pode adicionar dependencia, entao o basico
-//! mora aqui: aspas, aspas escapadas (`""`), quebra de linha dentro do campo,
-//! separador detectado (`,`, `;` ou tab), BOM e o preambulo "Notes:" que
-//! alguns CSVs do LinkedIn trazem antes do cabecalho de verdade.
+//! Hand-written CSV parser for the LinkedIn exports. The project has no
+//! `csv` crate and this round cannot add a dependency, so the basics
+//! live here: quotes, escaped quotes (`""`), line breaks inside a field,
+//! detected separator (`,`, `;` or tab), BOM and the "Notes:" preamble that
+//! some LinkedIn CSVs bring before the real header.
 
 use std::collections::HashMap;
 
-/// Normaliza um nome de coluna ou de arquivo: minusculas, so alfanumerico.
-/// "First Name" e "FIRST_NAME" viram "firstname".
+/// Normalizes a column or file name: lowercase, alphanumeric only.
+/// "First Name" and "FIRST_NAME" become "firstname".
 pub fn norm(s: &str) -> String {
     s.chars()
         .filter(|c| c.is_alphanumeric())
@@ -15,7 +15,7 @@ pub fn norm(s: &str) -> String {
         .collect()
 }
 
-/// Quebra o texto em registros crus com o separador dado.
+/// Breaks the text into raw records with the given separator.
 fn records(text: &str, sep: char) -> Vec<Vec<String>> {
     let mut out: Vec<Vec<String>> = Vec::new();
     let mut row: Vec<String> = Vec::new();
@@ -69,14 +69,14 @@ fn empty_record(r: &[String]) -> bool {
     r.iter().all(|f| f.trim().is_empty())
 }
 
-/// Indice do registro que e o cabecalho de verdade.
+/// Index of the record that is the real header.
 fn header_index(recs: &[Vec<String>]) -> Option<usize> {
     let first = recs.iter().position(|r| !empty_record(r))?;
     let head = norm(recs[first].first().map(String::as_str).unwrap_or(""));
     if !head.starts_with("notes") {
         return Some(first);
     }
-    // Preambulo "Notes:": segue ate a linha em branco que separa do cabecalho.
+    // "Notes:" preamble: runs to the blank line that separates it from the header.
     let mut i = first + 1;
     while i < recs.len() && !empty_record(&recs[i]) {
         i += 1;
@@ -87,7 +87,7 @@ fn header_index(recs: &[Vec<String>]) -> Option<usize> {
     if i < recs.len() {
         return Some(i);
     }
-    // Sem linha em branco: cai no primeiro registro com mais de uma coluna.
+    // No blank line: falls to the first record with more than one column.
     recs.iter()
         .enumerate()
         .skip(first + 1)
@@ -95,8 +95,8 @@ fn header_index(recs: &[Vec<String>]) -> Option<usize> {
         .map(|(i, _)| i)
 }
 
-/// Escolhe o separador testando os candidatos num pedaco do inicio do texto e
-/// ficando com o que produz o cabecalho mais largo.
+/// Picks the separator by testing the candidates on a piece from the start of the text and
+/// keeping the one that produces the widest header.
 fn detect_sep(text: &str) -> char {
     let mut cut = text.len().min(64 * 1024);
     while cut > 0 && !text.is_char_boundary(cut) {
@@ -114,7 +114,7 @@ fn detect_sep(text: &str) -> char {
     best.0
 }
 
-/// Uma planilha ja com cabecalho separado das linhas.
+/// A sheet already with its header separated from the rows.
 #[derive(Debug, Clone, Default)]
 pub struct Table {
     pub headers: Vec<String>,
@@ -155,12 +155,12 @@ impl Table {
         self.rows.is_empty()
     }
 
-    /// Indice da primeira coluna que casa com algum dos nomes dados.
+    /// Index of the first column that matches any of the given names.
     pub fn col(&self, names: &[&str]) -> Option<usize> {
         names.iter().find_map(|n| self.index.get(&norm(n)).copied())
     }
 
-    /// Valor de uma coluna numa linha, ja aparado. Coluna ausente vira "".
+    /// Value of a column in a row, already trimmed. A missing column becomes "".
     pub fn get<'a>(&self, row: &'a [String], names: &[&str]) -> &'a str {
         self.col(names)
             .and_then(|i| row.get(i))
@@ -169,7 +169,7 @@ impl Table {
     }
 }
 
-/// Escapa um campo para escrever CSV.
+/// Escapes a field to write CSV.
 pub fn esc(s: &str) -> String {
     if s.contains([',', '"', '\n', '\r']) {
         format!("\"{}\"", s.replace('"', "\"\""))
@@ -178,14 +178,14 @@ pub fn esc(s: &str) -> String {
     }
 }
 
-/// Monta uma linha de CSV com quebra `\n`.
+/// Builds a CSV line with a `\n` break.
 pub fn line(fields: &[&str]) -> String {
     let mut s = fields.iter().map(|f| esc(f)).collect::<Vec<_>>().join(",");
     s.push('\n');
     s
 }
 
-/// Data solta do export, reduzida a ano/mes/dia.
+/// A loose date from the export, reduced to year/month/day.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Ymd {
     pub y: i32,
@@ -212,15 +212,15 @@ fn month(name: &str) -> Option<u32> {
     Some(i as u32 + 1)
 }
 
-/// Aceita os formatos que aparecem no export: `2021-08-06 14:22:31 UTC`,
-/// `06 Aug 2021`, `Aug 6, 2021`, `Jan 2019`, `8/6/21` e `2021`.
+/// Accepts the formats that show up in the export: `2021-08-06 14:22:31 UTC`,
+/// `06 Aug 2021`, `Aug 6, 2021`, `Jan 2019`, `8/6/21` and `2021`.
 pub fn parse_date(raw: &str) -> Option<Ymd> {
     let s = raw.trim().trim_matches('"').trim();
     if s.is_empty() {
         return None;
     }
     let head = s.split_whitespace().next().unwrap_or(s);
-    // ISO: 2021-08-06 ou 2021-08
+    // ISO: 2021-08-06 or 2021-08
     if head.len() >= 7 && head.as_bytes().get(4) == Some(&b'-') {
         let mut p = head.split('-');
         let y = p.next()?.parse::<i32>().ok()?;
@@ -231,7 +231,7 @@ pub fn parse_date(raw: &str) -> Option<Ymd> {
         }
         return None;
     }
-    // 8/6/21 ou 08/06/2021 (mes primeiro, padrao do LinkedIn em ingles)
+    // 8/6/21 or 08/06/2021 (month first, LinkedIn's default in English)
     if head.contains('/') {
         let p: Vec<&str> = head.split('/').collect();
         if p.len() == 3 {
@@ -288,7 +288,7 @@ mod tests {
     }
 
     #[test]
-    fn aceita_bom_e_preambulo_de_notas() {
+    fn accepts_bom_and_notes_preamble() {
         let raw = "\u{feff}Notes:\n\"Se voce baixou o arquivo, guarde com cuidado.\"\n\nFirst Name,Company\nAna,Acme\n";
         let t = Table::parse(raw);
         assert_eq!(t.headers, vec!["First Name", "Company"]);

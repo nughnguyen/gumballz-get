@@ -1,8 +1,8 @@
-//! X / Twitter (estudo 67): modelo compartilhado e utilidades da categoria X.
+//! X / Twitter (study 67): shared model and utilities for the X category.
 //!
-//! Duas vias para tudo: a pública (FxTwitter v2, sem login) e a da sessão
-//! (GraphQL interno do X com os cookies do bucket `x.com`). Cada ferramenta
-//! escolhe a via; o modelo de post/usuário é o mesmo nas duas.
+//! Two routes for everything: the public one (FxTwitter v2, no login) and the session one
+//! (X's internal GraphQL with the cookies from the `x.com` bucket). Each tool
+//! picks a route; the post/user model is the same on both.
 
 pub mod archive;
 pub mod bookmarks;
@@ -58,10 +58,10 @@ pub struct XUser {
     pub verified: bool,
     #[serde(default)]
     pub protected: bool,
-    /// Eu sigo esta conta (só vem das listas da sessão).
+    /// I follow this account (only comes from the session's lists).
     #[serde(default)]
     pub followed_by_me: Option<bool>,
-    /// Esta conta me segue (só vem das listas da sessão).
+    /// This account follows me (only comes from the session's lists).
     #[serde(default)]
     pub follows_me: Option<bool>,
 }
@@ -76,7 +76,7 @@ impl XUser {
 pub struct XMedia {
     /// "photo" | "video" | "gif"
     pub kind: String,
-    /// Melhor URL: `?name=orig` para fotos, mp4 de maior bitrate para vídeos.
+    /// Best URL: `?name=orig` for photos, highest-bitrate mp4 for videos.
     pub url: String,
     #[serde(default)]
     pub thumb: String,
@@ -123,7 +123,7 @@ pub struct XPost {
     pub reply_to_handle: Option<String>,
     #[serde(default)]
     pub conversation_id: Option<String>,
-    /// Quem repostou, quando o item da timeline é um repost.
+    /// Who reposted, when the timeline item is a repost.
     #[serde(default)]
     pub reposted_by: Option<String>,
     #[serde(default)]
@@ -184,7 +184,7 @@ pub fn handle_from(input: &str) -> Option<String> {
     Some(h)
 }
 
-/// Pasta de dados da categoria: `<app_data>/tools/x`.
+/// Category data folder: `<app_data>/tools/x`.
 pub fn x_dir() -> std::path::PathBuf {
     let d = super::tools_dir()
         .unwrap_or_else(std::env::temp_dir)
@@ -193,7 +193,7 @@ pub fn x_dir() -> std::path::PathBuf {
     d
 }
 
-/// Sinal de cancelamento por id de tarefa (mídia em lote, unfollow, export).
+/// Cancellation signal by task id (batch media, unfollow, export).
 static CANCELLED: Lazy<Mutex<HashSet<String>>> = Lazy::new(|| Mutex::new(HashSet::new()));
 
 pub fn cancel(id: &str) {
@@ -224,7 +224,7 @@ pub fn iso_from_timestamp(ts: i64) -> String {
         .unwrap_or_default()
 }
 
-/// URL de foto em tamanho original (`pbs.twimg.com/media/X.jpg` → `?format=jpg&name=orig`).
+/// Original-size photo URL (`pbs.twimg.com/media/X.jpg` → `?format=jpg&name=orig`).
 pub fn photo_orig_url(url: &str) -> String {
     if url.contains("name=orig") {
         return url.to_string();

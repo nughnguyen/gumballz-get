@@ -1,8 +1,8 @@
-//! Legenda: converter entre SRT/VTT/ASS, ressincronizar e queimar no vídeo.
+//! Subtitles: convert between SRT/VTT/ASS, resync and burn into the video.
 //!
-//! O parser é próprio (Rust puro) porque o que se precisa aqui é pouco e o
-//! FFmpeg não sabe deslocar tempo nem esticar por âncora. A queima usa o
-//! filtro `subtitles`/`ass` do FFmpeg gerido, que já traz libass.
+//! The parser is our own (pure Rust) because what is needed here is little and
+//! FFmpeg cannot shift time or stretch by anchor. Burning uses the
+//! managed FFmpeg's `subtitles`/`ass` filter, which already ships libass.
 
 use std::path::{Path, PathBuf};
 
@@ -46,7 +46,7 @@ pub fn fmt_vtt_time(ms: i64) -> String {
     fmt_srt_time(ms).replace(',', ".")
 }
 
-/// ASS conta centésimos, não milésimos, e a hora não tem zero à esquerda.
+/// ASS counts hundredths, not thousandths, and the hour has no leading zero.
 pub fn fmt_ass_time(ms: i64) -> String {
     let ms = ms.max(0);
     format!(
@@ -79,10 +79,10 @@ fn parse_timed_blocks(text: &str, arrow: &str) -> Vec<Cue> {
     for line in text.lines() {
         let line = line.trim_end_matches('\r');
         if let Some((a, b)) = line.split_once(arrow) {
-            // Uma linha de tempo fecha o bloco anterior.
+            // A time line closes the previous block.
             flush(&mut pending, &mut buffer, &mut cues);
             let start = parse_time(a);
-            // O VTT pode ter posição depois do tempo final ("line:90%").
+            // VTT can have a position after the end time ("line:90%").
             let end = b.split_whitespace().next().and_then(parse_time);
             if let (Some(s), Some(e)) = (start, end) {
                 pending = Some((s, e));
@@ -127,7 +127,7 @@ fn parse_ass(text: &str) -> Vec<Cue> {
                 _ => continue,
             };
             let body = parts.get(ti).copied().unwrap_or("");
-            // Tira as marcas de override ({\an8}, {\i1}) e as quebras do ASS.
+            // Removes the override marks ({\an8}, {\i1}) and the ASS line breaks.
             let mut clean = String::new();
             let mut depth = 0;
             for c in body.chars() {
@@ -151,8 +151,8 @@ fn parse_ass(text: &str) -> Vec<Cue> {
     cues
 }
 
-/// Descobre o formato pelo conteúdo, não pela extensão — arquivo de legenda
-/// vem com o nome errado o tempo todo.
+/// Discovers the format from the content, not the extension — a subtitle file
+/// comes with the wrong name all the time.
 pub fn parse(text: &str) -> anyhow::Result<Vec<Cue>> {
     let head = text.trim_start_matches('\u{feff}');
     let cues = if head.contains("[Script Info]") || head.contains("Dialogue:") {
@@ -163,7 +163,7 @@ pub fn parse(text: &str) -> anyhow::Result<Vec<Cue>> {
         Vec::new()
     };
     if cues.is_empty() {
-        return Err(anyhow!("nenhuma legenda reconhecida no arquivo"));
+        return Err(anyhow!("no subtitle recognised in the file"));
     }
     Ok(cues)
 }
@@ -240,8 +240,8 @@ pub fn shift(cues: &mut [Cue], ms: i64) {
     }
 }
 
-/// Estica ou encolhe a linha do tempo inteira — é o conserto de legenda
-/// pega de um vídeo com outro frame rate (23,976 vs 25 é o caso clássico).
+/// Stretches or shrinks the whole timeline — the fix for a subtitle
+/// taken from a video with another frame rate (23.976 vs 25 is the classic case).
 pub fn scale(cues: &mut [Cue], factor: f64) {
     for c in cues.iter_mut() {
         c.start_ms = ((c.start_ms as f64) * factor).round() as i64;
@@ -249,9 +249,9 @@ pub fn scale(cues: &mut [Cue], factor: f64) {
     }
 }
 
-/// Sincronia por duas âncoras: o usuário diz onde a primeira e a última fala
-/// caem de verdade no áudio, e o resto é interpolado. Resolve de uma vez o
-/// caso "começa certo e vai atrasando".
+/// Sync by two anchors: the user says where the first and last speech
+/// really fall in the audio, and the rest is interpolated. Solves at once the
+/// case "starts right and drifts later".
 pub fn anchor_resync(cues: &mut [Cue], from_a: i64, to_a: i64, from_b: i64, to_b: i64) -> f64 {
     let span = (from_b - from_a) as f64;
     if span.abs() < 1.0 {
@@ -285,13 +285,13 @@ pub struct ConvertOptions {
     /// "srt" | "vtt" | "ass"
     #[serde(default = "default_format")]
     pub format: String,
-    /// Deslocamento em milissegundos (pode ser negativo).
+    /// Shift in milliseconds (can be negative).
     #[serde(default)]
     pub shift_ms: i64,
-    /// Fator de escala do tempo; 0 ou 1 não mexe.
+    /// Time scale factor; 0 or 1 does not move anything.
     #[serde(default)]
     pub scale: f64,
-    /// Âncoras em milissegundos: [de_a, para_a, de_b, para_b]. Vazio = não usa.
+    /// Anchors in milliseconds: [from_a, to_a, from_b, to_b]. Empty = does not use.
     #[serde(default)]
     pub anchors: Vec<i64>,
     #[serde(default)]
@@ -321,8 +321,8 @@ pub struct SubtitleResult {
     pub items: Vec<SubtitleItem>,
 }
 
-/// Lê um arquivo respeitando UTF-8 com BOM e caindo para Latin-1 quando o
-/// arquivo não é UTF-8 (legenda antiga em português é cheia disso).
+/// Reads a file respecting UTF-8 with BOM and falling back to Latin-1 when the
+/// file is not UTF-8 (old subtitles in Portuguese are full of that).
 fn read_text(path: &Path) -> anyhow::Result<String> {
     let bytes = std::fs::read(path)?;
     Ok(match String::from_utf8(bytes.clone()) {
@@ -401,13 +401,13 @@ fn convert_one(opts: &ConvertOptions, input: &str) -> SubtitleItem {
     let stem = inp
         .file_stem()
         .map(|s| s.to_string_lossy().to_string())
-        .unwrap_or_else(|| "legenda".into());
+        .unwrap_or_else(|| "subtitle".into());
     let ext = match opts.format.as_str() {
         "vtt" => "vtt",
         "ass" => "ass",
         _ => "srt",
     };
-    // Sem sufixo e mesmo formato, não sobrescreve o original em silêncio.
+    // With no suffix and the same format, do not silently overwrite the original.
     let suffix = if opts.suffix.is_empty() {
         let same = inp
             .extension()
@@ -441,7 +441,7 @@ fn convert_one(opts: &ConvertOptions, input: &str) -> SubtitleItem {
 pub struct BurnOptions {
     pub video: String,
     pub subtitle: String,
-    /// Tamanho da fonte quando a legenda não é ASS (o ASS traz o estilo dele).
+    /// Font size when the subtitle is not ASS (ASS brings its own style).
     #[serde(default = "default_font_size")]
     pub font_size: u32,
     #[serde(default)]
@@ -454,8 +454,8 @@ fn default_font_size() -> u32 {
     24
 }
 
-/// O filtro `subtitles` recebe o caminho dentro de uma string do FFmpeg:
-/// dois-pontos separam opções e a barra invertida do Windows é escape.
+/// The `subtitles` filter receives the path inside an FFmpeg string:
+/// colons separate options and the Windows backslash is an escape.
 pub fn escape_filter_path(path: &str) -> String {
     path.replace('\\', "/").replace(':', "\\:")
 }
@@ -465,7 +465,7 @@ pub async fn burn(opts: BurnOptions, progress: super::ProgressFn) -> anyhow::Res
     let video = Path::new(&opts.video);
     let sub = Path::new(&opts.subtitle);
     if !sub.exists() {
-        return Err(anyhow!("legenda não encontrada"));
+        return Err(anyhow!("subtitle not found"));
     }
     let dir = if opts.output_dir.trim().is_empty() {
         video.parent().map(|p| p.to_path_buf()).unwrap_or_default()
@@ -522,7 +522,7 @@ pub async fn burn(opts: BurnOptions, progress: super::ProgressFn) -> anyhow::Res
         .arg(&output)
         .output()
         .await
-        .map_err(|e| anyhow!("ffmpeg nao iniciou: {}", e))?;
+        .map_err(|e| anyhow!("ffmpeg did not start: {}", e))?;
     if !out.status.success() {
         return Err(anyhow!("{}", String::from_utf8_lossy(&out.stderr).trim()));
     }
@@ -570,7 +570,7 @@ mod tests {
             let back = parse(&render(&cues, format)).unwrap();
             assert_eq!(back.len(), cues.len(), "{}", format);
             assert_eq!(back[0].start_ms, cues[0].start_ms, "{}", format);
-            // O ASS só tem centésimos: 3500 ms continua 3500, mas 3505 vira 3500.
+            // ASS only has hundredths: 3500 ms stays 3500, but 3505 becomes 3500.
             assert_eq!(back[1].end_ms, cues[1].end_ms, "{}", format);
         }
     }
@@ -592,7 +592,7 @@ mod tests {
         }];
         let (_, factor) = FPS_PAIRS[1];
         scale(&mut cues, factor);
-        // 25 → 23,976: a legenda tem que ficar mais longa em tempo.
+        // 25 → 23.976: the subtitle has to get longer in time.
         assert!(cues[0].start_ms > 26_000, "{}", cues[0].start_ms);
         assert_eq!(cues[0].start_ms, 26_068);
     }
@@ -616,12 +616,12 @@ mod tests {
                 text: "c".into(),
             },
         ];
-        // A primeira fala cai em 2 s e a última em 105 s.
+        // The first line lands at 2 s and the last at 105 s.
         let factor = anchor_resync(&mut cues, 1_000, 2_000, 100_000, 105_000);
-        assert!((factor - 1.0404).abs() < 1e-3, "fator: {}", factor);
+        assert!((factor - 1.0404).abs() < 1e-3, "factor: {}", factor);
         assert_eq!(cues[0].start_ms, 2_000);
         assert_eq!(cues[2].start_ms, 105_000);
-        // O do meio interpolado, sem inversão de ordem.
+        // The middle one interpolated, with no order inversion.
         assert!(cues[1].start_ms > cues[0].start_ms && cues[1].start_ms < cues[2].start_ms);
     }
 

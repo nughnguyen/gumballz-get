@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Filtros de conteúdo: anúncios, IA (3 níveis), tipo e largura mínima. */
+  /** Content filters: ads, AI (3 levels), type and minimum width. */
   import { t } from "$lib/i18n";
   import type { Filters } from "$lib/tools/pinterest";
 

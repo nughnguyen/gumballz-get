@@ -17,7 +17,7 @@
 -->
 
 <script lang="ts">
-  /** Comprimir para um alvo exato de tamanho, com duas passagens do FFmpeg. */
+  /** Compress to an exact size target, with two FFmpeg passes. */
   import { invoke } from "@tauri-apps/api/core";
   import { onDestroy, onMount } from "svelte";
   import { t } from "$lib/i18n";

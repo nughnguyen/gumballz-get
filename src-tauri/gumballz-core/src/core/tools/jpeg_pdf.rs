@@ -1,6 +1,6 @@
-//! Escritor mínimo de PDF a partir de JPEGs (uma imagem por página, filtro
-//! DCTDecode, sem recomprimir). É o `img2pdf` dos scripts de SlideShare
-//! (estudo 50) sem dependência nova.
+//! Minimal PDF writer from JPEGs (one image per page, DCTDecode filter,
+//! no recompression). It is the `img2pdf` of the SlideShare scripts
+//! (study 50) with no new dependency.
 
 use anyhow::anyhow;
 
@@ -10,10 +10,10 @@ pub struct JpegInfo {
     pub components: u8,
 }
 
-/// Lê largura/altura/canais do marcador SOF do JPEG.
+/// Reads width/height/channels from the JPEG SOF marker.
 pub fn jpeg_info(data: &[u8]) -> anyhow::Result<JpegInfo> {
     if data.len() < 4 || data[0] != 0xFF || data[1] != 0xD8 {
-        return Err(anyhow!("nao e um JPEG"));
+        return Err(anyhow!("not a JPEG"));
     }
     let mut i = 2usize;
     while i + 9 < data.len() {
@@ -26,7 +26,7 @@ pub fn jpeg_info(data: &[u8]) -> anyhow::Result<JpegInfo> {
             i += 1;
             continue;
         }
-        // marcadores sem payload
+        // markers without payload
         if (0xD0..=0xD9).contains(&marker) || marker == 0x01 {
             i += 2;
             continue;
@@ -45,21 +45,21 @@ pub fn jpeg_info(data: &[u8]) -> anyhow::Result<JpegInfo> {
         }
         i += 2 + len;
     }
-    Err(anyhow!("JPEG sem cabecalho SOF"))
+    Err(anyhow!("JPEG without SOF header"))
 }
 
 pub fn is_jpeg(data: &[u8]) -> bool {
     data.len() > 3 && data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF
 }
 
-/// Monta o PDF em memória. Página no tamanho da imagem em pontos (72 dpi).
+/// Builds the PDF in memory. Page at the image size in points (72 dpi).
 pub fn build_pdf(images: &[Vec<u8>]) -> anyhow::Result<Vec<u8>> {
     build_pdf_inner(images, None)
 }
 
-/// Monta o PDF em memória fixando o tamanho físico de cada página em pontos
-/// (ex.: `1280.0 x 720.0` para apresentações 16:9), independentemente da
-/// resolução em pixels do JPEG embutido.
+/// Builds the PDF in memory, fixing the physical size of each page in points
+/// (e.g. `1280.0 x 720.0` for 16:9 presentations), regardless of the
+/// pixel resolution of the embedded JPEG.
 pub fn build_pdf_with_page_size(
     images: &[Vec<u8>],
     page_width_pt: f64,
@@ -73,13 +73,13 @@ fn build_pdf_inner(
     fixed_page_pt: Option<(f64, f64)>,
 ) -> anyhow::Result<Vec<u8>> {
     if images.is_empty() {
-        return Err(anyhow!("nenhuma imagem"));
+        return Err(anyhow!("no images"));
     }
     let mut out: Vec<u8> = Vec::new();
     let mut offsets: Vec<usize> = Vec::new();
     out.extend_from_slice(b"%PDF-1.4\n%\xE2\xE3\xCF\xD3\n");
 
-    // objetos: 1 catalog, 2 pages, depois por imagem: page, xobject, content
+    // objects: 1 catalog, 2 pages, then per image: page, xobject, content
     let n_pages = images.len();
     let obj_page = |i: usize| 3 + i * 3;
     let obj_img = |i: usize| 4 + i * 3;
@@ -178,7 +178,7 @@ fn build_pdf_inner(
 mod tests {
     use super::*;
 
-    /// JPEG 1x1 mínimo (cinza) só com os marcadores que o parser precisa.
+    /// Minimal 1x1 JPEG (grey) with only the markers the parser needs.
     fn tiny_jpeg() -> Vec<u8> {
         let mut v = vec![0xFF, 0xD8];
         v.extend_from_slice(&[

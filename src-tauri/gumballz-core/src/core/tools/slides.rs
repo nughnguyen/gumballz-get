@@ -1,4 +1,4 @@
-//! SlideShare → PDF (estudo 50): as páginas públicas trazem cada slide em
+//! SlideShare → PDF (study 50): public pages carry each slide in
 //! `<img data-testid="vertical-slide-image" srcset="… 2048w">`.
 
 use std::path::{Path, PathBuf};
@@ -21,7 +21,7 @@ pub fn parse_slide_urls(html: &str) -> Vec<String> {
     for m in img_re.find_iter(html) {
         let tag = m.as_str();
         let url = if let Some(c) = srcset_re.captures(tag) {
-            // "url1 320w, url2 638w, url3 2048w" → maior largura
+            // "url1 320w, url2 638w, url3 2048w" → largest width
             let mut best: Option<(u32, &str)> = None;
             for part in c[1].split(',') {
                 let mut it = part.split_whitespace();
@@ -57,7 +57,7 @@ pub fn og_title(html: &str) -> Option<String> {
     })
 }
 
-/// Converte qualquer imagem em JPEG pelo ffmpeg (webp/png escapam do DCTDecode).
+/// Converts any image to JPEG via ffmpeg (webp/png escape DCTDecode).
 pub(crate) async fn ensure_jpeg(data: Vec<u8>, work: &Path, idx: usize) -> anyhow::Result<Vec<u8>> {
     if super::jpeg_pdf::is_jpeg(&data) {
         return Ok(data);
@@ -74,7 +74,7 @@ pub(crate) async fn ensure_jpeg(data: Vec<u8>, work: &Path, idx: usize) -> anyho
         .output()
         .await?;
     if !o.status.success() {
-        return Err(anyhow!("ffmpeg nao converteu a imagem {}", idx));
+        return Err(anyhow!("ffmpeg did not convert image {}", idx));
     }
     Ok(tokio::fs::read(&output).await?)
 }
@@ -85,7 +85,7 @@ pub async fn download(
     progress: super::ProgressFn,
 ) -> anyhow::Result<SlidesResult> {
     if !url.contains("slideshare.net") {
-        return Err(anyhow!("cole um link do slideshare.net"));
+        return Err(anyhow!("paste a slideshare.net link"));
     }
     let client = super::client()?;
     let html = client
@@ -97,7 +97,7 @@ pub async fn download(
         .await?;
     let urls = parse_slide_urls(&html);
     if urls.is_empty() {
-        return Err(anyhow!("nao encontrei slides nessa pagina (o SlideShare pode ter mudado o HTML ou o deck e privado)"));
+        return Err(anyhow!("did not find slides on this page (SlideShare may have changed its HTML, or the deck is private)"));
     }
     let title = og_title(&html).unwrap_or_else(|| "slideshare".to_string());
     let work = super::temp_dir().join(format!("slides-{}", uuid::Uuid::new_v4()));

@@ -231,7 +231,7 @@ impl HotmartDownloader {
                                 }
                                 Err(e) => {
                                     tracing::error!(
-                                        "[download] Falha ao baixar vídeo '{}': {}",
+                                        "[download] Failed to download video '{}': {}",
                                         out,
                                         e
                                     );
@@ -281,12 +281,12 @@ impl HotmartDownloader {
                                             }
                                         }
                                         Err(e) => tracing::error!(
-                                            "[download] Falha ao baixar áudio: {}",
+                                            "[download] Failed to download audio: {}",
                                             e
                                         ),
                                     },
                                     Err(e) => {
-                                        tracing::error!("[download] Falha ao baixar áudio: {}", e)
+                                        tracing::error!("[download] Failed to download audio: {}", e)
                                     }
                                 }
                             }
@@ -368,14 +368,14 @@ impl HotmartDownloader {
                                                 paths.push(result.file_path);
                                             }
                                             Err(e) => {
-                                                tracing::error!("[download] Falha Vimeo: {}", e);
+                                                tracing::error!("[download] Vimeo failed: {}", e);
                                                 cleanup_part_files(out_dir).await;
                                             }
                                         }
                                     }
                                     Err(e) => {
                                         tracing::error!(
-                                            "[download] yt-dlp indisponível para Vimeo: {}",
+                                            "[download] yt-dlp unavailable for Vimeo: {}",
                                             e
                                         );
                                     }
@@ -420,7 +420,7 @@ impl HotmartDownloader {
                                         paths.push(hls_result.path);
                                     }
                                     Err(e) => {
-                                        tracing::error!("[download] Falha PandaVideo: {}", e);
+                                        tracing::error!("[download] PandaVideo failed: {}", e);
                                         let _ = tokio::fs::remove_file(&out).await;
                                     }
                                 }
@@ -465,13 +465,13 @@ impl HotmartDownloader {
                                                 paths.push(result.file_path);
                                             }
                                             Err(e) => {
-                                                tracing::error!("[download] Falha YouTube: {}", e);
+                                                tracing::error!("[download] YouTube failed: {}", e);
                                                 cleanup_part_files(out_dir).await;
                                             }
                                         }
                                     }
                                     Err(e) => {
-                                        tracing::error!("[download] yt-dlp indisponível: {}", e);
+                                        tracing::error!("[download] yt-dlp unavailable: {}", e);
                                     }
                                 }
                             }
@@ -566,7 +566,7 @@ impl HotmartDownloader {
 
                         if let Some(e) = last_err {
                             tracing::error!(
-                                "[download] Falha ao baixar anexo '{}' ({}): {}",
+                                "[download] Failed to download attachment '{}' ({}): {}",
                                 safe_name,
                                 file_membership_id,
                                 e
@@ -627,7 +627,7 @@ impl HotmartDownloader {
             .slug
             .as_deref()
             .or(course.subdomain.as_deref())
-            .ok_or_else(|| anyhow!("Curso sem slug/subdomain: {}", course.name))?;
+            .ok_or_else(|| anyhow!("Course without slug/subdomain: {}", course.name))?;
 
         let session = {
             let guard = self.session.lock().await;
@@ -721,7 +721,7 @@ impl HotmartDownloader {
                     }
 
                     if let Err(e) = tokio::fs::create_dir_all(&task.page_dir).await {
-                        tracing::error!("Falha ao criar diretório '{}': {}", task.page_dir, e);
+                        tracing::error!("Failed to create directory '{}': {}", task.page_dir, e);
                         done.fetch_add(1, Ordering::Relaxed);
                         return;
                     }
@@ -731,7 +731,7 @@ impl HotmartDownloader {
                             Ok(l) => l,
                             Err(e) => {
                                 tracing::error!(
-                                    "Falha ao carregar lição '{}': {}. Continuando...",
+                                    "Failed to load lesson '{}': {}. Continuing...",
                                     task.page_name,
                                     e
                                 );
@@ -862,7 +862,7 @@ async fn retry_hls_download(
             let _ = tokio::fs::remove_file(output_path).await;
             let backoff = std::time::Duration::from_secs(2u64.pow(attempt));
             tracing::warn!(
-                "[hls-retry] Tentativa {}/{} falhou para '{}', retentando em {:?}",
+                "[hls-retry] Attempt {}/{} failed for '{}', retrying in {:?}",
                 attempt + 1,
                 max_attempts,
                 output_path,
@@ -902,7 +902,7 @@ async fn download_attachment(
     let (target_url, final_path) = if !info.is_drm {
         if info.url.is_empty() {
             return Err(anyhow!(
-                "URL de download vazia para attachment {}",
+                "Empty download URL for attachment {}",
                 file_membership_id
             ));
         }

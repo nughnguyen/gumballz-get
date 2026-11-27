@@ -1,9 +1,9 @@
-//! Vídeo → GIF ou WebP animado com paleta decente.
+//! Video → GIF or animated WebP with a decent palette.
 //!
-//! GIF direto do FFmpeg fica sujo porque a paleta padrão é fixa de 216 cores.
-//! O caminho certo são duas passagens: `palettegen` olha o clipe inteiro e
-//! escolhe as cores, `paletteuse` aplica com dithering. WebP animado não
-//! precisa disso — tem cor real — e costuma sair 3-5× menor.
+//! A direct FFmpeg GIF comes out dirty because the default palette is a fixed 216 colours.
+//! The right way is two passes: `palettegen` looks at the whole clip and
+//! picks the colours, `paletteuse` applies them with dithering. Animated WebP does not
+//! need this — it has true colour — and usually comes out 3-5× smaller.
 
 use std::path::{Path, PathBuf};
 
@@ -13,15 +13,15 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Deserialize)]
 pub struct GifOptions {
     pub inputs: Vec<String>,
-    /// Segundos desde o início; 0 pega do começo.
+    /// Seconds from the start; 0 takes from the beginning.
     #[serde(default)]
     pub start: f64,
-    /// Duração em segundos; 0 pega até o fim.
+    /// Duration in seconds; 0 takes to the end.
     #[serde(default)]
     pub duration: f64,
     #[serde(default = "default_fps")]
     pub fps: u32,
-    /// Largura em pixels; 0 mantém a original.
+    /// Width in pixels; 0 keeps the original.
     #[serde(default)]
     pub width: u32,
     /// "gif" | "webp"
@@ -32,7 +32,7 @@ pub struct GifOptions {
     pub dither: String,
     #[serde(default = "default_colors")]
     pub max_colors: u32,
-    /// Qualidade do WebP (0-100); ignorado no GIF.
+    /// WebP quality (0-100); ignored for GIF.
     #[serde(default = "default_quality")]
     pub quality: u32,
     #[serde(default)]
@@ -72,8 +72,8 @@ pub struct GifResult {
     pub items: Vec<GifItem>,
 }
 
-/// `fps` e `scale` — a mesma cadeia tem que valer nas duas passagens, senão a
-/// paleta é calculada sobre quadros que não são os que vão para o arquivo.
+/// `fps` and `scale` — the same chain must hold in both passes, otherwise the
+/// palette is computed over frames that are not the ones going into the file.
 pub fn vf_chain(fps: u32, width: u32) -> String {
     let mut v = format!("fps={}", fps.clamp(1, 60));
     if width > 0 {
@@ -144,7 +144,7 @@ async fn convert_one(ffmpeg: &Path, opts: &GifOptions, input: &str) -> anyhow::R
             .arg(&output)
             .output()
             .await
-            .map_err(|e| anyhow!("ffmpeg nao iniciou: {}", e))?;
+            .map_err(|e| anyhow!("ffmpeg did not start: {}", e))?;
         if !out.status.success() {
             return Err(anyhow!("{}", String::from_utf8_lossy(&out.stderr).trim()));
         }
@@ -167,7 +167,7 @@ async fn convert_one(ffmpeg: &Path, opts: &GifOptions, input: &str) -> anyhow::R
             .arg(&tmp)
             .output()
             .await
-            .map_err(|e| anyhow!("ffmpeg nao iniciou: {}", e))?;
+            .map_err(|e| anyhow!("ffmpeg did not start: {}", e))?;
         if !pass1.status.success() {
             let _ = std::fs::remove_file(&tmp);
             return Err(anyhow!(
@@ -194,7 +194,7 @@ async fn convert_one(ffmpeg: &Path, opts: &GifOptions, input: &str) -> anyhow::R
             .arg(&output)
             .output()
             .await
-            .map_err(|e| anyhow!("ffmpeg nao iniciou: {}", e))?;
+            .map_err(|e| anyhow!("ffmpeg did not start: {}", e))?;
         let _ = std::fs::remove_file(&tmp);
         if !pass2.status.success() {
             return Err(anyhow!("{}", String::from_utf8_lossy(&pass2.stderr).trim()));
@@ -284,7 +284,7 @@ mod tests {
         assert_eq!(cut_args(0.0, 3.0), vec!["-t", "3.000"]);
     }
 
-    /// Ponta a ponta com o FFmpeg gerido, nos dois formatos.
+    /// End to end with the managed FFmpeg, in both formats.
     /// `cargo test -p gumballz-core --lib -- --ignored live_gif`
     #[tokio::test]
     #[ignore]
@@ -334,10 +334,10 @@ mod tests {
                 .await
                 .unwrap();
             let item = &res.items[0];
-            assert!(item.ok, "{} falhou: {:?}", format, item.error);
+            assert!(item.ok, "{} failed: {:?}", format, item.error);
             assert!(
                 item.bytes > 1000,
-                "{} saiu pequeno demais: {}",
+                "{} came out too small: {}",
                 format,
                 item.bytes
             );
@@ -348,12 +348,12 @@ mod tests {
                 .unwrap();
             assert!(
                 probe.streams.iter().any(|s| s.codec_type == "video"),
-                "{} não abriu como vídeo",
+                "{} did not open as a video",
                 format
             );
             eprintln!("{}: {} bytes", format, item.bytes);
         }
-        // A paleta temporária não pode ficar para trás.
+        // The temporary palette must not be left behind.
         assert!(
             !std::fs::read_dir(std::env::temp_dir())
                 .unwrap()
@@ -362,7 +362,7 @@ mod tests {
                     .file_name()
                     .to_string_lossy()
                     .starts_with("gumballz-get-palette-")),
-            "sobrou paleta temporária"
+            "temporary palette left over"
         );
     }
 

@@ -1,10 +1,10 @@
-//! Grok (estudo 67). Dois caminhos:
-//! 1. API oficial da xAI (`/v1/responses`) com a chave do usuario e as
-//!    tools `x_search` / `web_search` — o que grok-mcp e grok-cli fazem.
-//! 2. O Grok dentro do X pela sessao: `CreateGrokConversation` +
-//!    `add_response.json` em NDJSON (GrokAiChat / Grok-Wrapper, MIT).
+//! Grok (study 67). Two routes:
+//! 1. The official xAI API (`/v1/responses`) with the user's key and the
+//!    tools `x_search` / `web_search` — what grok-mcp and grok-cli do.
+//! 2. Grok inside X via the session: `CreateGrokConversation` +
+//!    `add_response.json` in NDJSON (GrokAiChat / Grok-Wrapper, MIT).
 //!
-//! grok.com ficou de fora: exige `x-statsig-id` de um assinador externo.
+//! grok.com was left out: it requires `x-statsig-id` from an external signer.
 
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
@@ -58,7 +58,7 @@ pub fn view() -> GrokConfigView {
     }
 }
 
-/// `xai_key`: `None` mantem, `Some("")` apaga.
+/// `xai_key`: `None` keeps it, `Some("")` deletes it.
 pub fn set(
     xai_key: Option<String>,
     xai_model: Option<String>,
@@ -189,13 +189,13 @@ async fn ask_xai(cfg: &GrokConfig, req: GrokRequest) -> anyhow::Result<GrokAnswe
     let v: Value = resp
         .json()
         .await
-        .map_err(|e| anyhow!("xAI: resposta invalida ({})", e))?;
+        .map_err(|e| anyhow!("xAI: invalid response ({})", e))?;
     if !status.is_success() {
         let msg = v
             .pointer("/error/message")
             .or_else(|| v.get("error"))
             .and_then(|m| m.as_str())
-            .unwrap_or("erro")
+            .unwrap_or("error")
             .to_string();
         return Err(anyhow!("xAI HTTP {}: {}", status, msg));
     }
@@ -293,7 +293,7 @@ async fn ask_x(cfg: &GrokConfig, req: GrokRequest) -> anyhow::Result<GrokAnswer>
     let conversation_id = conv
         .pointer("/data/create_grok_conversation/conversation_id")
         .and_then(|c| c.as_str())
-        .ok_or_else(|| anyhow!("Grok: nao consegui abrir uma conversa"))?
+        .ok_or_else(|| anyhow!("Grok: could not open a conversation"))?
         .to_string();
     let mut message = req.prompt.clone();
     if !req.system.trim().is_empty() {
@@ -377,7 +377,7 @@ async fn ask_x(cfg: &GrokConfig, req: GrokRequest) -> anyhow::Result<GrokAnswer>
     }
     if text.trim().is_empty() {
         return Err(anyhow!(
-            "Grok nao respondeu (modelo `{}` pode nao existir mais; troque nas opcoes)",
+            "Grok did not answer (model `{}` may no longer exist; change it in the options)",
             model
         ));
     }

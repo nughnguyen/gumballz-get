@@ -1,11 +1,11 @@
-//! ⚠️ SOMENTE WINDOWS. Limpar registro (estudo 10, Kudu): encontra entradas
-//! órfãs, isto é, chaves e valores que apontam para arquivos que não existem
-//! mais. Cada remoção é precedida de um `reg export` da chave para
-//! `<app_data>/tools/registry-backups/`, para o usuário poder importar de
-//! volta. Fora do Windows tudo devolve vazio.
+//! ⚠️ WINDOWS ONLY. Clean the registry (study 10, Kudu): finds orphan
+//! entries, that is, keys and values pointing at files that no longer exist.
+//! Every removal is preceded by a `reg export` of the key into
+//! `<app_data>/tools/registry-backups/`, so the user can import it
+//! back. Outside Windows everything returns empty.
 //!
-//! Também abriga os utilitários de `reg query` que Inicialização e
-//! Desinstalador reutilizam. Tudo passa pelo `reg.exe`, sem crate de registro.
+//! It also houses the `reg query` utilities that Startup and
+//! Uninstaller reuse. Everything goes through `reg.exe`, with no registry crate.
 
 use std::path::{Path, PathBuf};
 
@@ -26,7 +26,7 @@ pub struct RegKey {
     pub subkeys: Vec<String>,
 }
 
-/// Interpreta a saída de `reg query` (uma ou mais chaves).
+/// Reads the output of `reg query` (one or more keys).
 pub fn parse_reg_output(text: &str) -> Vec<RegKey> {
     let mut keys: Vec<RegKey> = Vec::new();
     for raw in text.lines() {
@@ -35,15 +35,15 @@ pub fn parse_reg_output(text: &str) -> Vec<RegKey> {
             continue;
         }
         if !raw.starts_with(' ') && (line.starts_with("HKEY_") || line.starts_with("HK")) {
-            // Subchave da chave anterior ou chave nova?
+            // Subkey of the previous key, or a new key?
             if let Some(last) = keys.last_mut() {
                 if line.starts_with(&last.path)
                     && line.len() > last.path.len()
                     && line[last.path.len()..].starts_with('\\')
                 {
                     last.subkeys.push(line.to_string());
-                    // A própria subchave também pode listar valores a seguir
-                    // quando o /s foi usado; abre como chave.
+                    // The subkey itself can also list values to follow
+                    // when /s was used; open it as a key.
                 }
             }
             keys.push(RegKey {
@@ -54,7 +54,7 @@ pub fn parse_reg_output(text: &str) -> Vec<RegKey> {
         }
         let Some(key) = keys.last_mut() else { continue };
         let t = line.trim_start();
-        // "<nome>    REG_TIPO    <dados>"
+        // "<name>    REG_TYPE    <data>"
         if let Some(idx) = t.find("    REG_") {
             let name = t[..idx].trim().to_string();
             let rest = t[idx + 4..].trim_start();
@@ -140,9 +140,9 @@ pub fn backups_dir() -> Option<PathBuf> {
     super::tools_dir().map(|d| d.join("registry-backups"))
 }
 
-/// `reg export` da chave para um `.reg` com carimbo de hora. Devolve o caminho.
+/// `reg export` of the key to a timestamped `.reg`. Returns the path.
 pub async fn reg_backup(key: &str) -> anyhow::Result<PathBuf> {
-    let dir = backups_dir().ok_or_else(|| anyhow!("sem pasta de dados"))?;
+    let dir = backups_dir().ok_or_else(|| anyhow!("no data folder"))?;
     std::fs::create_dir_all(&dir)?;
     let safe: String = key
         .chars()
@@ -169,7 +169,7 @@ pub async fn reg_backup(key: &str) -> anyhow::Result<PathBuf> {
     Ok(file)
 }
 
-/// Expande `%VAR%` e devolve o executável de uma linha de comando do registro
+/// Expands `%VAR%` and returns the executable of a registry command line
 /// (`"C:\x\a.exe" /arg`, `C:\x\a.exe /arg`, `rundll32 ...`).
 pub fn command_exe(cmd: &str) -> Option<PathBuf> {
     let s = expand_env(cmd.trim());
@@ -179,7 +179,7 @@ pub fn command_exe(cmd: &str) -> Option<PathBuf> {
     let candidate = if let Some(rest) = s.strip_prefix('"') {
         rest.split('"').next().unwrap_or("").to_string()
     } else {
-        // sem aspas: até o primeiro ".exe" (com espaços no caminho) ou o primeiro token
+        // no quotes: up to the first ".exe" (with spaces in the path) or the first token
         let lower = s.to_ascii_lowercase();
         if let Some(i) = lower.find(".exe") {
             s[..i + 4].to_string()
@@ -220,15 +220,15 @@ pub fn expand_env(s: &str) -> String {
     out
 }
 
-/// Um executável "existe" se o caminho existe, ou se é só um nome que o
-/// Windows resolve pelo PATH/App Paths (não dá para afirmar que falta).
+/// An executable "exists" if the path exists, or if it is just a name that
+/// Windows resolves via PATH/App Paths (cannot claim it is missing).
 fn exe_missing(p: &Path) -> bool {
     if p.exists() {
         return false;
     }
     let s = p.to_string_lossy();
-    // Caminho absoluto (C:\...) ou UNC que não existe → órfão. Nome solto
-    // (notepad.exe, rundll32) → não sabemos, não marcar.
+    // Absolute path (C:\...) or UNC that does not exist → orphan. Bare name
+    // (notepad.exe, rundll32) → we do not know, do not flag.
     s.len() > 2 && (s.as_bytes()[1] == b':' || s.starts_with("\\\\"))
 }
 
@@ -240,7 +240,7 @@ pub struct Orphan {
     /// "uninstall" | "app-paths" | "mui-cache" | "shared-dlls" | "run"
     pub category: String,
     pub key: String,
-    /// `None` = apagar a chave inteira; `Some("")` = valor padrão.
+    /// `None` = delete the whole key; `Some("")` = default value.
     pub value: Option<String>,
     pub name: String,
     pub data: String,
@@ -283,7 +283,7 @@ pub async fn scan(progress: &super::ProgressFn) -> Vec<Orphan> {
         out.push(o);
     };
 
-    // 1) Programas desinstalados que deixaram a entrada
+    // 1) Uninstalled programs that left the entry
     super::report(
         progress,
         "winreg",
@@ -333,13 +333,13 @@ pub async fn scan(progress: &super::ProgressFn) -> Vec<Orphan> {
                     } else {
                         loc
                     },
-                    reason: "pasta e desinstalador nao existem mais".into(),
+                    reason: "folder and uninstaller no longer exist".into(),
                 });
             }
         }
     }
 
-    // 2) App Paths apontando para exe inexistente
+    // 2) App Paths pointing at a missing exe
     super::report(
         progress,
         "winreg",
@@ -365,7 +365,7 @@ pub async fn scan(progress: &super::ProgressFn) -> Vec<Orphan> {
                         value: None,
                         name: key.path.rsplit('\\').next().unwrap_or("").to_string(),
                         data: p.to_string_lossy().to_string(),
-                        reason: "executavel nao existe".into(),
+                        reason: "executable does not exist".into(),
                     });
                 }
             }
@@ -404,7 +404,7 @@ pub async fn scan(progress: &super::ProgressFn) -> Vec<Orphan> {
                     value: Some(v.name.clone()),
                     name: v.data.clone(),
                     data: p.to_string_lossy().to_string(),
-                    reason: "programa nao existe".into(),
+                    reason: "program does not exist".into(),
                 });
             }
         }
@@ -434,13 +434,13 @@ pub async fn scan(progress: &super::ProgressFn) -> Vec<Orphan> {
                         .map(|s| s.to_string_lossy().to_string())
                         .unwrap_or_default(),
                     data: p.to_string_lossy().to_string(),
-                    reason: "arquivo nao existe".into(),
+                    reason: "file does not exist".into(),
                 });
             }
         }
     }
 
-    // 5) Run com executável sumido
+    // 5) Run with a vanished executable
     super::report(
         progress,
         "winreg",
@@ -461,7 +461,7 @@ pub async fn scan(progress: &super::ProgressFn) -> Vec<Orphan> {
                             value: Some(v.name.clone()),
                             name: v.name.clone(),
                             data: v.data.clone(),
-                            reason: "programa de inicializacao nao existe".into(),
+                            reason: "startup program does not exist".into(),
                         });
                     }
                 }
@@ -480,7 +480,7 @@ pub struct FixResult {
     pub failed: Vec<String>,
 }
 
-/// Remove os itens indicados (por `id`), exportando cada chave antes.
+/// Removes the indicated items (by `id`), exporting each key first.
 pub async fn fix(items: &[Orphan]) -> FixResult {
     let mut r = FixResult::default();
     let mut backed: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -493,7 +493,7 @@ pub async fn fix(items: &[Orphan]) -> FixResult {
                 }
                 Err(e) => {
                     r.failed
-                        .push(format!("{}: backup falhou ({})", item.name, e));
+                        .push(format!("{}: backup failed ({})", item.name, e));
                     continue;
                 }
             }

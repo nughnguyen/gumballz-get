@@ -1,8 +1,9 @@
-//! Comandos da categoria Vimeo: vídeo privado/unlisted (link com hash ou
-//! senha que o usuário já tem) e backup em lote de showcase, álbum e canal.
+//! Commands of the Vimeo category: private/unlisted video (link with a hash or a
+//! password the user already has) and batch backup of showcase, album and channel.
 //!
-//! A sessão do gerenciador de cookies entra aqui e só aqui — o front nunca
-//! manda cookie, e a senha nunca volta em nada que o front receba.
+//! The cookie manager's session comes in here and only here — the frontend never
+//! sends a cookie, and the password never comes back in anything the frontend
+//! receives.
 
 use gumballz_core::core::tools::vimeo;
 
@@ -10,9 +11,9 @@ use super::{err, progress};
 
 const DOMAIN: &str = "vimeo.com";
 
-/// Cookies da conta escolhida no gerenciador (None = `_default`). Sem sessão
-/// o Vimeo só entrega o que é público; com ela, o showcase e o vídeo que só a
-/// conta do usuário vê passam a abrir.
+/// Cookies of the account chosen in the manager (None = `_default`). Without a
+/// session Vimeo only delivers what is public; with it, the showcase and the
+/// video only the user's account can see start opening.
 fn session_of(slug: Option<&str>) -> Option<String> {
     let slug = slug.unwrap_or("_default");
     let content = crate::cookies::storage::read_account_file(DOMAIN, slug).ok()?;
