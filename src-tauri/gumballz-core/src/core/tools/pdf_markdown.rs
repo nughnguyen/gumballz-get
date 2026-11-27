@@ -1,7 +1,7 @@
 //! Clean PDF → Markdown, offline, to throw at an LLM. Out comes text with headings,
-/// reassembled paragraphs, lists, simple tables and code blocks — no
-/// cloud service and no PDF crate: each character's position comes from the
-/// PDFium the app already manages (`pdf::read_pages`).
+//! reassembled paragraphs, lists, simple tables and code blocks — no
+//! cloud service and no PDF crate: each character's position comes from the
+//! PDFium the app already manages (`pdf::read_pages`).
 //!
 //! The path is always the same: character → line (with cells split by a
 //! big horizontal gap) → column (x histogram) → reading order → block →

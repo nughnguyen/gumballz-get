@@ -9,6 +9,7 @@ bản hiện tại trong cùng commit đó.
 
 - Đăng nhập Gumroad bằng email/mật khẩu giờ mở cửa sổ trình duyệt trong app để đăng nhập trên trang Gumroad rồi đổi mã lấy token (Gumroad đã bỏ kiểu đăng nhập gửi thẳng mật khẩu nên trước đây báo lỗi 400 unsupported_grant_type); đăng nhập bằng token vẫn giữ nguyên.
 - Sửa đăng nhập Gumroad: địa chỉ redirect đúng là `http://127.0.0.1` (địa chỉ đã đăng ký cho app này), không phải `gumroadmobile://` nên trước đây Gumroad báo lỗi redirect không khớp.
+- Sửa lỗi biên dịch E0753 do đợt đổi chữ sang tiếng Anh làm vỡ khối chú thích đầu file pdf_markdown.rs; sửa 2 test frontend lỗi thời (số mục điều hướng 7 → 6 sau khi bỏ mục Plugins, điều kiện ẩn QualityPicker khi ở chế độ audio đã thêm ngoại lệ Spotify).
 - Chữ trong source code (comment, thông báo lỗi, log) đã đổi sang tiếng Anh — bỏ tiếng Bồ Đào Nha còn sót từ code gốc và tiếng Việt trong code, kể cả các file plugin.
 - Sửa lỗi biên dịch trên Windows (5 plugin trùng tên export nên app không link được): giờ `pnpm tauri dev` chạy lại bình thường, 5 plugin được build trước rồi mới đóng gói vào app.
 - 5 công cụ có sẵn giờ cài được từ trong app (không cần repo riêng, không cần tải từ kho ngoài): mở trang Công cụ, bấm nút Cài của công cụ muốn dùng là có ngay; gỡ thì nó lại về trạng thái chưa cài.
