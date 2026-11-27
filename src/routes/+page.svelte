@@ -1296,7 +1296,7 @@
               {#if COURSE_PLATFORMS.has(downloadboxState.info.platform)}
                 {#if coursesPluginInstalled === false}
                   <p class="course-upsell">{$t('downloadbox.courses_plugin_needed')}</p>
-                  <button class="download-primary-btn" onclick={() => goto("/marketplace")}>{$t('downloadbox.install_courses_plugin')}</button>
+                  <button class="download-primary-btn" onclick={() => goto("/tools")}>{$t('downloadbox.install_courses_plugin')}</button>
                 {:else}
                   <p class="course-upsell">{$t('downloadbox.courses_plugin_ready')}</p>
                   <button class="download-primary-btn" onclick={handleAction}>{$t(downloadboxState.info.platform === "udemy" ? 'downloadbox.go_to_udemy' : 'downloadbox.go_to_hotmart')}</button>

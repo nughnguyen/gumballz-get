@@ -23,7 +23,6 @@
   import { isMac } from "$lib/platform";
   import { isTauriDesktop } from "$lib/core/platform";
   import WebDownloadHub from "$components/web/WebDownloadHub.svelte";
-  import { ENABLED_PLUGINS } from "$lib/plugins/registry";
   import { goto } from "$app/navigation";
   import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
@@ -57,20 +56,17 @@
   import { t, locale, isRtlLocale, loadTranslations } from "$lib/i18n";
   import { syncTrayLabels } from "$lib/tray-labels";
   import { get } from "svelte/store";
-  import { CORE_NAV_ITEMS, pluginIconForRoute, type NavItem } from "$lib/nav-config";
+  import { CORE_NAV_ITEMS } from "$lib/nav-config";
   import { TOOLS, toolHref } from "$lib/tools/catalog";
   import type { Snippet } from "svelte";
   import type { Component } from "svelte";
 
-  let pluginNavItems = $state<NavItem[]>([]);
   let desktopMode = $state(isTauriDesktop());
 
-  let coreNavItems = $derived(CORE_NAV_ITEMS);
-
-  let allNav = $derived([...coreNavItems, ...pluginNavItems].sort((a, b) => (a.order ?? 50) - (b.order ?? 50)));
-  let primaryNav = $derived(allNav.filter((item) => item.group === "primary"));
-  let appNav = $derived(allNav.filter((item) => item.group === "app"));
-  let pluginNav = $derived(allNav.filter((item) => item.group === "plugins"));
+  // Plugin pages are reached from the Tools page, not the sidebar, so
+  // there is no plugin nav list here anymore.
+  let primaryNav = $derived(CORE_NAV_ITEMS.filter((item) => item.group === "primary"));
+  let appNav = $derived(CORE_NAV_ITEMS.filter((item) => item.group === "app"));
 
   let ytdlpDismissed = $state(false);
   let ytdlpMissing = $derived(isDepsChecked() && !isYtdlpAvailable());
@@ -114,41 +110,6 @@
     }
   }
 
-  function reloadPluginNav() {
-    const builtInItems: NavItem[] = ENABLED_PLUGINS.map((plugin, index) => ({
-      href: plugin.route,
-      label: plugin.name,
-      icon: "plugin",
-      iconSvg: plugin.iconSvg,
-      group: "plugins",
-      pluginId: plugin.id,
-      order: 60 + index,
-    }));
-    invoke<{ id: string; enabled: boolean; nav: { route: string; label: Record<string, string>; icon_svg: string | null; group: string; order: number }[] }[]>("list_plugins")
-      .then((plugins) => {
-        const items: NavItem[] = [];
-        for (const p of plugins) {
-          if (!p.enabled) continue;
-          for (const n of p.nav) {
-            const icon = pluginIconForRoute(n.route);
-            items.push({
-              href: n.route,
-              label: n.label[get(locale)] || n.label["en"] || p.id,
-              icon,
-              iconSvg: icon === "plugin" ? n.icon_svg || undefined : undefined,
-              group: "plugins",
-              pluginId: p.id,
-              order: n.order,
-            });
-          }
-        }
-        const enabledIds = new Set(plugins.filter((plugin) => plugin.enabled).map((plugin) => plugin.id));
-        pluginNavItems = [...builtInItems.filter((plugin) => !enabledIds.has(plugin.pluginId ?? "")), ...items];
-        buildCommandPaletteItems();
-      })
-      .catch(() => { pluginNavItems = builtInItems; });
-  }
-
   onMount(() => {
     desktopMode = isTauriDesktop();
     if (!desktopMode) return;
@@ -162,7 +123,6 @@
         attempts += 1;
         loadSettings()
           .then(async (s) => {
-            reloadPluginNav();
             const target = s?.appearance?.language;
             if (target && target !== get(locale)) {
               try {
@@ -211,10 +171,8 @@
     setTimeout(() => {
       void checkAnnouncements();
     }, 2000);
-    reloadPluginNav();
 
     let unlistenExternalUrl: (() => void) | null = null;
-    let unlistenPlugins: (() => void) | null = null;
 
     listen<Omit<ExternalUrlEvent, "id">>("external-url-event", (event) => {
       handleExternalUrlEvent(event.payload);
@@ -222,15 +180,8 @@
       unlistenExternalUrl = un;
     });
 
-    listen("plugins-changed", () => {
-      reloadPluginNav();
-    }).then((un) => {
-      unlistenPlugins = un;
-    });
-
     return () => {
       if (unlistenExternalUrl) unlistenExternalUrl();
-      if (unlistenPlugins) unlistenPlugins();
     };
   });
 
@@ -273,13 +224,6 @@
         keywords: [...tool.keywords, get(t)(`tools.categories.${tool.category}.name`)].join(" "),
         action: () => goto(toolHref(tool)),
       })),
-      {
-        id: "nav-marketplace",
-        label: get(t)("nav.marketplace"),
-        group: get(t)("command_palette.group_nav"),
-        keywords: "plugins extensions store",
-        action: () => goto("/marketplace"),
-      },
       {
         id: "nav-about",
         label: get(t)("nav.about"),
@@ -434,7 +378,6 @@
   <AppSidebar
     {primaryNav}
     {appNav}
-    {pluginNav}
     {badgeLabel}
     badgeCount={counts.badge}
     collapsed={sidebarCollapsed}

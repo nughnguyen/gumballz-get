@@ -169,7 +169,22 @@
       "empty_desc": "换个关键词试试，或更改平台筛选。",
       "not_on_this_os": "此工具无法在你的系统（{{os}}）上运行。",
       "soon_title": "开发中",
-      "soon_desc": "此工具在 GumballZ Get 的规划中，尚不可用。列在这里是让你提前了解即将推出的功能。"
+      "soon_desc": "此工具在 GumballZ Get 的规划中，尚不可用。列在这里是让你提前了解即将推出的功能。",
+      "no_plugins_title": "No plugins installed yet",
+      "no_plugins_desc": "Install a plugin below to add new tools to GumballZ Get.",
+      "installed_hint": "Toggle a plugin off to disable it without uninstalling.",
+      "install_from_file": "Install from file",
+      "install_from_file_hint": "Pick a .zip plugin package from your computer.",
+      "official_tools": "Official tools",
+      "official_telegram_desc": "Browse chats, download media, and manage Telegram files.",
+      "official_listening_studio_name": "Listening & Vocab Studio",
+      "official_listening_studio_desc": "Split subtitle-timed practice clips and export cloze worksheets.",
+      "official_asset_forge_name": "Batch Media & Asset Forge",
+      "official_asset_forge_desc": "Convert audio, video, and image folders in parallel with FFmpeg.",
+      "open_plugin": "Open",
+      "confirm_uninstall": "Uninstall {{name}}?",
+      "go_to_tools": "Go to Tools",
+      "plugin_install_hint": "Install this plugin from the Tools page to use it."
     },
     "categories": {
       "youtube": {

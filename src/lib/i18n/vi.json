@@ -189,7 +189,22 @@
       "empty_desc": "Thử từ khác, hoặc đổi bộ lọc nền tảng.",
       "not_on_this_os": "Công cụ này không chạy trên hệ thống của bạn ({{os}}).",
       "soon_title": "Đang phát triển",
-      "soon_desc": "Công cụ này đang nằm trong lộ trình của GumballZ Get và chưa dùng được. Nó được liệt kê để bạn biết sắp có gì."
+      "soon_desc": "Công cụ này đang nằm trong lộ trình của GumballZ Get và chưa dùng được. Nó được liệt kê để bạn biết sắp có gì.",
+      "no_plugins_title": "Chưa cài plugin nào",
+      "no_plugins_desc": "Cài một plugin bên dưới để thêm công cụ mới vào GumballZ Get.",
+      "installed_hint": "Tắt plugin để vô hiệu hoá mà không cần gỡ cài đặt.",
+      "install_from_file": "Cài từ file",
+      "install_from_file_hint": "Chọn gói plugin .zip trên máy của bạn.",
+      "official_tools": "Công cụ chính thức",
+      "official_telegram_desc": "Duyệt đoạn chat, tải media và quản lý file Telegram.",
+      "official_listening_studio_name": "Listening & Vocab Studio",
+      "official_listening_studio_desc": "Cắt clip luyện nghe theo phụ đề và xuất bài tập điền từ.",
+      "official_asset_forge_name": "Batch Media & Asset Forge",
+      "official_asset_forge_desc": "Chuyển đổi hàng loạt thư mục âm thanh, video và hình ảnh bằng FFmpeg.",
+      "open_plugin": "Mở",
+      "confirm_uninstall": "Gỡ cài đặt {{name}}?",
+      "go_to_tools": "Đến trang Công cụ",
+      "plugin_install_hint": "Cài plugin này từ trang Công cụ để sử dụng."
     },
     "categories": {
       "youtube": {
@@ -4541,9 +4556,9 @@
     "go_to_marketplace": "Đến Chợ plugin",
     "plugin_restart_hint": "Khởi động lại GumballZ Get để tải plugin này.",
     "plugin_incompatible_title": "Plugin không tương thích với phiên bản này",
-    "plugin_incompatible_hint": "Plugin này được xây dựng cho phiên bản cũ của GumballZ Get và không thể tải. Cài lại từ Chợ plugin để nhận bản tương thích — khởi động lại sẽ không khắc phục được.",
+    "plugin_incompatible_hint": "Plugin này được xây dựng cho phiên bản cũ của GumballZ Get và không thể tải. Cài lại từ trang Công cụ để nhận bản tương thích — khởi động lại sẽ không khắc phục được.",
     "plugin_load_failed_title": "Không tải được plugin",
-    "plugin_load_failed_hint": "GumballZ Get không tải được plugin này. Thử cài lại từ Chợ plugin.",
+    "plugin_load_failed_hint": "GumballZ Get không tải được plugin này. Thử cài lại từ trang Công cụ.",
     "plugin_load_error_details": "Chi tiết: {{error}}",
     "reinstall": "Cài lại"
   },

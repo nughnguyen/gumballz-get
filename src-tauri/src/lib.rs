@@ -761,27 +761,11 @@ pub fn run() {
 
                         // Load already-installed plugins first so they are
                         // usable immediately (and offline), without waiting
-                        // on any of the network calls below.
+                        // on any of the network calls below. No builtin is
+                        // auto-registered here anymore: a tool only appears
+                        // once the user actually downloads its package.
                         {
                             let mut mgr = mgr_for_plugins.blocking_write();
-                            let _ = mgr.register_builtin(
-                                gumballz_get_plugin_convert::manifest(),
-                                Box::new(gumballz_get_plugin_convert::ConvertPlugin::new()),
-                                std::sync::Arc::clone(&host),
-                            );
-                            let _ = mgr.register_builtin(
-                                gumballz_get_plugin_telegram::manifest(),
-                                Box::new(gumballz_get_plugin_telegram::TelegramPlugin::new()),
-                                std::sync::Arc::clone(&host),
-                            );
-                            let _ = mgr.register_builtin(
-                                gumballz_get_plugin_courses::manifest(),
-                                Box::new(
-                                    gumballz_get_plugin_courses::CoursesPlugin::new()
-                                        .with_app(app_emit.clone()),
-                                ),
-                                std::sync::Arc::clone(&host),
-                            );
                             mgr.load_all(std::sync::Arc::clone(&host));
                         }
                         let _ = app_emit.emit("plugins-changed", ());
@@ -793,9 +777,6 @@ pub fn run() {
                                 return;
                             }
                         };
-                        rt.block_on(commands::plugins::ensure_default_plugins(
-                            std::sync::Arc::clone(&mgr_for_plugins),
-                        ));
                         rt.block_on(commands::plugins::auto_update_plugins(
                             std::sync::Arc::clone(&mgr_for_plugins),
                         ));
@@ -1298,6 +1279,7 @@ pub fn run() {
             commands::plugin_tools::asset_forge_convert,
             commands::plugins::fetch_marketplace_registry,
             commands::plugins::install_plugin_from_registry,
+            commands::plugins::install_plugin_from_file,
             commands::plugins::get_plugin_i18n,
             commands::plugins::check_plugin_updates,
             commands::plugins::update_plugin,

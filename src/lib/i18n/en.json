@@ -189,7 +189,22 @@
       "empty_desc": "Try another word, or change the platform filter.",
       "not_on_this_os": "This tool does not run on your system ({{os}}).",
       "soon_title": "In development",
-      "soon_desc": "This tool is on GumballZ Get's roadmap and does not work yet. It is listed so you know what is coming."
+      "soon_desc": "This tool is on GumballZ Get's roadmap and does not work yet. It is listed so you know what is coming.",
+      "no_plugins_title": "No plugins installed yet",
+      "no_plugins_desc": "Install a plugin below to add new tools to GumballZ Get.",
+      "installed_hint": "Toggle a plugin off to disable it without uninstalling.",
+      "install_from_file": "Install from file",
+      "install_from_file_hint": "Pick a .zip plugin package from your computer.",
+      "official_tools": "Official tools",
+      "official_telegram_desc": "Browse chats, download media, and manage Telegram files.",
+      "official_listening_studio_name": "Listening & Vocab Studio",
+      "official_listening_studio_desc": "Split subtitle-timed practice clips and export cloze worksheets.",
+      "official_asset_forge_name": "Batch Media & Asset Forge",
+      "official_asset_forge_desc": "Convert audio, video, and image folders in parallel with FFmpeg.",
+      "open_plugin": "Open",
+      "confirm_uninstall": "Uninstall {{name}}?",
+      "go_to_tools": "Go to Tools",
+      "plugin_install_hint": "Install this plugin from the Tools page to use it."
     },
     "categories": {
       "youtube": {
@@ -4541,9 +4556,9 @@
     "go_to_marketplace": "Go to Marketplace",
     "plugin_restart_hint": "Restart GumballZ Get to load this plugin.",
     "plugin_incompatible_title": "Plugin incompatible with this version",
-    "plugin_incompatible_hint": "This plugin was built for an older version of GumballZ Get and cannot be loaded. Reinstall it from the Marketplace to get a compatible build — restarting will not fix this.",
+    "plugin_incompatible_hint": "This plugin was built for an older version of GumballZ Get and cannot be loaded. Reinstall it from the Tools page to get a compatible build — restarting will not fix this.",
     "plugin_load_failed_title": "Plugin failed to load",
-    "plugin_load_failed_hint": "GumballZ Get couldn't load this plugin. Try reinstalling it from the Marketplace.",
+    "plugin_load_failed_hint": "GumballZ Get couldn't load this plugin. Try reinstalling it from the Tools page.",
     "plugin_load_error_details": "Details: {{error}}",
     "reinstall": "Reinstall"
   },

@@ -16,60 +16,16 @@
   along with this program. If not, see <https://www.gnu.org/licenses/>.
 -->
 
+<!--
+  Tools hub: installed plugins only. Browsing, installing (registry or
+  local .zip file) and managing plugins all live in PluginManager below,
+  driven by live `list_plugins` state — no hardcoded tool catalog here.
+  The catalog (`$lib/tools/catalog`) still backs the /tools/[category]
+  routes and the command palette; it is intentionally not rendered here.
+-->
 <script lang="ts">
-  import { page } from "$app/state";
   import { t } from "$lib/i18n";
-  import ToolTile from "$components/tools/ToolTile.svelte";
-  import PluginBentoCards from "$components/plugins/PluginBentoCards.svelte";
-  import ToolsSearchBar from "$components/tools/ToolsSearchBar.svelte";
-  import {
-    CATEGORIES,
-    buildIndex,
-    search,
-    toolHref,
-    toolsOf,
-    type PlatformFilter,
-  } from "$lib/tools/catalog";
-
-  // `/tools?q=instagram` abre o hub já filtrado, para a paleta e para links.
-  let query = $state(page.url.searchParams.get("q") ?? "");
-  let filter = $state<PlatformFilter>("all");
-
-  let index = $derived(buildIndex((k) => $t(k) as string));
-  let browsing = $derived(query.trim() === "" && filter === "all");
-  let groups = $derived(search(index, query, filter));
-  let resultCount = $derived(groups.reduce((n, g) => n + g.tools.length, 0));
-  let ready = $derived(index.filter((e) => e.tool.status !== "soon"));
-  let categories = $derived([...CATEGORIES].sort((a, b) => a.order - b.order));
-
-  const BATCH_SIZE = 24;
-  let visibleReadyCount = $state(BATCH_SIZE);
-  let visibleReady = $derived(ready.slice(0, visibleReadyCount));
-  let sentinelEl = $state<HTMLElement | null>(null);
-
-  $effect(() => {
-    if (!browsing) {
-      visibleReadyCount = BATCH_SIZE;
-      return;
-    }
-    if (!sentinelEl || visibleReadyCount >= ready.length) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting) {
-          visibleReadyCount = Math.min(ready.length, visibleReadyCount + BATCH_SIZE);
-        }
-      },
-      { rootMargin: "400px" },
-    );
-
-    observer.observe(sentinelEl);
-    return () => observer.disconnect();
-  });
-
-  function countLabel(n: number): string {
-    return n === 1 ? ($t("tools.hub.tool_count_one") as string) : ($t("tools.hub.tool_count", { count: n }) as string);
-  }
+  import PluginManager from "$components/plugins/PluginManager.svelte";
 </script>
 
 <section class="tools-hub">
@@ -81,81 +37,7 @@
     </div>
   </header>
 
-  <ToolsSearchBar bind:query bind:filter autofocus resultCount={browsing ? undefined : resultCount} />
-
-  {#if browsing}
-    <PluginBentoCards />
-    <div class="tools-section">
-      <div class="section-header">
-        <span class="section-header-title">{$t("tools.hub.categories")}</span>
-      </div>
-      <div class="tools-grid">
-        {#each categories as cat (cat.id)}
-          <ToolTile
-            href="/tools/{cat.id}"
-            label={$t(`tools.categories.${cat.id}.name`)}
-            sublabel={countLabel(toolsOf(cat.id).length)}
-            icon={cat.icon}
-            from={cat.from}
-            to={cat.to}
-            via={cat.via}
-          />
-        {/each}
-      </div>
-    </div>
-
-    <div class="tools-section">
-      <div class="section-header">
-        <span class="section-header-title">{$t("tools.hub.ready_now")}</span>
-      </div>
-      <div class="tools-grid">
-        {#each visibleReady as entry (entry.tool.id)}
-          <ToolTile
-            href={toolHref(entry.tool)}
-            label={entry.name}
-            icon={entry.tool.icon}
-            from={entry.tool.from}
-            to={entry.tool.to}
-            via={entry.tool.via}
-            platforms={entry.tool.platforms}
-            status={entry.tool.status}
-          />
-        {/each}
-      </div>
-      {#if visibleReadyCount < ready.length}
-        <div bind:this={sentinelEl} class="tools-sentinel" aria-hidden="true"></div>
-      {/if}
-    </div>
-  {:else if groups.length === 0}
-    <div class="tools-empty">
-      <img class="empty-state-art" src="/emoji/magnifying_glass_tilted_left.png" alt="" width="96" height="96" />
-      <h2>{$t("tools.hub.empty_title")}</h2>
-      <p>{$t("tools.hub.empty_desc")}</p>
-    </div>
-  {:else}
-    {#each groups as group (group.category.id)}
-      <div class="tools-section">
-        <div class="section-header">
-          <span class="section-header-title">{$t(`tools.categories.${group.category.id}.name`)}</span>
-          <a class="section-header-action" href="/tools/{group.category.id}">{$t("tools.hub.open_category")}</a>
-        </div>
-        <div class="tools-grid">
-          {#each group.tools as entry (entry.tool.id)}
-            <ToolTile
-              href={toolHref(entry.tool)}
-              label={entry.name}
-              icon={entry.tool.icon}
-              from={entry.tool.from}
-              to={entry.tool.to}
-              via={entry.tool.via}
-              platforms={entry.tool.platforms}
-              status={entry.tool.status}
-            />
-          {/each}
-        </div>
-      </div>
-    {/each}
-  {/if}
+  <PluginManager />
 </section>
 
 <style>
@@ -202,45 +84,5 @@
     margin: 0;
     font-size: var(--text-base);
     color: var(--text-muted);
-  }
-
-  .tools-section {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-
-  .tools-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
-    gap: var(--space-2) var(--space-3);
-  }
-
-  .tools-empty {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-8) var(--space-4);
-    text-align: center;
-  }
-
-  .tools-empty h2 {
-    margin: var(--space-2) 0 0;
-    font-size: var(--text-lg);
-    font-weight: 600;
-    color: var(--text);
-  }
-
-  .tools-empty p {
-    margin: 0;
-    font-size: var(--text-base);
-    color: var(--text-muted);
-  }
-
-  .tools-sentinel {
-    height: 1px;
-    width: 100%;
-    pointer-events: none;
   }
 </style>

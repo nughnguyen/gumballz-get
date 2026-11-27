@@ -1,7 +1,34 @@
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tauri::Emitter;
 
 use gumballz_get_plugin_listening_studio::SubtitleSegment;
+
+use crate::plugin_loader::PluginManager;
+
+/// The `plugin_tools` commands call the compiled-in plugin crates directly,
+/// bypassing `PluginManager` — so a tool page reached by direct navigation
+/// could be used even when its plugin was never installed. Gate every one of
+/// them on the PluginManager state: the plugin must be installed, enabled,
+/// and actually loaded (same "loaded" check `plugin_command` uses).
+fn plugin_available(manager: &PluginManager, plugin_id: &str) -> bool {
+    manager
+        .installed_plugins()
+        .iter()
+        .any(|p| p.id == plugin_id && p.enabled)
+        && manager.is_loaded(plugin_id)
+}
+
+fn require_plugin_installed(
+    manager: &PluginManager,
+    plugin_id: &str,
+) -> Result<(), String> {
+    if plugin_available(manager, plugin_id) {
+        Ok(())
+    } else {
+        Err("Plugin chưa được cài đặt. Hãy tải về từ trang Công cụ.".into())
+    }
+}
 
 fn read_subtitles(path: &Path) -> Result<String, String> {
     let extension = path
@@ -20,17 +47,29 @@ fn read_subtitles(path: &Path) -> Result<String, String> {
 }
 
 #[tauri::command]
-pub fn listening_studio_parse_subtitles(path: String) -> Result<Vec<SubtitleSegment>, String> {
+pub fn listening_studio_parse_subtitles(
+    state: tauri::State<'_, Arc<tokio::sync::RwLock<PluginManager>>>,
+    path: String,
+) -> Result<Vec<SubtitleSegment>, String> {
+    {
+        let manager = state.blocking_read();
+        require_plugin_installed(&manager, "listening-studio")?;
+    }
     let content = read_subtitles(Path::new(&path))?;
     gumballz_get_plugin_listening_studio::parse_subtitles(&content)
 }
 
 #[tauri::command]
 pub async fn listening_studio_split_audio(
+    state: tauri::State<'_, Arc<tokio::sync::RwLock<PluginManager>>>,
     audio_path: String,
     subtitle_path: String,
     output_dir: String,
 ) -> Result<Vec<String>, String> {
+    {
+        let manager = state.read().await;
+        require_plugin_installed(&manager, "listening-studio")?;
+    }
     let audio = PathBuf::from(audio_path);
     if !audio.is_file() {
         return Err("Audio/video input does not exist".into());
@@ -49,7 +88,15 @@ pub async fn listening_studio_split_audio(
 }
 
 #[tauri::command]
-pub fn listening_studio_export(path: String, format: String) -> Result<String, String> {
+pub fn listening_studio_export(
+    state: tauri::State<'_, Arc<tokio::sync::RwLock<PluginManager>>>,
+    path: String,
+    format: String,
+) -> Result<String, String> {
+    {
+        let manager = state.blocking_read();
+        require_plugin_installed(&manager, "listening-studio")?;
+    }
     let content = read_subtitles(Path::new(&path))?;
     let segments = gumballz_get_plugin_listening_studio::parse_subtitles(&content)?;
     let blanks = gumballz_get_plugin_listening_studio::cloze(&segments, 7);
@@ -67,10 +114,15 @@ pub fn listening_studio_export(path: String, format: String) -> Result<String, S
 #[tauri::command]
 pub async fn asset_forge_convert(
     app: tauri::AppHandle,
+    state: tauri::State<'_, Arc<tokio::sync::RwLock<PluginManager>>>,
     inputs: Vec<String>,
     output_dir: String,
     format: String,
 ) -> Result<Vec<gumballz_get_plugin_asset_forge::ForgeResult>, String> {
+    {
+        let manager = state.read().await;
+        require_plugin_installed(&manager, "asset-forge")?;
+    }
     let files = gumballz_get_plugin_asset_forge::collect_media(
         &inputs.iter().map(PathBuf::from).collect::<Vec<_>>(),
         256,

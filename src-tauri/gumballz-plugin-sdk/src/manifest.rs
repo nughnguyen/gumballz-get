@@ -101,6 +101,14 @@ pub struct RegistryEntry {
     pub official: bool,
     #[serde(default)]
     pub capabilities: Vec<String>,
+    /// SHA-256 hex of the platform `.zip` asset, when the registry knows it.
+    /// `None` means the registry does not publish a checksum for this plugin
+    /// and the installer can only validate the zip + manifest.
+    #[serde(default)]
+    pub sha256: Option<String>,
+    /// Expected size in bytes of the platform `.zip` asset, when known.
+    #[serde(default)]
+    pub size: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

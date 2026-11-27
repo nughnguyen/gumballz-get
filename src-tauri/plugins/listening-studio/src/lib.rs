@@ -172,7 +172,7 @@ pub fn export_csv(segments: &[SubtitleSegment], blanks: &[String]) -> String {
 }
 
 pub fn manifest() -> gumballz_plugin_sdk::PluginManifest {
-    serde_json::from_str(include_str!("../plugin.manifest.json"))
+    serde_json::from_str(include_str!("../plugin.json"))
         .expect("valid Listening Studio manifest")
 }
 
@@ -218,4 +218,4 @@ impl GumballzPlugin for ListeningStudio {
         vec!["parse_subtitles".into()]
     }
 }
-// gumballz_plugin_sdk::export_plugin!(ListeningStudio::new());
+gumballz_plugin_sdk::export_plugin!(ListeningStudio::new());

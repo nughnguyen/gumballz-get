@@ -167,3 +167,5 @@ impl GumballzPlugin for ConvertPlugin {
         ]
     }
 }
+
+gumballz_plugin_sdk::export_plugin!(ConvertPlugin::new());

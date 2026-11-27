@@ -29,7 +29,6 @@
   interface Props {
     primaryNav?: NavItem[];
     appNav?: NavItem[];
-    pluginNav?: NavItem[];
     badgeLabel?: string;
     badgeCount?: number;
     collapsed?: boolean;
@@ -39,7 +38,6 @@
   let {
     primaryNav = [],
     appNav = [],
-    pluginNav = [],
     badgeLabel = "",
     badgeCount = 0,
     collapsed = false,
@@ -48,20 +46,6 @@
 
   let updateInfo = $derived(getUpdateInfo());
   const shortcutLabel = isMac() ? "⌃⌘S" : "Ctrl+Shift+S";
-
-  const PLUGINS_KEY = "gumballz-get.sidebar.plugins_expanded";
-  let pluginsExpanded = $state(
-    typeof localStorage === "undefined"
-      ? true
-      : localStorage.getItem(PLUGINS_KEY) !== "0",
-  );
-
-  function togglePlugins() {
-    pluginsExpanded = !pluginsExpanded;
-    try {
-      localStorage.setItem(PLUGINS_KEY, pluginsExpanded ? "1" : "0");
-    } catch {}
-  }
 
   function isActive(href: string): boolean {
     if (href === "/") return page.url.pathname === "/";
@@ -118,8 +102,7 @@
     if (!sidebarEl) return;
     const active = sidebarEl.querySelector<HTMLElement>(".mac-nav-item.active");
     if (!active) {
-      // No visible active item (e.g. a plugin route while the plugins
-      // section is collapsed): hide the pill and snap on next appearance.
+      // No visible active item: hide the pill and snap on next appearance.
       gliderReady = false;
       return;
     }
@@ -135,14 +118,12 @@
   }
 
   $effect(() => {
-    // Re-measure whenever the active route, the collapsed state, the
-    // plugins section, or any nav list changes.
+    // Re-measure whenever the active route, the collapsed state,
+    // or any nav list changes.
     void page.url.pathname;
     void collapsed;
-    void pluginsExpanded;
     void primaryNav.length;
     void appNav.length;
-    void pluginNav.length;
     measureGlider();
   });
 
@@ -188,36 +169,6 @@
       {@render navLink(item)}
     {/each}
   </nav>
-
-  {#if pluginNav.length > 0}
-    <nav class="mac-nav-section" aria-label={$t("nav.section_plugins")}>
-      <div class="mac-nav-section-header">
-        <span>{$t("nav.section_plugins")}</span>
-        {#if !collapsed}
-          <button
-            type="button"
-            class="mac-plugins-toggle"
-            onclick={togglePlugins}
-            aria-expanded={pluginsExpanded}
-            aria-label={pluginsExpanded ? $t("nav.collapse_plugins") : $t("nav.expand_plugins")}
-          >
-            <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              {#if pluginsExpanded}
-                <path d="M4 6l4 4 4-4" />
-              {:else}
-                <path d="M6 4l4 4-4 4" />
-              {/if}
-            </svg>
-          </button>
-        {/if}
-      </div>
-      {#if collapsed || pluginsExpanded}
-        {#each pluginNav as item (item.href)}
-          {@render navLink(item)}
-        {/each}
-      {/if}
-    </nav>
-  {/if}
 
   <nav class="mac-nav-section" aria-label={$t("nav.section_app")}>
     <div class="mac-nav-section-header">{$t("nav.section_app")}</div>

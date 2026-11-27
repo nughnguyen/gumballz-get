@@ -194,8 +194,8 @@
       <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" />
     </svg>
     <h2>{$t("marketplace.plugin_not_installed")}</h2>
-    <p>{$t("marketplace.plugin_install_hint")}</p>
-    <a href="/marketplace" class="guard-link">{$t("marketplace.go_to_marketplace")}</a>
+    <p>{$t("tools.hub.plugin_install_hint")}</p>
+    <a href="/tools" class="guard-link">{$t("tools.hub.go_to_tools")}</a>
   </div>
 {:else if pluginStatus === "needs-restart"}
   <div class="plugin-guard">
@@ -206,7 +206,7 @@
   <div class="plugin-guard">
     <h2>{$t("marketplace.plugin_incompatible_title")}</h2>
     <p>{$t("marketplace.plugin_incompatible_hint")}</p>
-    <a href="/marketplace" class="guard-link">{$t("marketplace.go_to_marketplace")}</a>
+    <a href="/tools" class="guard-link">{$t("tools.hub.go_to_tools")}</a>
     {#if loadError}
       <p class="guard-detail"><code>{loadError.message}</code></p>
     {/if}
@@ -215,7 +215,7 @@
   <div class="plugin-guard">
     <h2>{$t("marketplace.plugin_load_failed_title")}</h2>
     <p>{$t("marketplace.plugin_load_failed_hint")}</p>
-    <a href="/marketplace" class="guard-link">{$t("marketplace.go_to_marketplace")}</a>
+    <a href="/tools" class="guard-link">{$t("tools.hub.go_to_tools")}</a>
     {#if loadError}
       <p class="guard-detail"><code>{loadError.message}</code></p>
     {/if}

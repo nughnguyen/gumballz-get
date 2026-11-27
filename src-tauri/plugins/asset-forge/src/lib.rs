@@ -184,7 +184,7 @@ fn output_path(
 }
 
 pub fn manifest() -> gumballz_plugin_sdk::PluginManifest {
-    serde_json::from_str(include_str!("../plugin.manifest.json"))
+    serde_json::from_str(include_str!("../plugin.json"))
         .expect("valid Asset Forge manifest")
 }
 
@@ -219,4 +219,4 @@ impl GumballzPlugin for AssetForge {
         Vec::new()
     }
 }
-// gumballz_plugin_sdk::export_plugin!(AssetForge::new());
+gumballz_plugin_sdk::export_plugin!(AssetForge::new());

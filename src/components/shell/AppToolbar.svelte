@@ -66,7 +66,6 @@
     if (path.startsWith("/downloads")) return $t("nav.downloads");
     if (path.startsWith("/tools")) return $t("tools.hub.title");
     if (path.startsWith("/social-media")) return $t("nav.social_media");
-    if (path.startsWith("/marketplace")) return $t("nav.marketplace");
     if (path.startsWith("/settings")) return $t("nav.settings");
     if (path.startsWith("/about")) return $t("nav.about");
     if (path.startsWith("/courses")) return $t("courses.title");

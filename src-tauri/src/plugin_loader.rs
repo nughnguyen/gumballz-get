@@ -63,8 +63,43 @@ pub struct PluginManager {
 
 impl PluginManager {
     pub fn new(plugins_dir: PathBuf) -> Self {
-        let installed = load_installed_list(&plugins_dir);
+        let mut installed = load_installed_list(&plugins_dir);
         let user_removed = load_removed_list(&plugins_dir);
+        // Migration (see task: stop auto-presenting builtins): the old
+        // bootstrap auto-created an `installed.json` entry for each compiled-in
+        // builtin even though no package was ever downloaded, so there is no
+        // on-disk `<plugins>/<id>/` directory and `load_all` can never load
+        // it (manifest_read). Drop exactly those stale entries — a builtin id
+        // with no `repo` and no on-disk directory. Entries WITH a real
+        // directory are genuine downloads and are preserved untouched, as is
+        // `removed-plugins.json` (a user-removed id stays removed).
+        let stale_before = installed.len();
+        installed.retain(|entry| {
+            const KNOWN_BUILTIN_IDS: [&str; 5] = [
+                "convert",
+                "telegram",
+                "courses",
+                "listening-studio",
+                "asset-forge",
+            ];
+            if !KNOWN_BUILTIN_IDS.contains(&entry.id.as_str()) || entry.repo.is_some() {
+                return true;
+            }
+            if validate_plugin_id(&entry.id).is_err() {
+                return true;
+            }
+            if plugins_dir.join(&entry.id).is_dir() {
+                return true;
+            }
+            tracing::info!(
+                "[plugins] removing stale builtin entry '{}' (no downloaded package on disk)",
+                entry.id
+            );
+            false
+        });
+        if installed.len() != stale_before {
+            let _ = save_installed_list(&plugins_dir, &installed);
+        }
         Self {
             plugins_dir,
             loaded: HashMap::new(),

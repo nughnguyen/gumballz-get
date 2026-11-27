@@ -2256,6 +2256,8 @@ impl GumballzPlugin for CoursesPlugin {
     }
 }
 
+gumballz_plugin_sdk::export_plugin!(CoursesPlugin::new());
+
 #[cfg(test)]
 mod tests {
     use super::*;

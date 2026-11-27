@@ -1,11 +1,22 @@
+use std::io::Write as _;
 use std::sync::Arc;
 
+use futures::StreamExt;
 use gumballz_plugin_sdk::{PluginHost, PluginManifest, RegistryEntry};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use tauri::Emitter;
+use tokio::io::AsyncWriteExt as _;
 
 use crate::plugin_host::PluginHostImpl;
-use crate::plugin_loader::{PluginLoadError, PluginManager};
+use crate::plugin_loader::{validate_plugin_id, PluginLoadError, PluginManager};
+
+/// Hard cap for a plugin zip download when the registry publishes no size.
+/// A registry `size` replaces this cap (the download must not exceed it).
+const MAX_PLUGIN_ZIP_BYTES: u64 = 500 * 1024 * 1024;
+/// Hard cap for the total uncompressed bytes of an extracted plugin zip
+/// (zip-bomb guard). A plugin package is far smaller than this in practice.
+const MAX_PLUGIN_EXTRACTED_BYTES: u64 = 1024 * 1024 * 1024;
 
 fn emit_plugins_changed(app: &tauri::AppHandle) {
     let _ = app.emit("plugins-changed", ());
@@ -378,25 +389,251 @@ struct GitHubRelease {
 struct GitHubAsset {
     name: String,
     browser_download_url: String,
+    #[serde(default)]
+    size: Option<u64>,
+}
+
+/// Extract `zip_path` into a fresh staging dir under the plugins dir,
+/// validate the extracted `plugin.json` (it must parse and its `id` must
+/// equal `plugin_id`), then atomically move the staging dir into place as
+/// `<plugins>/<plugin_id>/` (the previous install, if any, is first moved
+/// aside to `<plugins>/<plugin_id>.old` and restored if the move fails, and
+/// removed once the new install is in place). Only then is the entry
+/// registered in `installed.json`. On ANY failure the staging dir is deleted
+/// and the previous install is left untouched. Shared by the registry
+/// download path and the install-from-file path — the extraction logic lives
+/// here exactly once.
+async fn install_from_zip_file(
+    zip_path: &std::path::Path,
+    plugin_id: &str,
+    repo: Option<String>,
+    source_release: Option<String>,
+    state: &Arc<tokio::sync::RwLock<PluginManager>>,
+) -> Result<String, String> {
+    let (plugins_dir, dest_dir) = {
+        let manager = state.read().await;
+        let dest = manager.plugin_dir(plugin_id).map_err(|e| e.to_string())?;
+        (manager.plugins_dir().to_path_buf(), dest)
+    };
+    std::fs::create_dir_all(&plugins_dir).map_err(|e| e.to_string())?;
+
+    let staging = plugins_dir.join(format!(
+        ".tmp-{}-{}",
+        plugin_id,
+        uuid::Uuid::new_v4().as_simple()
+    ));
+    let cleanup = |staging: &std::path::Path| {
+        let _ = std::fs::remove_dir_all(staging);
+    };
+    if let Err(e) = std::fs::create_dir_all(&staging) {
+        return Err(format!("Không tạo được thư mục tạm: {}", e));
+    }
+
+    let manifest = match extract_and_validate_zip(zip_path, &staging, plugin_id) {
+        Ok(m) => m,
+        Err(e) => {
+            cleanup(&staging);
+            return Err(e);
+        }
+    };
+    let version = manifest.version.clone();
+
+    // Atomic-ish swap: move the old install aside, move staging in, restore
+    // the old install if the second rename fails.
+    let backup_dir = plugins_dir.join(format!("{}.old", plugin_id));
+    let mut moved_aside = false;
+    if dest_dir.exists() {
+        let _ = std::fs::remove_dir_all(&backup_dir);
+        if let Err(e) = std::fs::rename(&dest_dir, &backup_dir) {
+            cleanup(&staging);
+            return Err(format!("Không thể thay thế bản cài cũ: {}", e));
+        }
+        moved_aside = true;
+    }
+    if let Err(e) = std::fs::rename(&staging, &dest_dir) {
+        if moved_aside {
+            let _ = std::fs::rename(&backup_dir, &dest_dir);
+        }
+        cleanup(&staging);
+        return Err(format!("Không thể cài đặt plugin: {}", e));
+    }
+    let _ = std::fs::remove_dir_all(&backup_dir);
+
+    let mut manager = state.write().await;
+    if let Err(e) = manager.register_installed(gumballz_plugin_sdk::InstalledPlugin {
+        id: plugin_id.to_string(),
+        version: version.clone(),
+        installed_at: chrono::Utc::now().to_rfc3339(),
+        updated_at: chrono::Utc::now().to_rfc3339(),
+        enabled: true,
+        repo,
+        source_release,
+    }) {
+        // The files are in place but the registry write failed: roll the
+        // install back so `installed.json` and the disk never disagree.
+        let _ = std::fs::remove_dir_all(&dest_dir);
+        return Err(format!("Không ghi được danh sách plugin đã cài: {}", e));
+    }
+
+    Ok(version)
+}
+
+/// Open `zip_path`, extract it into `staging` (Zip-Slip + symlink + size
+/// guards), then validate the extracted `plugin.json`: it must parse and its
+/// `id` must equal `plugin_id`. Returns the parsed manifest.
+fn extract_and_validate_zip(
+    zip_path: &std::path::Path,
+    staging: &std::path::Path,
+    plugin_id: &str,
+) -> Result<PluginManifest, String> {
+    let file = std::fs::File::open(zip_path)
+        .map_err(|e| format!("Không mở được tệp .zip: {}", e))?;
+    let mut archive = zip::ZipArchive::new(file)
+        .map_err(|e| format!("Tệp .zip không hợp lệ: {}", e))?;
+
+    let mut extracted_bytes: u64 = 0;
+    for i in 0..archive.len() {
+        let mut entry = archive.by_index(i).map_err(|e| e.to_string())?;
+        // Reject symlinks: a symlink inside the zip could point the
+        // extraction outside the staging dir.
+        if let Some(mode) = entry.unix_mode() {
+            if mode & 0o170000 == 0o120000 {
+                return Err("Tệp .zip chứa liên kết tượng trưng (symlink), đã từ chối".into());
+            }
+        }
+        extracted_bytes = extracted_bytes.saturating_add(entry.size());
+        if extracted_bytes > MAX_PLUGIN_EXTRACTED_BYTES {
+            return Err("Tệp .zip giải nén vượt quá giới hạn cho phép".into());
+        }
+        let mangled = entry.mangled_name();
+        let outpath = staging.join(&mangled);
+        if !outpath.starts_with(staging) {
+            return Err("Tệp .zip chứa đường dẫn không hợp lệ, đã từ chối".into());
+        }
+        if entry.is_dir() {
+            std::fs::create_dir_all(&outpath).map_err(|e| e.to_string())?;
+        } else {
+            if let Some(parent) = outpath.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            }
+            let mut outfile = std::fs::File::create(&outpath).map_err(|e| e.to_string())?;
+            std::io::copy(&mut entry, &mut outfile).map_err(|e| e.to_string())?;
+        }
+    }
+
+    let manifest_path = staging.join("plugin.json");
+    let manifest_str = std::fs::read_to_string(&manifest_path).map_err(|_| {
+        "Gói plugin thiếu plugin.json ở thư mục gốc của tệp .zip".to_string()
+    })?;
+    let manifest: PluginManifest = serde_json::from_str(&manifest_str)
+        .map_err(|e| format!("plugin.json không hợp lệ: {}", e))?;
+    if let Err(e) = validate_plugin_id(&manifest.id) {
+        return Err(format!("plugin.json có id không hợp lệ: {}", e));
+    }
+    if manifest.id != plugin_id {
+        return Err(format!(
+            "plugin.json có id '{}' nhưng đang cài '{}'",
+            manifest.id, plugin_id
+        ));
+    }
+    Ok(manifest)
+}
+
+/// Read the `id` from the root `plugin.json` inside `zip_path` without
+/// extracting anything. Used by install-from-file to learn which plugin the
+/// user picked before running the shared install pipeline.
+fn read_plugin_id_from_zip(zip_path: &std::path::Path) -> Result<String, String> {
+    let file = std::fs::File::open(zip_path)
+        .map_err(|e| format!("Không mở được tệp .zip: {}", e))?;
+    let mut archive = zip::ZipArchive::new(file)
+        .map_err(|e| format!("Tệp .zip không hợp lệ: {}", e))?;
+    let mut entry = archive
+        .by_name("plugin.json")
+        .map_err(|_| "Gói plugin thiếu plugin.json ở thư mục gốc của tệp .zip".to_string())?;
+    let mut content = String::new();
+    use std::io::Read as _;
+    entry
+        .read_to_string(&mut content)
+        .map_err(|e| format!("Không đọc được plugin.json: {}", e))?;
+    let manifest: PluginManifest = serde_json::from_str(&content)
+        .map_err(|e| format!("plugin.json không hợp lệ: {}", e))?;
+    validate_plugin_id(&manifest.id)
+        .map_err(|e| format!("plugin.json có id không hợp lệ: {}", e))?;
+    Ok(manifest.id)
+}
+
+/// Stream `url` to `dest_path`, failing closed if the download exceeds
+/// `size_cap` bytes. Returns the SHA-256 hex of the downloaded bytes.
+async fn stream_download_to_file(
+    client: &reqwest::Client,
+    url: &str,
+    dest_path: &std::path::Path,
+    size_cap: u64,
+) -> Result<String, String> {
+    let resp = client
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| format!("NetworkUnreachable|Không tải được plugin: {}", e))?
+        .error_for_status()
+        .map_err(|e| format!("Không tải được plugin: {}", e))?;
+    if let Some(declared) = resp.content_length() {
+        if declared > size_cap {
+            return Err(format!(
+                "Bản tải về lớn hơn giới hạn cho phép ({} byte)",
+                size_cap
+            ));
+        }
+    }
+    let mut file = tokio::fs::File::create(dest_path)
+        .await
+        .map_err(|e| e.to_string())?;
+    let mut hasher = Sha256::new();
+    let mut downloaded: u64 = 0;
+    let mut stream = resp.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| format!("NetworkUnreachable|Lỗi khi tải về: {}", e))?;
+        downloaded = downloaded.saturating_add(chunk.len() as u64);
+        if downloaded > size_cap {
+            return Err(format!(
+                "Bản tải về lớn hơn giới hạn cho phép ({} byte)",
+                size_cap
+            ));
+        }
+        hasher.update(&chunk);
+        file.write_all(&chunk).await.map_err(|e| e.to_string())?;
+    }
+    file.flush().await.map_err(|e| e.to_string())?;
+    Ok(format!("{:x}", hasher.finalize()))
 }
 
 pub async fn install_plugin_zip_from_repo(
     state: &Arc<tokio::sync::RwLock<PluginManager>>,
     plugin_id: String,
     repo: String,
+    expected_sha256: Option<String>,
+    expected_size: Option<u64>,
 ) -> Result<String, String> {
-    {
-        let manager = state.read().await;
-        if let Some(lp) = manager.get(&plugin_id) {
-            if manager.is_builtin(&plugin_id) {
-                return Ok(lp.manifest.version.clone());
-            }
-        }
-    }
+    validate_plugin_id(&plugin_id).map_err(|e| e.to_string())?;
     let suffix = platform_artifact_suffix();
     if suffix == "unknown" {
-        return Err("Unsupported platform".to_string());
+        return Err("Nền tảng này chưa được hỗ trợ".to_string());
     }
+    // Fail closed on a malformed registry checksum: a checksum that is not
+    // 64 hex chars can never match a real download, so refuse upfront
+    // instead of downloading and then comparing against garbage.
+    let expected_sha256 = match expected_sha256.as_deref() {
+        Some(raw) => {
+            let normalized = raw.trim().trim_start_matches("sha256:").to_lowercase();
+            let is_hex = normalized.len() == 64
+                && normalized.chars().all(|c| c.is_ascii_hexdigit());
+            if !is_hex {
+                return Err("Checksum SHA-256 trong registry không hợp lệ".into());
+            }
+            Some(normalized)
+        }
+        None => None,
+    };
 
     let client = crate::core::http_client::apply_global_proxy(
         reqwest::Client::builder()
@@ -412,73 +649,84 @@ pub async fn install_plugin_zip_from_repo(
         .get(&api_url)
         .send()
         .await
-        .map_err(|e| format!("NetworkUnreachable|Failed to fetch release: {}", e))?
+        .map_err(|e| format!("NetworkUnreachable|Không tải được thông tin bản phát hành: {}", e))?
+        .error_for_status()
+        .map_err(|e| format!("Không tải được thông tin bản phát hành: {}", e))?
         .json()
         .await
-        .map_err(|e| format!("Invalid release response: {}", e))?;
+        .map_err(|e| format!("Phản hồi bản phát hành không hợp lệ: {}", e))?;
 
     let asset = release
         .assets
         .iter()
         .find(|a| a.name.contains(suffix) && a.name.ends_with(".zip"))
-        .ok_or_else(|| format!("No artifact found for {}", suffix))?;
+        .ok_or_else(|| format!("Không có bản dựng cho {}", suffix))?;
 
-    let zip_bytes = client
-        .get(&asset.browser_download_url)
-        .send()
-        .await
-        .map_err(|e| format!("NetworkUnreachable|Failed to download: {}", e))?
-        .bytes()
-        .await
-        .map_err(|e| format!("NetworkUnreachable|Failed to read download: {}", e))?;
+    // Size cap: the registry size when known (the download must not exceed
+    // it), the asset size GitHub reports as a fallback, else 500 MB.
+    let size_cap = expected_size
+        .or(asset.size)
+        .unwrap_or(MAX_PLUGIN_ZIP_BYTES);
 
-    let plugin_dir = {
+    let plugins_dir = {
         let manager = state.read().await;
-        manager.plugin_dir(&plugin_id).map_err(|e| e.to_string())?
+        manager.plugins_dir().to_path_buf()
     };
-    std::fs::create_dir_all(&plugin_dir).map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&plugins_dir).map_err(|e| e.to_string())?;
+    let download_path = plugins_dir.join(format!(
+        ".download-{}-{}.zip",
+        plugin_id,
+        uuid::Uuid::new_v4().as_simple()
+    ));
 
-    let cursor = std::io::Cursor::new(zip_bytes);
-    let mut archive = zip::ZipArchive::new(cursor).map_err(|e| format!("Invalid ZIP: {}", e))?;
-
-    for i in 0..archive.len() {
-        let mut file = archive.by_index(i).map_err(|e| e.to_string())?;
-        let mangled = file.mangled_name();
-        let outpath = plugin_dir.join(&mangled);
-        if !outpath.starts_with(&plugin_dir) {
-            return Err("Malicious zip path traversal detected".to_string());
+    // Stream the download to a temp file (never whole-file into memory),
+    // hashing as we go and failing closed past the size cap. Returns the
+    // SHA-256 hex of the downloaded bytes.
+    let actual_sha256 = match stream_download_to_file(
+        &client,
+        &asset.browser_download_url,
+        &download_path,
+        size_cap,
+    )
+    .await
+    {
+        Ok(hash) => hash,
+        Err(e) => {
+            let _ = std::fs::remove_file(&download_path);
+            return Err(e);
         }
-        if file.is_dir() {
-            std::fs::create_dir_all(&outpath).map_err(|e| e.to_string())?;
-        } else {
-            if let Some(parent) = outpath.parent() {
-                std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-            }
-            if outpath.exists() {
-                let old = outpath.with_extension("old");
-                let _ = std::fs::remove_file(&old);
-                let _ = std::fs::rename(&outpath, &old);
-            }
-            let mut outfile = std::fs::File::create(&outpath).map_err(|e| e.to_string())?;
-            std::io::copy(&mut file, &mut outfile).map_err(|e| e.to_string())?;
+    };
+
+    // SHA-256: when the registry publishes one, the download must match it
+    // exactly; when it publishes none, there is nothing to compare against
+    // and the zip + manifest validation + the loader's ABI/rustc handshake
+    // at `load_one` are the checks.
+    if let Some(expected) = &expected_sha256 {
+        if actual_sha256 != *expected {
+            let _ = std::fs::remove_file(&download_path);
+            return Err(
+                "Checksum SHA-256 của bản tải về không khớp với registry. Đã hủy cài đặt."
+                    .into(),
+            );
         }
     }
 
-    let version = release.tag_name.trim_start_matches('v').to_string();
-
-    let mut manager = state.write().await;
-    manager
-        .register_installed(gumballz_plugin_sdk::InstalledPlugin {
-            id: plugin_id.clone(),
-            version: version.clone(),
-            installed_at: chrono::Utc::now().to_rfc3339(),
-            updated_at: chrono::Utc::now().to_rfc3339(),
-            enabled: true,
-            repo: Some(repo),
-            source_release: Some(release.tag_name),
-        })
-        .map_err(|e| e.to_string())?;
-
+    let version = match install_from_zip_file(
+        &download_path,
+        &plugin_id,
+        Some(repo),
+        Some(release.tag_name.clone()),
+        state,
+    )
+    .await
+    {
+        Ok(v) => v,
+        Err(e) => {
+            let _ = std::fs::remove_file(&download_path);
+            return Err(e);
+        }
+    };
+    let _ = std::fs::remove_file(&download_path);
     Ok(version)
 }
 
@@ -489,8 +737,82 @@ pub async fn install_plugin_from_registry(
     plugin_id: String,
     repo: String,
 ) -> Result<String, String> {
-    let version =
-        install_plugin_zip_from_repo(&state.inner().clone(), plugin_id.clone(), repo).await?;
+    // Best-effort registry lookup for the checksum + expected size. If the
+    // registry is unreachable the install still proceeds, but without a
+    // checksum to verify against (zip + manifest validation + the loader's
+    // ABI/rustc handshake still apply).
+    let (expected_sha256, expected_size) = match fetch_registry_entries().await {
+        Ok(entries) => entries
+            .into_iter()
+            .find(|e| e.id == plugin_id)
+            .map(|e| (e.sha256, e.size))
+            .unwrap_or((None, None)),
+        Err(e) => {
+            tracing::debug!(
+                "install_plugin_from_registry: registry unavailable, no checksum: {}",
+                e
+            );
+            (None, None)
+        }
+    };
+    let version = install_plugin_zip_from_repo(
+        &state.inner().clone(),
+        plugin_id.clone(),
+        repo,
+        expected_sha256,
+        expected_size,
+    )
+    .await?;
+    {
+        let mut manager = state.write().await;
+        if !manager.is_loaded(&plugin_id) {
+            let plugins_dir = manager.plugins_dir().to_path_buf();
+            let host = build_plugin_host(&app, plugins_dir);
+            let _ = manager.load_one(&plugin_id, host);
+        }
+    }
+    emit_plugins_changed(&app);
+    Ok(version)
+}
+
+/// Install a plugin from a local `.zip` file the user picks (e.g. from the
+/// file picker). Same temp-dir pipeline as the registry path — zip opens,
+/// `plugin.json` parses with a valid id matching the package, atomic move
+/// into place, only then `register_installed` + `load_one` — except there is
+/// no registry checksum to verify against, so zip + manifest validation +
+/// the loader's ABI/rustc handshake at `load_one` are the checks.
+#[tauri::command]
+pub async fn install_plugin_from_file(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, Arc<tokio::sync::RwLock<PluginManager>>>,
+    path: String,
+) -> Result<String, String> {
+    let zip_path = std::path::PathBuf::from(&path);
+    if !zip_path.is_file() {
+        return Err("Không tìm thấy tệp plugin. Hãy chọn lại tệp .zip.".into());
+    }
+    let is_zip = zip_path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.eq_ignore_ascii_case("zip"))
+        .unwrap_or(false);
+    if !is_zip {
+        return Err("Tệp plugin phải có định dạng .zip".into());
+    }
+    if let Ok(metadata) = std::fs::metadata(&zip_path) {
+        if metadata.len() > MAX_PLUGIN_ZIP_BYTES {
+            return Err("Tệp plugin vượt quá giới hạn cho phép (500 MB)".into());
+        }
+    }
+    let plugin_id = read_plugin_id_from_zip(&zip_path)?;
+    let version = install_from_zip_file(
+        &zip_path,
+        &plugin_id,
+        None,
+        None,
+        &state.inner().clone(),
+    )
+    .await?;
     {
         let mut manager = state.write().await;
         if !manager.is_loaded(&plugin_id) {
@@ -534,39 +856,6 @@ async fn fetch_registry_entries() -> Result<Vec<RegistryEntry>, String> {
         }
     }
     Err(last_err)
-}
-
-pub async fn ensure_default_plugins(state: Arc<tokio::sync::RwLock<PluginManager>>) {
-    let entries = match fetch_registry_entries().await {
-        Ok(e) => e,
-        Err(e) => {
-            // The marketplace registry repo is not published yet and the
-            // built-in plugins already work — a missing registry is
-            // expected, not a warning.
-            tracing::debug!("ensure_default_plugins: registry unavailable: {}", e);
-            return;
-        }
-    };
-
-    for entry in entries {
-        let skip = {
-            let manager = state.read().await;
-            manager.installed_plugins().iter().any(|p| p.id == entry.id)
-                || manager.is_user_removed(&entry.id)
-        };
-        if skip {
-            continue;
-        }
-        tracing::info!(
-            "installing default plugin '{}' from {}",
-            entry.id,
-            entry.repo
-        );
-        match install_plugin_zip_from_repo(&state, entry.id.clone(), entry.repo.clone()).await {
-            Ok(v) => tracing::info!("default plugin '{}' installed ({})", entry.id, v),
-            Err(e) => tracing::warn!("failed to install default plugin '{}': {}", entry.id, e),
-        }
-    }
 }
 
 pub async fn auto_update_plugins(state: Arc<tokio::sync::RwLock<PluginManager>>) {

@@ -1601,6 +1601,8 @@ impl GumballzPlugin for TelegramPlugin {
     }
 }
 
+gumballz_plugin_sdk::export_plugin!(TelegramPlugin::new());
+
 #[cfg(test)]
 mod tests {
     use super::*;
