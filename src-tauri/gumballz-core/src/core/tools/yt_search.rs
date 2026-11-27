@@ -5,11 +5,24 @@
 //! list of terms (e.g. `gumballz-get search "mir4 boss" --json > hits.ndjson`),
 //! and the duration/title filters live in a pure function testable without network.
 
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
+
 use serde::Serialize;
 
 /// yt-dlp cap per query; above it the search gets slow and YouTube
 /// starts returning empty pages.
 pub const MAX_RESULTS: u32 = 500;
+
+/// How long one search may run before it is killed. YouTube answers
+/// yt-dlp's search in ~5 s on a good day and ~40 s on a bad one, and
+/// without a bound the UI spins forever on the bad days.
+const SEARCH_TIMEOUT: Duration = Duration::from_secs(25);
+
+/// The search currently running, if any. A new search kills the
+/// previous one: typing a query fires a search per pause, and the old
+/// ones only waste time and bandwidth once their results are discarded.
+static CURRENT_SEARCH: Mutex<Option<tokio::process::Child>> = Mutex::new(None);
 
 #[derive(Debug, Clone, Default)]
 pub struct SearchOptions {
@@ -68,11 +81,58 @@ pub async fn search(opts: &SearchOptions) -> anyhow::Result<Vec<SearchHit>> {
     args.extend(crate::core::ytdlp::insecure_tls_args());
     args.push(format!("{}{}:{}", search_prefix(&opts.platform), n, query));
 
-    let output = crate::core::ytdlp::ytdlp_command(&ytdlp_path)
+    // Cancel any previous search still running, then register this one
+    // so the next search (or the timeout below) can kill it.
+    let old = CURRENT_SEARCH.lock().ok().and_then(|mut guard| guard.take());
+    if let Some(mut old) = old {
+        let _ = old.kill().await;
+        let _ = old.wait().await;
+    }
+    let child = crate::core::ytdlp::ytdlp_command(&ytdlp_path)
         .args(&args)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
-        .output()
+        .spawn()
+        .map_err(|e| anyhow::anyhow!("Failed to run yt-dlp: {}", e))?;
+    if let Ok(mut guard) = CURRENT_SEARCH.lock() {
+        *guard = Some(child);
+    }
+
+    // Poll for exit instead of awaiting the whole process: that is what
+    // lets the timeout and a newer search kill this one mid-flight.
+    // (The results arrive as one burst at the end, so there is nothing
+    // to stream; the win is a bounded wait, not partial results.)
+    let deadline = Instant::now() + SEARCH_TIMEOUT;
+    loop {
+        let exited = match CURRENT_SEARCH.lock() {
+            Ok(mut guard) => match guard.as_mut() {
+                Some(running) => running
+                    .try_wait()
+                    .map_err(|e| anyhow::anyhow!("Search failed: {}", e))?,
+                None => anyhow::bail!("Search was superseded by a newer query"),
+            },
+            Err(_) => anyhow::bail!("Search was superseded by a newer query"),
+        };
+        if exited.is_some() {
+            break;
+        }
+        if Instant::now() >= deadline {
+            let old = CURRENT_SEARCH.lock().ok().and_then(|mut guard| guard.take());
+            if let Some(mut old) = old {
+                let _ = old.kill().await;
+                let _ = old.wait().await;
+            }
+            anyhow::bail!("Search timed out after {} seconds", SEARCH_TIMEOUT.as_secs());
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+
+    let child = CURRENT_SEARCH.lock().ok().and_then(|mut guard| guard.take());
+    let Some(mut child) = child else {
+        anyhow::bail!("Search was superseded by a newer query");
+    };
+    let output = child
+        .wait_with_output()
         .await
         .map_err(|e| anyhow::anyhow!("Failed to run yt-dlp: {}", e))?;
     if !output.status.success() {

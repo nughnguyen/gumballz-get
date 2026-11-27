@@ -1129,7 +1129,7 @@
               bind:mode={homeInputMode}
               bind:inputEl={urlInput}
               busy={downloadboxState.kind === "detecting" || downloadboxState.kind === "searching"}
-              busyLabel={downloadboxState.kind === "detecting" ? $t('downloadbox.detecting') : downloadboxState.kind === "searching" ? $t('downloadbox.searching') : ""}
+              busyLabel={downloadboxState.kind === "detecting" ? $t('downloadbox.detecting') : ""}
               showSubmit={downloadboxState.kind === "detected" || (downloadboxState.kind === "idle" && url.trim().length > 0)}
               onInput={handleInput}
               onSubmit={handleSubmit}

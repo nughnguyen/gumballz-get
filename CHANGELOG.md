@@ -7,6 +7,8 @@ bản hiện tại trong cùng commit đó.
 
 ## [Unreleased]
 
+- Tìm kiếm video (gõ chữ không phải link) giờ tối đa 25 giây thay vì quay mãi không dừng (YouTube trả chậm thì báo không có kết quả sau 25 giây); gõ tiếp sẽ hủy lần tìm cũ đang chạy thay vì để nhiều tiến trình yt-dlp chạy chồng lên nhau; bỏ dòng "Searching..." thừa dưới ô nhập (chỉ còn một dòng kèm vòng xoay).
+
 - Đăng nhập Gumroad bằng email/mật khẩu giờ mở cửa sổ trình duyệt trong app để đăng nhập trên trang Gumroad rồi đổi mã lấy token (Gumroad đã bỏ kiểu đăng nhập gửi thẳng mật khẩu nên trước đây báo lỗi 400 unsupported_grant_type); đăng nhập bằng token vẫn giữ nguyên.
 - Sửa đăng nhập Gumroad: địa chỉ redirect đúng là `http://127.0.0.1` (địa chỉ đã đăng ký cho app này), không phải `gumroadmobile://` nên trước đây Gumroad báo lỗi redirect không khớp.
 - Sửa lỗi biên dịch E0753 do đợt đổi chữ sang tiếng Anh làm vỡ khối chú thích đầu file pdf_markdown.rs; sửa 2 test frontend lỗi thời (số mục điều hướng 7 → 6 sau khi bỏ mục Plugins, điều kiện ẩn QualityPicker khi ở chế độ audio đã thêm ngoại lệ Spotify).
