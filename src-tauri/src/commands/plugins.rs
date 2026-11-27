@@ -1,4 +1,3 @@
-use std::io::Write as _;
 use std::sync::Arc;
 
 use futures::StreamExt;

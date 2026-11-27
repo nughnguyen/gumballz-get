@@ -6,6 +6,14 @@ edition = "2021"
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+[features]
+default = []
+# `dynamic` gates the `#[no_mangle]` C exports emitted by `export_plugin!`
+# (ABI version / build info / init). It is intentionally NOT a default
+# feature: the app crate links this crate as an rlib, and every rlib that
+# defines those three symbols breaks the Windows link (LNK2005). Only a
+# standalone cdylib build enables it (`--features dynamic`).
+dynamic = []
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }

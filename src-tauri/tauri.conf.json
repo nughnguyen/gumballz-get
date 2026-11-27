@@ -4,9 +4,9 @@
   "version": "1.0.2",
   "identifier": "com.gumballz.get",
   "build": {
-    "beforeDevCommand": "pnpm dev",
+    "beforeDevCommand": "pnpm plugins:build && pnpm dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "pnpm build",
+    "beforeBuildCommand": "pnpm plugins:build:release && pnpm build",
     "frontendDist": "../build"
   },
   "app": {

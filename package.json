@@ -27,6 +27,8 @@
     "lint:ui": "node scripts/lint-ui.mjs",
     "lint:ui:update": "node scripts/lint-ui.mjs --update",
     "plugins:deploy": "node scripts/deploy-plugins-local.mjs",
+    "plugins:build": "node scripts/build-bundled-plugins.mjs",
+    "plugins:build:release": "node scripts/build-bundled-plugins.mjs --release",
     "extension:sync": "node browser-extension/sync.mjs",
     "build:extension": "node scripts/build-extension.mjs",
     "clean:cargo": "cargo sweep -t 3 -r src-tauri",
