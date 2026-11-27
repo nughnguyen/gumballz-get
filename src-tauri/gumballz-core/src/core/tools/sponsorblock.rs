@@ -551,9 +551,9 @@ mod submit_tests {
 
     #[test]
     fn server_errors_become_readable_messages() {
-        assert!(submit_error(429, "").contains("espere"));
+        assert!(submit_error(429, "").contains("wait"));
         assert!(submit_error(409, "").contains("had already been"));
-        assert!(submit_error(403, "banned").contains("bloqueado"));
+        assert!(submit_error(403, "banned").contains("blocked"));
         assert!(submit_error(400, "Duplicate segment").contains("Duplicate segment"));
         assert!(submit_error(500, "boom").contains("500"));
         let enorme = "x".repeat(1000);
@@ -573,6 +573,6 @@ mod submit_tests {
         })
         .await
         .expect_err("without confirmation it does not go out");
-        assert!(e.to_string().contains("confirme"));
+        assert!(e.to_string().contains("confirm"));
     }
 }

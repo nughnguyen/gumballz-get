@@ -566,7 +566,7 @@ mod tests {
         let md = std::fs::read_to_string(out.join("linkedin-panorama.md")).expect("md");
         assert!(md.contains("Conexoes: **5**"));
         assert!(md.contains("Acme"));
-        assert!(md.contains("anunciantes"));
+        assert!(md.contains("advertisers"));
         let js = std::fs::read_to_string(out.join("linkedin-panorama.json")).expect("json");
         assert!(js.contains("\"ad_targeting\""));
     }

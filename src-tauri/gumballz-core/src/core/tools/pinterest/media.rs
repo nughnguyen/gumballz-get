@@ -189,8 +189,8 @@ pub fn base_name(pin: &Pin, naming: &str) -> String {
     let clean = super::super::sanitize_name(&short);
     match naming {
         "id" => pin.id.clone(),
-        "title" if clean != "arquivo" => clean,
-        _ if clean != "arquivo" => format!("{}-{}", clean, pin.id),
+        "title" if clean != "file" => clean,
+        _ if clean != "file" => format!("{}-{}", clean, pin.id),
         _ => pin.id.clone(),
     }
 }

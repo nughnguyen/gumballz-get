@@ -192,7 +192,7 @@ mod tests {
             text.index_of_coincidence
         );
         assert_eq!(text.top[0].display, " ", "space is the most common byte");
-        assert!(text.looks_like.contains("texto"));
+        assert!(text.looks_like.contains("text"));
 
         let random: Vec<u8> = (0..=255u8).cycle().take(4096).collect();
         let r = analyze(&random, 5);

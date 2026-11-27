@@ -654,8 +654,8 @@ frame= 2 fps=0.0 q=-0.0 size=N/A time=00:00:00.08
             source: "cena".into(),
         }];
         let chs = build_chapters(&marks, &[], 200.0, 45.0);
-        assert_eq!(chs[0].title, "Parte 1");
-        assert_eq!(chs[1].title, "Parte 2");
+        assert_eq!(chs[0].title, "Part 1");
+        assert_eq!(chs[1].title, "Part 2");
     }
 
     #[test]
@@ -697,7 +697,7 @@ frame= 2 fps=0.0 q=-0.0 size=N/A time=00:00:00.08
             45.0,
         );
         let block = description_block(&chs);
-        assert_eq!(block, "0:00 Parte 1\n1:05 Parte 2\n1:02:05 Parte 3");
+        assert_eq!(block, "0:00 Part 1\n1:05 Part 2\n1:02:05 Part 3");
         assert!(
             block
                 .lines()
@@ -786,7 +786,7 @@ frame= 2 fps=0.0 q=-0.0 size=N/A time=00:00:00.08
         ];
         assert!(youtube_note(&curto)
             .unwrap_or_default()
-            .contains("10 segundos"));
+            .contains("10 seconds"));
     }
 
     /// Generates a clip with two scene cuts and silence in the middle and checks

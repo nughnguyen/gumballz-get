@@ -816,7 +816,7 @@ mod tests {
         assert!(md.contains("**Duna** (2021)"));
         assert!(md.contains("8.0/10"));
         assert!(md.contains("> gostei"));
-        assert!(md.contains("## Sem data"));
+        assert!(md.contains("## No date"));
     }
 
     #[test]
