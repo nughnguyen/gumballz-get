@@ -83,6 +83,13 @@
     <path d="M2 17l.5-5 .5 5M5 17l.5-8 .5 8M8 17l.5-10 .5 10M11 17l.5-7 .5 7" />
     <path d="M14 17V7a3 3 0 0 1 3-3c2 0 4 1 5 3v10H14z" />
   </svg>
+{:else if platform === "spotify"}
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="9" />
+    <path d="M8 10c2.5-1 5.5-1 8-0.5" />
+    <path d="M8.5 13.5c2-0.8 4.5-0.8 7-0.2" />
+    <path d="M9 16.8c1.8-0.6 4-0.6 5.8-0.1" />
+  </svg>
 {:else if platform === "facebook"}
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
     <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" />
@@ -118,6 +125,12 @@
     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
     <path d="M14 2v6h6" />
     <rect x="8" y="12" width="8" height="6" rx="1" />
+  </svg>
+{:else if platform === "studocu"}
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <path d="M14 2v6h6" />
+    <path d="M9 13h6M9 17h6" />
   </svg>
 {:else if platform === "generic"}
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

@@ -29,7 +29,7 @@
     onDownload: (label: string | null) => void;
   } = $props();
 
-  const IMAGE_FORMATS = ["jpg", "jpeg", "png", "webp"];
+  const IMAGE_FORMATS = ["jpg", "jpeg", "png", "webp", "gif"];
 
   let photos = $derived(qualities.filter((q) => IMAGE_FORMATS.includes(q.format)));
   let videoOptions = $derived(

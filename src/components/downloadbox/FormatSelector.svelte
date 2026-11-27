@@ -158,6 +158,11 @@
     {$t('downloadbox.formats_playlist_note')}
   </div>
 {:else if isYtdlpPlatform(platform)}
+  {#if platform === "spotify"}
+    <div class="formats-playlist-note">
+      {$t('downloadbox.spotify_preview_note')}
+    </div>
+  {/if}
   <button
     class="button formats-toggle-btn"
     onclick={onLoadFormats}

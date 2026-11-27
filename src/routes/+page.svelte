@@ -785,6 +785,13 @@
       // Regra é conveniência: se falhar, o download segue com as escolhas manuais.
     }
 
+    // Spotify picks its artifact by `quality` ("30s preview" / "cover art"),
+    // not by `format_id` like the other native downloaders — pass the picked
+    // format through so choosing "cover art" really downloads the cover
+    // instead of silently falling back to the preview.
+    const qualityForDownload =
+      platform === "spotify" && selectedFormatId ? selectedFormatId : ruleQuality;
+
     // B39: comparar com o que esta URL era da última vez, antes de sobrescrever.
     // Depois do download é tarde: o arquivo antigo já foi.
     const snapshot = {
@@ -814,7 +821,7 @@
         url: currentUrl,
         outputDir,
         downloadMode: downloadMode === "auto" ? null : downloadMode,
-        quality: ruleQuality,
+        quality: qualityForDownload,
         formatId: selectedFormatId,
         referer: referer.trim() || null,
         cookieSlug: selectedCookieSlug,
@@ -1205,7 +1212,7 @@
                 onPresetMusic={presetMusic}
               />
               <MediaPreview bind:mediaPreview bind:imageLoading={previewImageLoading} />
-              {#if mediaPreview && (mediaPreview.media_type === "photo" || mediaPreview.media_type === "carousel")}
+              {#if mediaPreview && (mediaPreview.media_type === "photo" || mediaPreview.media_type === "carousel" || mediaPreview.media_type === "gif")}
                 <PhotoList qualities={mediaPreview.qualities} onDownload={downloadPhotoOption} />
               {/if}
               {#if mediaPreview && mediaPreview.media_type === "video"}
@@ -1307,7 +1314,7 @@
                     <div class="options-content">
                       {#if !docFormats}
                         <DownloadModeSelector bind:downloadMode onChange={() => { selectedFormatId = null; }} />
-                        {#if downloadMode !== "audio"}
+                        {#if downloadMode !== "audio" && downloadboxState.info.platform !== "spotify"}
                           <QualityPicker bind:selectedQuality {selectedFormatId} {availableHeights} {hasAudioOnly} />
                         {/if}
                       {/if}

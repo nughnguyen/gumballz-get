@@ -11,6 +11,8 @@ pub mod p2p_words;
 pub mod pinterest;
 pub mod reddit;
 pub mod scribd;
+pub mod spotify;
+pub mod studocu;
 pub mod threads;
 pub mod tiktok;
 pub mod traits;
@@ -30,6 +32,8 @@ pub use p2p::P2pDownloader;
 pub use pinterest::PinterestDownloader;
 pub use reddit::RedditDownloader;
 pub use scribd::ScribdDownloader;
+pub use spotify::SpotifyDownloader;
+pub use studocu::StudocuDownloader;
 pub use threads::ThreadsDownloader;
 pub use tiktok::TikTokDownloader;
 pub use traits::PlatformDownloader;
@@ -83,6 +87,8 @@ pub enum Platform {
     Vimeo,
     Udemy,
     Bilibili,
+    Spotify,
+    Studocu,
     Other(String),
 }
 
@@ -103,6 +109,8 @@ impl fmt::Display for Platform {
             Platform::Vimeo => "vimeo",
             Platform::Udemy => "udemy",
             Platform::Bilibili => "bilibili",
+            Platform::Spotify => "spotify",
+            Platform::Studocu => "studocu",
             Platform::Other(ref name) => name.as_str(),
         };
         write!(f, "{}", name)
@@ -128,6 +136,8 @@ impl FromStr for Platform {
             "vimeo" => Ok(Platform::Vimeo),
             "udemy" => Ok(Platform::Udemy),
             "bilibili" | "b站" => Ok(Platform::Bilibili),
+            "spotify" => Ok(Platform::Spotify),
+            "studocu" => Ok(Platform::Studocu),
             _ => Err(format!("Unknown platform: {}", s)),
         }
     }
@@ -184,6 +194,22 @@ impl Platform {
             Some(Platform::Udemy)
         } else if matches("bilibili.com") || matches("bilibili.tv") || host == "b23.tv" {
             Some(Platform::Bilibili)
+        } else if host == "spotify.link"
+            || (matches("open.spotify.com")
+                && parsed
+                    .path_segments()
+                    .map(|s| s.any(|seg| seg == "track"))
+                    .unwrap_or(false))
+        {
+            // Only track links: albums / playlists / artists stay generic,
+            // the Spotify downloader handles tracks only.
+            Some(Platform::Spotify)
+        } else if matches("soundcloud.com") {
+            // yt-dlp-only host: resolved to GenericYtdlpDownloader via the
+            // registry (its can_handle accepts any http(s) URL). Verified
+            // 2026-11-27 with yt-dlp 2026.11.23: public track probe +
+            // full audio download work with no login and no impersonation.
+            Some(Platform::Other("soundcloud".to_string()))
         } else if matches("kiwify.com.br") {
             Some(Platform::Other("kiwify".to_string()))
         } else if matches("gumroad.com") {
@@ -216,6 +242,12 @@ impl Platform {
             Some(Platform::Other("youku".to_string()))
         } else if matches("scribd.com") {
             Some(Platform::Other("scribd".to_string()))
+        } else if matches("studocu.com")
+            || matches("studocu.vn")
+            || matches("studocu.id")
+            || matches("studeersnel.nl")
+        {
+            Some(Platform::Studocu)
         } else if host == "docs.google.com" && crate::core::tools::gdocs::parse(url_str).is_some() {
             Some(Platform::Other("gdocs".to_string()))
         } else if is_direct_file_url(url_str) {
@@ -241,6 +273,8 @@ impl Platform {
             Platform::Vimeo,
             Platform::Udemy,
             Platform::Bilibili,
+            Platform::Spotify,
+            Platform::Studocu,
         ]
     }
 }

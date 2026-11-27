@@ -64,6 +64,7 @@ pub mod sponsorblock;
 pub mod srt_translate;
 pub mod startup;
 pub mod sticker;
+pub mod studocu;
 pub mod subtitle;
 pub mod sysclean;
 pub mod tiktok;

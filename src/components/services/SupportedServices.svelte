@@ -28,6 +28,7 @@
     "Bluesky", "Hotmart", "Telegram", "Bilibili",
     "Douyin (抖音)", "Xiaohongshu (小红书)", "Kuaishou (快手)",
     "Youku (优酷)", "Torrent",
+    "Spotify", "SoundCloud", "Studocu",
   ];
 
   const YT_DLP_SITES_URL = "https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md";

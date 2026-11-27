@@ -44,8 +44,11 @@ pub fn parse_url(url_str: &str) -> Option<ParsedUrl> {
         Platform::Vimeo => parse_vimeo(&segments),
         Platform::Udemy => parse_udemy(&segments),
         Platform::Bilibili => parse_bilibili(&segments),
+        Platform::Spotify => parse_spotify(&segments),
+        Platform::Studocu => parse_studocu(&segments),
         Platform::Other(ref name) => match name.as_str() {
             "douyin" => parse_douyin(&segments),
+            "soundcloud" => parse_soundcloud(&segments),
             "tencentvideo" => parse_tencent(&segments),
             "xiaohongshu" => parse_xiaohongshu(&segments),
             "gdocs" => {
@@ -269,6 +272,14 @@ fn parse_pinterest(segments: &[&str]) -> (Option<String>, ParsedContentType) {
         return (code, ParsedContentType::Unknown);
     }
 
+    // pin.it short links: the whole path is the short code
+    // (e.g. pin.it/2u3CBgh). A single-segment pinterest.com path is a
+    // profile name; either way the segment is the usable identifier.
+    if segments.len() == 1 {
+        let code = segments[0].to_string();
+        return (Some(code), ParsedContentType::Unknown);
+    }
+
     (None, ParsedContentType::Unknown)
 }
 
@@ -312,6 +323,23 @@ fn parse_bilibili(segments: &[&str]) -> (Option<String>, ParsedContentType) {
     (None, ParsedContentType::Unknown)
 }
 
+fn parse_spotify(segments: &[&str]) -> (Option<String>, ParsedContentType) {
+    if let Some(i) = segments.iter().position(|s| *s == "track") {
+        let id = segments.get(i + 1).map(|s| s.to_string());
+        return (id, ParsedContentType::Audio);
+    }
+    (None, ParsedContentType::Unknown)
+}
+
+fn parse_studocu(segments: &[&str]) -> (Option<String>, ParsedContentType) {
+    // /{locale}/document/{school}/{course}/{slug}/{numeric-id}
+    let id = segments
+        .last()
+        .filter(|s| !s.is_empty() && s.chars().all(|c| c.is_ascii_digit()))
+        .map(|s| s.to_string());
+    (id, ParsedContentType::Post)
+}
+
 fn parse_telegram(segments: &[&str]) -> (Option<String>, ParsedContentType) {
     if segments.len() >= 2 {
         let channel = segments[0].to_string();
@@ -340,6 +368,23 @@ fn parse_douyin(segments: &[&str]) -> (Option<String>, ParsedContentType) {
         return (Some(segments[0].to_string()), ParsedContentType::Video);
     }
     (None, ParsedContentType::Video)
+}
+
+fn parse_soundcloud(segments: &[&str]) -> (Option<String>, ParsedContentType) {
+    // /<artist>/<track> is a track; /<artist>/sets/<name> is a set/playlist.
+    if segments.len() >= 3 && segments[1] == "sets" {
+        return (
+            Some(segments[2].to_string()),
+            ParsedContentType::Playlist,
+        );
+    }
+    if segments.len() >= 2 {
+        return (
+            Some(segments[1].to_string()),
+            ParsedContentType::Audio,
+        );
+    }
+    (None, ParsedContentType::Audio)
 }
 
 fn parse_tencent(segments: &[&str]) -> (Option<String>, ParsedContentType) {

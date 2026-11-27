@@ -4337,6 +4337,7 @@
     "formats_presets_label": "フォーマットプリセット",
     "formats_merge_note": "FFmpeg が利用可能な場合、動画形式 (V) は自動的に音声 (A) と結合されます。",
     "formats_playlist_note": "動画ごとのフォーマット選択はプレイリストには適用されません。上の「品質」設定がすべての動画に適用されます。",
+    "spotify_preview_note": "Spotify では 30 秒のプレビュー音源のみ利用でき、フル楽曲はダウンロードできません。",
     "referer_label": "リファラー（任意）",
     "referer_placeholder": "https://example.com",
     "timerange_label": "一部だけダウンロード（任意）",

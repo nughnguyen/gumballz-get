@@ -271,6 +271,12 @@ pub fn run() {
         gumballz_core::platforms::ScribdDownloader::new(),
     ));
     registry.register(Arc::new(
+        gumballz_core::platforms::StudocuDownloader::new(),
+    ));
+    registry.register(Arc::new(
+        gumballz_core::platforms::SpotifyDownloader::new(),
+    ));
+    registry.register(Arc::new(
         gumballz_core::platforms::DirectFileDownloader::new(),
     ));
     registry.register(Arc::new(

@@ -4357,6 +4357,7 @@
     "formats_presets_label": "Mẫu định dạng",
     "formats_merge_note": "Định dạng video (V) sẽ tự động gộp với âm thanh (A) nếu có FFmpeg.",
     "formats_playlist_note": "Bộ chọn định dạng theo từng video không áp dụng cho danh sách phát. Tùy chọn Chất lượng ở trên áp dụng cho mọi video.",
+    "spotify_preview_note": "Spotify chỉ cho tải bản nghe thử 30 giây của bài hát — không tải được toàn bộ bài.",
     "referer_label": "Referer (tùy chọn)",
     "referer_placeholder": "https://example.com",
     "timerange_label": "Chỉ tải một đoạn (tùy chọn)",

@@ -24,6 +24,9 @@ export const PLATFORM_DISPLAY_NAMES: Record<string, string> = {
   p2p: "P2P",
   gdocs: "Google Docs / Slides",
   scribd: "Scribd",
+  studocu: "Studocu",
+  spotify: "Spotify",
+  soundcloud: "SoundCloud",
   direct_file: "Direct file",
 };
 

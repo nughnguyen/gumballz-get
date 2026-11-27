@@ -5,6 +5,8 @@ pub use gumballz_core::platforms::DirectFileDownloader;
 pub use gumballz_core::platforms::DouyinDownloader;
 pub use gumballz_core::platforms::GdocsDownloader;
 pub use gumballz_core::platforms::ScribdDownloader;
+pub use gumballz_core::platforms::SpotifyDownloader;
+pub use gumballz_core::platforms::StudocuDownloader;
 pub use gumballz_core::platforms::GenericYtdlpDownloader;
 pub use gumballz_core::platforms::InstagramDownloader;
 pub use gumballz_core::platforms::P2pDownloader;

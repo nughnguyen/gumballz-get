@@ -4337,6 +4337,7 @@
     "formats_presets_label": "Préréglage du format",
     "formats_merge_note": "Les formats vidéo (V) seront automatiquement fusionnés avec l'audio (A) si FFmpeg est disponible.",
     "formats_playlist_note": "Le sélecteur de format par vidéo ne s'applique pas aux playlists. L'option Qualité ci-dessus s'applique à chaque vidéo.",
+    "spotify_preview_note": "Spotify ne propose qu'un aperçu de 30 secondes du morceau — la chanson complète ne peut pas être téléchargée.",
     "referer_label": "Referer (optionnel)",
     "referer_placeholder": "https://example.com",
     "timerange_label": "Télécharger seulement une section (facultatif)",

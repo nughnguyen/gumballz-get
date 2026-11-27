@@ -4337,6 +4337,7 @@
     "formats_presets_label": "Preset de formato",
     "formats_merge_note": "Formatos de vídeo (V) serão automaticamente combinados com áudio (A) se o FFmpeg estiver disponível.",
     "formats_playlist_note": "A seleção de formato por vídeo não se aplica a playlists. A opção Qualidade acima vale para cada vídeo.",
+    "spotify_preview_note": "O Spotify só oferece uma prévia de 30 segundos da faixa — a música completa não pode ser transferida.",
     "referer_label": "Referer (opcional)",
     "referer_placeholder": "https://exemplo.com",
     "timerange_label": "Baixar só um trecho (opcional)",

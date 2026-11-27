@@ -10,7 +10,7 @@ use gumballz_core::models::settings::ProxySettings;
 use gumballz_core::platforms::{
     BilibiliDownloader, BlueskyDownloader, DirectFileDownloader, DouyinDownloader, GdocsDownloader,
     GenericYtdlpDownloader, InstagramDownloader, P2pDownloader, PinterestDownloader,
-    PlatformDownloader, RedditDownloader, ThreadsDownloader, TikTokDownloader,
+    PlatformDownloader, RedditDownloader, SpotifyDownloader, ThreadsDownloader, TikTokDownloader,
     TwitchClipsDownloader, TwitterDownloader, VimeoDownloader, YouTubeDownloader,
 };
 use tokio_util::sync::CancellationToken;
@@ -94,6 +94,7 @@ pub fn core_platform_registry() -> PlatformRegistry {
     registry.register(Arc::new(DouyinDownloader::new()));
     registry.register(Arc::new(P2pDownloader::new()));
     registry.register(Arc::new(GdocsDownloader::new()));
+    registry.register(Arc::new(SpotifyDownloader::new()));
     registry.register(Arc::new(DirectFileDownloader::new()));
     registry.register(Arc::new(GenericYtdlpDownloader::new()));
     registry

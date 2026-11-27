@@ -4337,6 +4337,7 @@
     "formats_presets_label": "Preset del formato",
     "formats_merge_note": "I formati video (V) verranno automaticamente uniti con l'audio (A) se FFmpeg è disponibile.",
     "formats_playlist_note": "La selezione del formato per video non si applica alle playlist. L'opzione Qualità sopra vale per ogni video.",
+    "spotify_preview_note": "Spotify offre solo un'anteprima di 30 secondi del brano: il brano completo non può essere scaricato.",
     "referer_label": "Referer (opzionale)",
     "referer_placeholder": "https://example.com",
     "timerange_label": "Scarica solo una parte (opzionale)",

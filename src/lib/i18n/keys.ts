@@ -343,6 +343,7 @@ export type TranslationKeys =
   | 'downloadbox.searching'
   | 'downloadbox.slideshow_video'
   | 'downloadbox.slideshow_video_watermark'
+  | 'downloadbox.spotify_preview_note'
   | 'downloadbox.timerange_end'
   | 'downloadbox.timerange_hint'
   | 'downloadbox.timerange_label'

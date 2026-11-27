@@ -4337,6 +4337,7 @@
     "formats_presets_label": "格式预设",
     "formats_merge_note": "如果 FFmpeg 可用，视频格式 (V) 将自动与音频 (A) 合并。",
     "formats_playlist_note": "单视频格式选择器不适用于播放列表。上方的「质量」选项将应用于每个视频。",
+    "spotify_preview_note": "Spotify 仅提供 30 秒试听片段，无法下载完整歌曲。",
     "referer_label": "Referer（可选）",
     "referer_placeholder": "https://example.com",
     "timerange_label": "仅下载片段（可选）",

@@ -4337,6 +4337,7 @@
     "formats_presets_label": "ຮູບແບບສຳເລັດຮູບ",
     "formats_merge_note": "ຮູບແບບວິດີໂອ (V) ຈະຖືກລວມກັບສຽງ (A) ອັດຕະໂນມັດ ຖ້າມີ FFmpeg.",
     "formats_playlist_note": "ການເລືອກຮູບແບບແຍກແຕ່ລະວິດີໂອໃຊ້ບໍ່ໄດ້ກັບເພລລິສ. ຕົວເລືອກຄຸນນະພາບຂ້າງເທິງຈະນຳໃຊ້ກັບທຸກວິດີໂອ.",
+    "spotify_preview_note": "Spotify ໃຫ້ດາວໂຫລດໄດ້ແຕ່ຕົວຢ່າງຟັງ 30 ວິນາທີຂອງເພງເທົ່ານັ້ນ — ບໍ່ສາມາດດາວໂຫລດເພງເຕັມໄດ້.",
     "referer_label": "Referer (ບໍ່ບັງຄັບ)",
     "referer_placeholder": "https://example.com",
     "timerange_label": "ດາວໂຫຼດສະເພາະບາງຊ່ວງ (ບໍ່ບັງຄັບ)",

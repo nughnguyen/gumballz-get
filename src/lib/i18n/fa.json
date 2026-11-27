@@ -4337,6 +4337,7 @@
     "formats_presets_label": "Format preset",
     "formats_merge_note": "Video formats (V) will be automatically merged with audio (A) if FFmpeg is available.",
     "formats_playlist_note": "Per-video format picker doesn't apply to playlists. The Quality option above applies to every video.",
+    "spotify_preview_note": "اسپاتیفای فقط پیش‌نمایش ۳۰ ثانیه‌ای آهنگ را ارائه می‌دهد — آهنگ کامل قابل دانلود نیست.",
     "referer_label": "Referer (optional)",
     "referer_placeholder": "https://example.com",
     "timerange_label": "Download only a section (optional)",
