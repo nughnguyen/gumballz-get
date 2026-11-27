@@ -26,7 +26,7 @@ fn require_plugin_installed(
     if plugin_available(manager, plugin_id) {
         Ok(())
     } else {
-        Err("Plugin chưa được cài đặt. Hãy tải về từ trang Công cụ.".into())
+        Err("Plugin is not installed. Download it from the Tools page.".into())
     }
 }
 

@@ -442,7 +442,7 @@ async fn swap_staged_into_place(
         let _ = std::fs::remove_dir_all(&backup_dir);
         if let Err(e) = std::fs::rename(&dest_dir, &backup_dir) {
             cleanup(staging);
-            return Err(format!("Không thể thay thế bản cài cũ: {}", e));
+            return Err(format!("Failed to replace the old installation: {}", e));
         }
         moved_aside = true;
     }
@@ -451,7 +451,7 @@ async fn swap_staged_into_place(
             let _ = std::fs::rename(&backup_dir, &dest_dir);
         }
         cleanup(staging);
-        return Err(format!("Không thể cài đặt plugin: {}", e));
+        return Err(format!("Failed to install the plugin: {}", e));
     }
     let _ = std::fs::remove_dir_all(&backup_dir);
 
@@ -468,7 +468,7 @@ async fn swap_staged_into_place(
         // The files are in place but the registry write failed: roll the
         // install back so `installed.json` and the disk never disagree.
         let _ = std::fs::remove_dir_all(&dest_dir);
-        return Err(format!("Không ghi được danh sách plugin đã cài: {}", e));
+        return Err(format!("Failed to write the installed plugin list: {}", e));
     }
 
     Ok(version)
@@ -503,7 +503,7 @@ async fn install_from_zip_file(
         let _ = std::fs::remove_dir_all(staging);
     };
     if let Err(e) = std::fs::create_dir_all(&staging) {
-        return Err(format!("Không tạo được thư mục tạm: {}", e));
+        return Err(format!("Failed to create the temporary directory: {}", e));
     }
 
     let manifest = match extract_and_validate_zip(zip_path, &staging, plugin_id) {
@@ -527,9 +527,9 @@ fn extract_and_validate_zip(
     plugin_id: &str,
 ) -> Result<PluginManifest, String> {
     let file = std::fs::File::open(zip_path)
-        .map_err(|e| format!("Không mở được tệp .zip: {}", e))?;
+        .map_err(|e| format!("Failed to open the .zip file: {}", e))?;
     let mut archive = zip::ZipArchive::new(file)
-        .map_err(|e| format!("Tệp .zip không hợp lệ: {}", e))?;
+        .map_err(|e| format!("Invalid .zip file: {}", e))?;
 
     let mut extracted_bytes: u64 = 0;
     for i in 0..archive.len() {
@@ -538,17 +538,17 @@ fn extract_and_validate_zip(
         // extraction outside the staging dir.
         if let Some(mode) = entry.unix_mode() {
             if mode & 0o170000 == 0o120000 {
-                return Err("Tệp .zip chứa liên kết tượng trưng (symlink), đã từ chối".into());
+                return Err("The .zip file contains a symlink, rejected".into());
             }
         }
         extracted_bytes = extracted_bytes.saturating_add(entry.size());
         if extracted_bytes > MAX_PLUGIN_EXTRACTED_BYTES {
-            return Err("Tệp .zip giải nén vượt quá giới hạn cho phép".into());
+            return Err("The extracted .zip exceeds the allowed limit".into());
         }
         let mangled = entry.mangled_name();
         let outpath = staging.join(&mangled);
         if !outpath.starts_with(staging) {
-            return Err("Tệp .zip chứa đường dẫn không hợp lệ, đã từ chối".into());
+            return Err("The .zip file contains an invalid path, rejected".into());
         }
         if entry.is_dir() {
             std::fs::create_dir_all(&outpath).map_err(|e| e.to_string())?;
@@ -563,16 +563,16 @@ fn extract_and_validate_zip(
 
     let manifest_path = staging.join("plugin.json");
     let manifest_str = std::fs::read_to_string(&manifest_path).map_err(|_| {
-        "Gói plugin thiếu plugin.json ở thư mục gốc của tệp .zip".to_string()
+        "Plugin package is missing plugin.json at the root of the .zip file".to_string()
     })?;
     let manifest: PluginManifest = serde_json::from_str(&manifest_str)
-        .map_err(|e| format!("plugin.json không hợp lệ: {}", e))?;
+        .map_err(|e| format!("Invalid plugin.json: {}", e))?;
     if let Err(e) = validate_plugin_id(&manifest.id) {
-        return Err(format!("plugin.json có id không hợp lệ: {}", e));
+        return Err(format!("plugin.json has an invalid id: {}", e));
     }
     if manifest.id != plugin_id {
         return Err(format!(
-            "plugin.json có id '{}' nhưng đang cài '{}'",
+            "plugin.json has id '{}' but installing '{}'",
             manifest.id, plugin_id
         ));
     }
@@ -584,21 +584,21 @@ fn extract_and_validate_zip(
 /// user picked before running the shared install pipeline.
 fn read_plugin_id_from_zip(zip_path: &std::path::Path) -> Result<String, String> {
     let file = std::fs::File::open(zip_path)
-        .map_err(|e| format!("Không mở được tệp .zip: {}", e))?;
+        .map_err(|e| format!("Failed to open the .zip file: {}", e))?;
     let mut archive = zip::ZipArchive::new(file)
-        .map_err(|e| format!("Tệp .zip không hợp lệ: {}", e))?;
+        .map_err(|e| format!("Invalid .zip file: {}", e))?;
     let mut entry = archive
         .by_name("plugin.json")
-        .map_err(|_| "Gói plugin thiếu plugin.json ở thư mục gốc của tệp .zip".to_string())?;
+        .map_err(|_| "Plugin package is missing plugin.json at the root of the .zip file".to_string())?;
     let mut content = String::new();
     use std::io::Read as _;
     entry
         .read_to_string(&mut content)
-        .map_err(|e| format!("Không đọc được plugin.json: {}", e))?;
+        .map_err(|e| format!("Failed to read plugin.json: {}", e))?;
     let manifest: PluginManifest = serde_json::from_str(&content)
-        .map_err(|e| format!("plugin.json không hợp lệ: {}", e))?;
+        .map_err(|e| format!("Invalid plugin.json: {}", e))?;
     validate_plugin_id(&manifest.id)
-        .map_err(|e| format!("plugin.json có id không hợp lệ: {}", e))?;
+        .map_err(|e| format!("plugin.json has an invalid id: {}", e))?;
     Ok(manifest.id)
 }
 
@@ -614,13 +614,13 @@ async fn stream_download_to_file(
         .get(url)
         .send()
         .await
-        .map_err(|e| format!("NetworkUnreachable|Không tải được plugin: {}", e))?
+        .map_err(|e| format!("NetworkUnreachable|Failed to download the plugin: {}", e))?
         .error_for_status()
-        .map_err(|e| format!("Không tải được plugin: {}", e))?;
+        .map_err(|e| format!("Failed to download the plugin: {}", e))?;
     if let Some(declared) = resp.content_length() {
         if declared > size_cap {
             return Err(format!(
-                "Bản tải về lớn hơn giới hạn cho phép ({} byte)",
+                "The download exceeds the allowed limit ({} byte)",
                 size_cap
             ));
         }
@@ -632,11 +632,11 @@ async fn stream_download_to_file(
     let mut downloaded: u64 = 0;
     let mut stream = resp.bytes_stream();
     while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| format!("NetworkUnreachable|Lỗi khi tải về: {}", e))?;
+        let chunk = chunk.map_err(|e| format!("NetworkUnreachable|Download error: {}", e))?;
         downloaded = downloaded.saturating_add(chunk.len() as u64);
         if downloaded > size_cap {
             return Err(format!(
-                "Bản tải về lớn hơn giới hạn cho phép ({} byte)",
+                "The download exceeds the allowed limit ({} byte)",
                 size_cap
             ));
         }
@@ -657,7 +657,7 @@ pub async fn install_plugin_zip_from_repo(
     validate_plugin_id(&plugin_id).map_err(|e| e.to_string())?;
     let suffix = platform_artifact_suffix();
     if suffix == "unknown" {
-        return Err("Nền tảng này chưa được hỗ trợ".to_string());
+        return Err("This platform is not supported".to_string());
     }
     // Fail closed on a malformed registry checksum: a checksum that is not
     // 64 hex chars can never match a real download, so refuse upfront
@@ -668,7 +668,7 @@ pub async fn install_plugin_zip_from_repo(
             let is_hex = normalized.len() == 64
                 && normalized.chars().all(|c| c.is_ascii_hexdigit());
             if !is_hex {
-                return Err("Checksum SHA-256 trong registry không hợp lệ".into());
+                return Err("Invalid SHA-256 checksum in the registry".into());
             }
             Some(normalized)
         }
@@ -689,18 +689,18 @@ pub async fn install_plugin_zip_from_repo(
         .get(&api_url)
         .send()
         .await
-        .map_err(|e| format!("NetworkUnreachable|Không tải được thông tin bản phát hành: {}", e))?
+        .map_err(|e| format!("NetworkUnreachable|Failed to download the release information: {}", e))?
         .error_for_status()
-        .map_err(|e| format!("Không tải được thông tin bản phát hành: {}", e))?
+        .map_err(|e| format!("Failed to download the release information: {}", e))?
         .json()
         .await
-        .map_err(|e| format!("Phản hồi bản phát hành không hợp lệ: {}", e))?;
+        .map_err(|e| format!("Invalid release response: {}", e))?;
 
     let asset = release
         .assets
         .iter()
         .find(|a| a.name.contains(suffix) && a.name.ends_with(".zip"))
-        .ok_or_else(|| format!("Không có bản dựng cho {}", suffix))?;
+        .ok_or_else(|| format!("No build available for {}", suffix))?;
 
     // Size cap: the registry size when known (the download must not exceed
     // it), the asset size GitHub reports as a fallback, else 500 MB.
@@ -745,7 +745,7 @@ pub async fn install_plugin_zip_from_repo(
         if actual_sha256 != *expected {
             let _ = std::fs::remove_file(&download_path);
             return Err(
-                "Checksum SHA-256 của bản tải về không khớp với registry. Đã hủy cài đặt."
+                "The downloaded file's SHA-256 checksum does not match the registry. Installation aborted."
                     .into(),
             );
         }
@@ -829,7 +829,7 @@ pub async fn install_plugin_from_file(
 ) -> Result<String, String> {
     let zip_path = std::path::PathBuf::from(&path);
     if !zip_path.is_file() {
-        return Err("Không tìm thấy tệp plugin. Hãy chọn lại tệp .zip.".into());
+        return Err("Plugin file not found. Please select a .zip file again.".into());
     }
     let is_zip = zip_path
         .extension()
@@ -837,11 +837,11 @@ pub async fn install_plugin_from_file(
         .map(|ext| ext.eq_ignore_ascii_case("zip"))
         .unwrap_or(false);
     if !is_zip {
-        return Err("Tệp plugin phải có định dạng .zip".into());
+        return Err("The plugin file must be a .zip file".into());
     }
     if let Ok(metadata) = std::fs::metadata(&zip_path) {
         if metadata.len() > MAX_PLUGIN_ZIP_BYTES {
-            return Err("Tệp plugin vượt quá giới hạn cho phép (500 MB)".into());
+            return Err("The plugin file exceeds the allowed limit (500 MB)".into());
         }
     }
     let plugin_id = read_plugin_id_from_zip(&zip_path)?;
@@ -908,15 +908,15 @@ fn read_bundled_manifest(
 ) -> Result<PluginManifest, String> {
     let manifest_path = bundled_dir.join("plugin.json");
     let manifest_str = std::fs::read_to_string(&manifest_path)
-        .map_err(|_| format!("Gói plugin đi kèm '{plugin_id}' thiếu plugin.json"))?;
+        .map_err(|_| format!("The bundled plugin package '{plugin_id}' is missing plugin.json"))?;
     let manifest: PluginManifest = serde_json::from_str(&manifest_str)
-        .map_err(|e| format!("plugin.json không hợp lệ: {}", e))?;
+        .map_err(|e| format!("Invalid plugin.json: {}", e))?;
     if let Err(e) = validate_plugin_id(&manifest.id) {
-        return Err(format!("plugin.json có id không hợp lệ: {}", e));
+        return Err(format!("plugin.json has an invalid id: {}", e));
     }
     if manifest.id != plugin_id {
         return Err(format!(
-            "plugin.json có id '{}' nhưng đang cài '{}'",
+            "plugin.json has id '{}' but installing '{}'",
             manifest.id, plugin_id
         ));
     }
@@ -967,13 +967,13 @@ pub async fn install_plugin_from_bundle(
     // filesystem — the id becomes a resource path below.
     if !BUNDLED_PLUGIN_IDS.contains(&plugin_id.as_str()) {
         return Err(format!(
-            "Plugin '{plugin_id}' không có trong gói đi kèm ứng dụng"
+            "Plugin '{plugin_id}' is not included in the app bundle"
         ));
     }
     validate_plugin_id(&plugin_id).map_err(|e| e.to_string())?;
     let bundled_dir = bundled_plugin_dir(&app, &plugin_id).ok_or_else(|| {
         format!(
-            "Bản dựng này không kèm gói plugin '{plugin_id}' (bản portable .exe không có thư mục resources). Hãy cài plugin từ kho plugin hoặc từ tệp .zip."
+            "This build does not include the bundled plugin package '{plugin_id}' (the portable .exe build has no resources folder). Install the plugin from the plugin registry or from a .zip file."
         )
     })?;
     let manifest = read_bundled_manifest(&bundled_dir, &plugin_id)?;
@@ -981,13 +981,13 @@ pub async fn install_plugin_from_bundle(
     let native_lib = match native_libs.len() {
         0 => {
             return Err(format!(
-                "Gói plugin đi kèm '{plugin_id}' thiếu thư viện cho nền tảng này"
+                "The bundled plugin package '{plugin_id}' is missing the library for this platform"
             ));
         }
         1 => native_libs.into_iter().next().expect("exactly one lib"),
         _ => {
             return Err(format!(
-                "Gói plugin đi kèm '{plugin_id}' chứa nhiều hơn một thư viện, đã từ chối"
+                "The bundled plugin package '{plugin_id}' contains more than one library, rejected"
             ));
         }
     };
@@ -1007,7 +1007,7 @@ pub async fn install_plugin_from_bundle(
         let _ = std::fs::remove_dir_all(staging);
     };
     if let Err(e) = std::fs::create_dir_all(&staging) {
-        return Err(format!("Không tạo được thư mục tạm: {}", e));
+        return Err(format!("Failed to create the temporary directory: {}", e));
     }
 
     // Copy exactly the two payload files — plugin.json + the single native
@@ -1020,20 +1020,20 @@ pub async fn install_plugin_from_bundle(
         if metadata.file_type().is_symlink() {
             cleanup(&staging);
             return Err(format!(
-                "Gói plugin đi kèm '{plugin_id}' chứa liên kết tượng trưng (symlink), đã từ chối"
+                "The bundled plugin package '{plugin_id}' contains a symlink, rejected"
             ));
         }
         copied_bytes = copied_bytes.saturating_add(metadata.len());
         if copied_bytes > MAX_BUNDLED_PLUGIN_BYTES {
             cleanup(&staging);
-            return Err("Gói plugin đi kèm vượt quá giới hạn cho phép (100 MB)".into());
+            return Err("The bundled plugin package exceeds the allowed limit (100 MB)".into());
         }
         let file_name = src.file_name().ok_or_else(|| {
-            format!("Gói plugin đi kèm '{plugin_id}' có tên tệp không hợp lệ")
+            format!("The bundled plugin package '{plugin_id}' has an invalid file name")
         })?;
         if let Err(e) = std::fs::copy(&src, staging.join(file_name)) {
             cleanup(&staging);
-            return Err(format!("Không sao chép được gói plugin đi kèm: {}", e));
+            return Err(format!("Failed to copy the bundled plugin package: {}", e));
         }
     }
 

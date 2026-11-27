@@ -226,7 +226,7 @@ pub struct AppState {
 pub fn run() {
     tracing_subscriber::fmt::init();
 
-    // Emitido antes do single-instance poder sair em silencio: ver
+    // Emitted before single-instance can exit silently: see
     // core::portable::startup_banner.
     tracing::info!(
         "{}",
@@ -346,76 +346,77 @@ pub fn run() {
             None,
         ))
         .setup(|app| {
-            // A janela principal e criada aqui, e nao pelo `tauri.conf.json`
-            // (`"create": false`), porque so daqui da para passar
-            // `.data_directory(...)` ao WebView2. O Tauri resolve esse caminho
-            // para `LocalData/{identifier}` e cria o diretorio *antes* do setup
-            // rodar, entao a variavel de ambiente que o `main.rs` define nunca
-            // chega a ser lida — que e a causa da issue #195, o modo portatil
-            // deixando uma pasta fora do diretorio do app.
+            // The main window is created here, not by `tauri.conf.json`
+            // (`"create": false`), because only from here can
+            // `.data_directory(...)` be passed to WebView2. Tauri resolves
+            // that path to `LocalData/{identifier}` and creates the directory
+            // *before* setup runs, so the environment variable that `main.rs`
+            // sets is never read — which is the cause of issue #195, portable
+            // mode leaving a folder outside the app directory.
             {
-                // `mut` so e usado no ramo Windows abaixo; sem o cfg_attr isto
-                // vira warning novo em macOS e Linux e reprova o portao de clippy.
+                // `mut` is only used in the Windows branch below; without the
+                // cfg_attr this becomes a new warning on macOS and Linux and
+                // fails the clippy gate.
                 #[cfg_attr(not(any(windows, target_os = "linux")), allow(unused_mut))]
                 let mut builder = tauri::WebviewWindowBuilder::from_config(
                     app.handle(),
                     &app.config().app.windows[0],
                 )?;
 
-                // Nao e so Windows. No Linux o wry usa este caminho para
-                // `base_data_directory`, `base_cache_directory` e os cookies do
-                // WebKitGTK; sem ele o modo portatil deixa
-                // `XDG_DATA_HOME/com.gumballz.get` no perfil do usuario — a
-                // mesma #209, fora do Windows. Foi o smoke test do B55 que
-                // pegou isso, na primeira vez que rodou.
+                // Not Windows only. On Linux wry uses this path for
+                // `base_data_directory`, `base_cache_directory` and the
+                // WebKitGTK cookies; without it portable mode leaves
+                // `XDG_DATA_HOME/com.gumballz.get` in the user profile — the
+                // same #209, outside Windows. The B55 smoke test caught this
+                // the first time it ran.
                 //
-                // macOS fica de fora porque o wry nao le `data_directory` no
-                // WKWebView: incluir daria a impressao de cobrir um caso que
-                // nao esta coberto.
+                // macOS is left out because wry does not read `data_directory`
+                // in WKWebView: including it would give the impression of
+                // covering a case that is not covered.
                 #[cfg(any(windows, target_os = "linux"))]
                 if let Some(webview_dir) = core::portable::portable_webview_dir_from_env() {
                     if let Err(e) = std::fs::create_dir_all(&webview_dir) {
                         tracing::warn!(
-                            "[portable] nao foi possivel criar {}: {} — o WebView2 vai usar o diretorio padrao",
+                            "[portable] could not create {}: {} — WebView2 will use the default directory",
                             webview_dir.display(),
                             e
                         );
                     } else {
                         tracing::info!(
-                            "[portable] WebView2 apontado para {}",
+                            "[portable] WebView2 pointed at {}",
                             webview_dir.display()
                         );
                         builder = builder.data_directory(webview_dir);
                     }
                 }
 
-                // macOS nao tem para onde apontar: o wry nao le `data_directory`
-                // no WKWebView (nenhuma referencia em `src/wkwebview/`), ao
-                // contrario do webkitgtk, que a usa para base_data_directory,
-                // base_cache_directory e cookies.
+                // macOS has nowhere to point at: wry does not read
+                // `data_directory` in WKWebView (no reference in
+                // `src/wkwebview/`), unlike webkitgtk, which uses it for
+                // base_data_directory, base_cache_directory and cookies.
                 //
-                // Entao o modo portatil nao cumpre o que promete aqui, e dizer
-                // isso e melhor do que deixar o usuario achar que o pendrive nao
-                // deixou rastro. Issue #227.
+                // So portable mode does not deliver what it promises here, and
+                // saying so is better than letting the user think the USB stick
+                // left no trace. Issue #227.
                 #[cfg(target_os = "macos")]
                 if core::portable::portable_webview_dir_from_env().is_some() {
                     tracing::warn!(
-                        "[portable] no macOS o WebView guarda dados em ~/Library mesmo em modo \
-                         portatil — o wry nao permite redirecionar. Ver github.com/nughnguyen/gumballz-get/issues/227"
+                        "[portable] on macOS WebView stores data in ~/Library even in portable \
+                         mode — wry does not allow redirecting it. See github.com/nughnguyen/gumballz-get/issues/227"
                     );
                 }
 
                 builder.build()?;
 
-                // A unica prova de que a janela subiu. O CI compila em todas as
-                // plataformas mas nunca abriu o app: foi assim que a #209 passou
-                // batido. O smoke test do CI casa exatamente esta linha.
+                // The only proof that the window came up. CI compiles on all
+                // platforms but never opened the app: that is how #209 slipped
+                // through. The CI smoke test matches exactly this line.
                 tracing::info!("[startup] main window created");
             }
 
-            // Modo smoke: sobe, prova que a janela existe, e sai sozinho com 0.
-            // So existe para o CI conseguir responder "abre?", que e a pergunta
-            // que compilar nunca responde.
+            // Smoke mode: starts up, proves the window exists, and exits on
+            // its own with 0. It only exists so CI can answer "does it open?",
+            // the question compiling never answers.
             if let Ok(raw) = std::env::var("GUMBALLZ_SMOKE_EXIT_MS") {
                 if let Ok(ms) = raw.trim().parse::<u64>() {
                     let handle = app.handle().clone();
@@ -608,16 +609,16 @@ pub fn run() {
             {
                 let app_handle = app.handle().clone();
                 gumballz_core::core::log_hook::set_log_sink(std::sync::Arc::new(move |id, line| {
-                    // B33: caixa-preta. Toda linha de log de download passa por
-                    // aqui, e o `record` redige antes de guardar — e o unico
-                    // ponto onde da para capturar o historico sem instrumentar
-                    // cada chamada uma por uma.
+                    // B33: black box. Every download log line passes through
+                    // here, and `record` redacts before storing — it is the
+                    // only point where the history can be captured without
+                    // instrumenting every call one by one.
                     core::flight_recorder::record(line);
                     let should_emit = core::download_log::push_line(id, line);
                     if should_emit {
-                        // A linha vai junto para o card mostrar "a última
-                        // coisa que o yt-dlp disse" sem pedir o log inteiro
-                        // a cada evento.
+                        // The line rides along so the card can show "the last
+                        // thing yt-dlp said" without asking for the whole log
+                        // on every event.
                         let _ = tauri::Emitter::emit(
                             &app_handle,
                             "download-log-update",
@@ -696,11 +697,12 @@ pub fn run() {
             migrate_legacy_omniget_data();
             cleanup_legacy_omniget_artifacts();
 
-            // Cookie Manager: reparticiona `chrome-extension-cookies.txt` legacy em
-            // `cookies/<domain>/_default.txt` (CK-1). Quando o registry já tem
-            // buckets, a migration vira no-op. Após migration bem-sucedida, o
-            // arquivo legacy é deletado — a partir de CK-7b o multi-file é a
-            // única fonte de verdade.
+            // Cookie Manager: repartitions the legacy
+            // `chrome-extension-cookies.txt` into
+            // `cookies/<domain>/_default.txt` (CK-1). When the registry
+            // already has buckets, the migration becomes a no-op. After a
+            // successful migration, the legacy file is deleted — from CK-7b on,
+            // the multi-file layout is the only source of truth.
             if !cookies::storage::has_been_migrated() {
                 match cookies::migrate_legacy_if_needed() {
                     Ok(_) => {
@@ -718,8 +720,9 @@ pub fn run() {
                     Err(err) => tracing::warn!("cookies: legacy migration skipped: {err}"),
                 }
             } else {
-                // Registry já populado — significa migration anterior já rolou; se
-                // o legacy ainda existe (instalação intermediária), remove agora.
+                // Registry already populated — means a previous migration
+                // already ran; if the legacy file still exists (an
+                // intermediate install), remove it now.
                 let legacy = extension_storage::extension_cookie_file_path();
                 if legacy.exists() {
                     if let Err(err) = std::fs::remove_file(&legacy) {
@@ -811,8 +814,9 @@ pub fn run() {
                         .build()
                         .expect("startup runtime");
                     rt.block_on(async {
-                        // Garante o yt-dlp (zipapp quando há Python, senão o
-                        // onefile) antes do primeiro download pedir por ele.
+                        // Ensures yt-dlp is present (zipapp when Python is
+                        // available, otherwise the onefile build) before the
+                        // first download asks for it.
                         if let Err(e) = core::ytdlp::ensure_ytdlp().await {
                             tracing::warn!("yt-dlp not available at startup: {}", e);
                         }
@@ -829,11 +833,12 @@ pub fn run() {
                             core::ytdlp::cleanup_stale_pyinstaller_dirs,
                         )
                         .await;
-                        // O `--update-to` é um bootstrap inteiro do yt-dlp
-                        // mais rede, e trocar o binário com download ativo
-                        // quebra o processo (B2). Espera o app assentar e só
-                        // roda sem yt-dlp em andamento; se a fila está cheia,
-                        // tenta de novo a cada 5 min por até uma hora.
+                        // `--update-to` is a full yt-dlp bootstrap plus
+                        // network, and swapping the binary while a download is
+                        // active breaks the process (B2). Wait for the app to
+                        // settle and only run it with no yt-dlp in progress; if
+                        // the queue is full, retry every 5 min for up to an
+                        // hour.
                         tokio::time::sleep(std::time::Duration::from_secs(45)).await;
                         for _ in 0..12 {
                             let Some(ytdlp) = core::ytdlp::find_ytdlp_cached().await else {
