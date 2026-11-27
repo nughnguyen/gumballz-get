@@ -86,7 +86,9 @@ fn session_file_path() -> anyhow::Result<PathBuf> {
 ///   2. the user signs in on Gumroad's own page and approves the app;
 ///   3. Gumroad redirects to the app's registered redirect URI with `?code=`;
 ///   4. the code is exchanged here for an access token (PKCE + client secret).
-/// The app never sees the user's Gumroad password in this flow.
+/// The password from the app's credentials tab is only used to auto-fill
+/// Gumroad's own login page inside the login window (see
+/// `build_autofill_script`); the app never sends it to any server itself.
 const AUTHORIZE_URL: &str = "https://gumroad.com/oauth/mobile_pre_authorization/new";
 const TOKEN_URL: &str = "https://gumroad.com/oauth/token";
 /// Redirect URI registered for this OAuth client: `http://127.0.0.1` — the
@@ -230,14 +232,65 @@ async fn exchange_code(
     })
 }
 
+/// Builds the initialization script that auto-fills Gumroad's own login
+/// form inside the login webview with the email/password the user typed in
+/// the app's credentials tab. Fill-only: it never submits — the user presses
+/// Gumroad's login button himself.
+///
+/// Selectors (read from Gumroad's own login JS chunk, 2026-11-27): the page
+/// has exactly two inputs — `input[type="email"]` and
+/// `input[autocomplete="current-password"]`. Both ids are dynamic, so they
+/// are never selected by id, and neither input has a `name`. The form is
+/// React/Inertia, so plain `.value =` would not stick: the native value
+/// setter is used, followed by bubbling `input`/`change` events (same trick
+/// as Hotmart's `auth.rs`).
+///
+/// Guards: the script runs on every webview navigation, but returns at once
+/// unless `window.location.hostname === 'gumroad.com'`, and fills only when
+/// both inputs exist — on the consent page (already logged in) there is no
+/// login form, so it silently does nothing. The form renders async, so the
+/// fill retries on an interval until it succeeds once (`filled` flag).
+/// The credentials are JSON-serialized into the script (never raw string
+/// interpolation) and live only as a stack parameter — never logged, stored
+/// or persisted.
+fn build_autofill_script(email: &str, password: &str) -> anyhow::Result<String> {
+    let email_json = serde_json::to_string(email)?;
+    let password_json = serde_json::to_string(password)?;
+    Ok(format!(
+        r#"(function() {{
+            if (window.location.hostname !== 'gumroad.com') return;
+            var filled = false;
+            function fillForm() {{
+                if (filled) return;
+                var u = document.querySelector('input[type="email"]');
+                var p = document.querySelector('input[autocomplete="current-password"]');
+                if (!u || !p) return;
+                filled = true;
+                var s = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+                s.call(u, {email_json});
+                u.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                u.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                s.call(p, {password_json});
+                p.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                p.dispatchEvent(new Event('change', {{ bubbles: true }}));
+            }}
+            setTimeout(fillForm, 1000);
+            setInterval(fillForm, 500);
+        }})()"#
+    ))
+}
+
 /// Logs in through Gumroad's authorization page in an in-app browser window
 /// (same pattern as Hotmart's `authenticate`): the user signs in on
 /// Gumroad's own page, Gumroad redirects to `http://127.0.0.1/?code=`, and
-/// the code is exchanged for an access token. The authorization code, PKCE
-/// verifier and `state` value are never logged.
+/// the code is exchanged for an access token. The email/password from the
+/// app's credentials tab are auto-filled into Gumroad's login form
+/// (fill-only, no auto-submit) by `build_autofill_script`. The authorization
+/// code, PKCE verifier and `state` value are never logged.
 pub async fn authenticate_via_browser(
     app: &tauri::AppHandle,
     email: &str,
+    password: &str,
 ) -> anyhow::Result<GumroadSession> {
     use std::sync::{Arc, Mutex};
     use tauri::Manager;
@@ -245,6 +298,12 @@ pub async fn authenticate_via_browser(
     let oauth_state = random_token();
     let (code_verifier, code_challenge) = generate_pkce();
     let authorize_url = build_authorize_url(&oauth_state, &code_challenge);
+
+    // Auto-fill Gumroad's own login page with the credentials the user typed
+    // in the app's credentials tab. The password is used only for this
+    // in-webview fill — it is never sent to any server by the app itself —
+    // and is dropped when this function returns on any path.
+    let autofill_script = build_autofill_script(email, password)?;
 
     // The redirect back from Gumroad lands on `http://127.0.0.1`, where
     // nothing listens on port 80. The webview watches for that navigation
@@ -269,6 +328,7 @@ pub async fn authenticate_via_browser(
     )
     .title("Gumroad Login")
     .inner_size(500.0, 700.0)
+    .initialization_script(&autofill_script)
     .on_navigation(move |url| {
         if url.scheme() == "http" && url.host_str() == Some("127.0.0.1") {
             // The URL carries the authorization code: never log it.
@@ -652,5 +712,29 @@ mod tests {
         assert!(parse_redirect_url("http://127.0.0.1/?state=xyz").is_err());
         assert!(parse_redirect_url("http://127.0.0.1/").is_err());
         assert!(parse_redirect_url("http://127.0.0.1").is_err());
+    }
+
+    #[test]
+    fn autofill_script_guards_host_and_fills_by_selector() {
+        // Dummy values only — clearly not real credentials.
+        let script =
+            build_autofill_script("dummy-user@example.invalid", "dummy\"pass<123>").unwrap();
+        // Host guard: never fills on any other page.
+        assert!(script.contains("window.location.hostname !== 'gumroad.com'"));
+        // The two verified selectors (ids are dynamic, never selected by id).
+        assert!(script.contains("input[type=\"email\"]"));
+        assert!(script.contains("input[autocomplete=\"current-password\"]"));
+        // React-safe fill: native setter + bubbling events.
+        assert!(script.contains("HTMLInputElement.prototype, 'value'"));
+        assert!(script.contains("new Event('input'"));
+        // Fill-only: no submit, no button click.
+        assert!(!script.contains("click()"));
+        assert!(!script.contains("submit"));
+        // Credentials are JSON-escaped, never interpolated raw: the dummy
+        // password's quote is escaped in the script, the raw value is not.
+        assert!(script.contains("dummy\\\"pass<123>"));
+        assert!(!script.contains("dummy\"pass<123>"));
+        // The dummy email is embedded as a JSON string.
+        assert!(script.contains("\"dummy-user@example.invalid\""));
     }
 }

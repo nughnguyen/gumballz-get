@@ -24,18 +24,19 @@ pub async fn gumroad_login(
     state: tauri::State<'_, CoursesState>,
     email: String,
     // Gumroad no longer accepts the password grant (`unsupported_grant_type`),
-    // so the password is not sent anywhere: the user signs in on Gumroad's
-    // own page inside the login window opened below. The parameter stays so
-    // the command signature — and the credentials tab that calls it — is
-    // unchanged.
-    _password: String,
+    // so the password is never sent to any server by the app itself: it is
+    // only used to auto-fill Gumroad's own login page inside the login
+    // window opened below (see `api::build_autofill_script`), so the user
+    // does not have to type the same credentials twice. The password lives
+    // only as a stack parameter and is dropped when the login returns.
+    password: String,
 ) -> Result<String, String> {
     let _ = api::delete_saved_session().await;
     state.gumroad_session.lock().await.take();
     *state.gumroad_session_validated_at.lock().await = None;
     *state.gumroad_courses_cache.lock().await = None;
 
-    match api::authenticate_via_browser(&app, &email).await {
+    match api::authenticate_via_browser(&app, &email, &password).await {
         Ok(session) => {
             let response_email = session.email.clone();
             let _ = api::save_session(&session).await;

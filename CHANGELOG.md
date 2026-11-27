@@ -9,6 +9,7 @@ bản hiện tại trong cùng commit đó.
 
 - Đăng nhập Gumroad bằng email/mật khẩu giờ mở cửa sổ trình duyệt trong app để đăng nhập trên trang Gumroad rồi đổi mã lấy token (Gumroad đã bỏ kiểu đăng nhập gửi thẳng mật khẩu nên trước đây báo lỗi 400 unsupported_grant_type); đăng nhập bằng token vẫn giữ nguyên.
 - Sửa đăng nhập Gumroad: địa chỉ redirect đúng là `http://127.0.0.1` (địa chỉ đã đăng ký cho app này), không phải `gumroadmobile://` nên trước đây Gumroad báo lỗi redirect không khớp.
+- Đăng nhập Gumroad trong app giờ tự điền sẵn email + mật khẩu đã gõ vào trang đăng nhập của Gumroad (chỉ điền, anh vẫn tự bấm nút đăng nhập trên trang đó); mật khẩu chỉ nằm trong bộ nhớ lúc đăng nhập, không gửi hay lưu ở đâu.
 - Thêm nguồn tải mới: Pinterest (sửa bộ đọc trang — giờ lấy ảnh gốc thay vì bản thu nhỏ, video chọn đúng chất lượng), Spotify (thông tin bài hát + ảnh bìa + bản nghe thử 30 giây — nhạc đầy đủ không tải được vì Spotify dùng DRM), Studocu (tài liệu PDF/DOCX từ bản xem trước, trang bị khóa chỉ có bản mờ), SoundCloud (nhạc .m4a). Dailymotion chưa thêm được vì yt-dlp đang lỗi với trang này.
 
 ## [1.0.2] - 2026-11-26
