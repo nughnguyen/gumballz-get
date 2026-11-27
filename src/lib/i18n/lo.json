@@ -168,6 +168,7 @@
       "empty_title": "ບໍ່ພົບຫຍັງ",
       "empty_desc": "ລອງຄຳອື່ນ, ຫຼື ປ່ຽນຕົວກັ່ນຕອງແພລດຟອມ.",
       "not_on_this_os": "ເຄື່ອງມືນີ້ໃຊ້ບໍ່ໄດ້ໃນລະບົບຂອງທ່ານ ({{os}}).",
+      "not_in_this_build": "Not included in this build.",
       "soon_title": "ກຳລັງພັດທະນາ",
       "soon_desc": "ເຄື່ອງມືນີ້ຢູ່ໃນແຜນງານຂອງ GumballZ Get ແລະ ຍັງໃຊ້ບໍ່ໄດ້. ສະແດງໄວ້ເພື່ອໃຫ້ທ່ານຮູ້ວ່າມີຫຍັງກຳລັງຈະມາ.",
       "no_plugins_title": "No plugins installed yet",

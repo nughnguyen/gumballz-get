@@ -168,6 +168,7 @@
       "empty_title": "Ничего не найдено",
       "empty_desc": "Попробуйте другое слово или смените фильтр по платформе.",
       "not_on_this_os": "Этот инструмент не работает на вашей системе ({{os}}).",
+      "not_in_this_build": "Not included in this build.",
       "soon_title": "В разработке",
       "soon_desc": "Этот инструмент в дорожной карте GumballZ Get и пока не работает. Он показан, чтобы вы знали, что будет дальше.",
       "no_plugins_title": "No plugins installed yet",

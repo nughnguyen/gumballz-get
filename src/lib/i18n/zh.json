@@ -168,6 +168,7 @@
       "empty_title": "没有找到任何内容",
       "empty_desc": "换个关键词试试，或更改平台筛选。",
       "not_on_this_os": "此工具无法在你的系统（{{os}}）上运行。",
+      "not_in_this_build": "Not included in this build.",
       "soon_title": "开发中",
       "soon_desc": "此工具在 GumballZ Get 的规划中，尚不可用。列在这里是让你提前了解即将推出的功能。",
       "no_plugins_title": "No plugins installed yet",

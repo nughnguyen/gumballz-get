@@ -5,7 +5,7 @@ use futures::StreamExt;
 use gumballz_plugin_sdk::{PluginHost, PluginManifest, RegistryEntry};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 use tokio::io::AsyncWriteExt as _;
 
 use crate::plugin_host::PluginHostImpl;
@@ -17,6 +17,24 @@ const MAX_PLUGIN_ZIP_BYTES: u64 = 500 * 1024 * 1024;
 /// Hard cap for the total uncompressed bytes of an extracted plugin zip
 /// (zip-bomb guard). A plugin package is far smaller than this in practice.
 const MAX_PLUGIN_EXTRACTED_BYTES: u64 = 1024 * 1024 * 1024;
+/// The five official tools that ship inside the app bundle as installable
+/// payloads (staged by `src-tauri/build.rs` into
+/// `resources/bundled-plugins/<id>/` and shipped via `bundle.resources`).
+/// Only these ids may be installed from the bundle — the allowlist runs
+/// before any filesystem access, on top of `validate_plugin_id`, because
+/// the id becomes a resource path below. Must stay in sync with
+/// `BUNDLED_PLUGIN_IDS` in `src-tauri/build.rs`.
+const BUNDLED_PLUGIN_IDS: &[&str] = &[
+    "convert",
+    "telegram",
+    "courses",
+    "listening-studio",
+    "asset-forge",
+];
+/// Hard cap for the total bytes copied from a bundled plugin payload.
+/// A bundled payload is one cdylib (a few MB) + `plugin.json`; 100 MB is
+/// far above that and fails closed on anything unexpected.
+const MAX_BUNDLED_PLUGIN_BYTES: u64 = 100 * 1024 * 1024;
 
 fn emit_plugins_changed(app: &tauri::AppHandle) {
     let _ = app.emit("plugins-changed", ());
@@ -393,19 +411,18 @@ struct GitHubAsset {
     size: Option<u64>,
 }
 
-/// Extract `zip_path` into a fresh staging dir under the plugins dir,
-/// validate the extracted `plugin.json` (it must parse and its `id` must
-/// equal `plugin_id`), then atomically move the staging dir into place as
+/// Atomically move a fully-populated staging dir into place as
 /// `<plugins>/<plugin_id>/` (the previous install, if any, is first moved
 /// aside to `<plugins>/<plugin_id>.old` and restored if the move fails, and
 /// removed once the new install is in place). Only then is the entry
 /// registered in `installed.json`. On ANY failure the staging dir is deleted
-/// and the previous install is left untouched. Shared by the registry
-/// download path and the install-from-file path — the extraction logic lives
-/// here exactly once.
-async fn install_from_zip_file(
-    zip_path: &std::path::Path,
+/// and the previous install is left untouched (or restored). Shared by the
+/// zip installer and the bundled installer — the swap logic lives here
+/// exactly once.
+async fn swap_staged_into_place(
+    staging: &std::path::Path,
     plugin_id: &str,
+    version: String,
     repo: Option<String>,
     source_release: Option<String>,
     state: &Arc<tokio::sync::RwLock<PluginManager>>,
@@ -414,6 +431,67 @@ async fn install_from_zip_file(
         let manager = state.read().await;
         let dest = manager.plugin_dir(plugin_id).map_err(|e| e.to_string())?;
         (manager.plugins_dir().to_path_buf(), dest)
+    };
+    let cleanup = |staging: &std::path::Path| {
+        let _ = std::fs::remove_dir_all(staging);
+    };
+    // Atomic-ish swap: move the old install aside, move staging in, restore
+    // the old install if the second rename fails.
+    let backup_dir = plugins_dir.join(format!("{}.old", plugin_id));
+    let mut moved_aside = false;
+    if dest_dir.exists() {
+        let _ = std::fs::remove_dir_all(&backup_dir);
+        if let Err(e) = std::fs::rename(&dest_dir, &backup_dir) {
+            cleanup(staging);
+            return Err(format!("Không thể thay thế bản cài cũ: {}", e));
+        }
+        moved_aside = true;
+    }
+    if let Err(e) = std::fs::rename(staging, &dest_dir) {
+        if moved_aside {
+            let _ = std::fs::rename(&backup_dir, &dest_dir);
+        }
+        cleanup(staging);
+        return Err(format!("Không thể cài đặt plugin: {}", e));
+    }
+    let _ = std::fs::remove_dir_all(&backup_dir);
+
+    let mut manager = state.write().await;
+    if let Err(e) = manager.register_installed(gumballz_plugin_sdk::InstalledPlugin {
+        id: plugin_id.to_string(),
+        version: version.clone(),
+        installed_at: chrono::Utc::now().to_rfc3339(),
+        updated_at: chrono::Utc::now().to_rfc3339(),
+        enabled: true,
+        repo,
+        source_release,
+    }) {
+        // The files are in place but the registry write failed: roll the
+        // install back so `installed.json` and the disk never disagree.
+        let _ = std::fs::remove_dir_all(&dest_dir);
+        return Err(format!("Không ghi được danh sách plugin đã cài: {}", e));
+    }
+
+    Ok(version)
+}
+
+/// Extract `zip_path` into a fresh staging dir under the plugins dir,
+/// validate the extracted `plugin.json` (it must parse and its `id` must
+/// equal `plugin_id`), then atomically move the staging dir into place via
+/// `swap_staged_into_place`. On ANY failure the staging dir is deleted and
+/// the previous install is left untouched. Shared by the registry download
+/// path and the install-from-file path — the extraction logic lives here
+/// exactly once.
+async fn install_from_zip_file(
+    zip_path: &std::path::Path,
+    plugin_id: &str,
+    repo: Option<String>,
+    source_release: Option<String>,
+    state: &Arc<tokio::sync::RwLock<PluginManager>>,
+) -> Result<String, String> {
+    let plugins_dir = {
+        let manager = state.read().await;
+        manager.plugins_dir().to_path_buf()
     };
     std::fs::create_dir_all(&plugins_dir).map_err(|e| e.to_string())?;
 
@@ -438,44 +516,7 @@ async fn install_from_zip_file(
     };
     let version = manifest.version.clone();
 
-    // Atomic-ish swap: move the old install aside, move staging in, restore
-    // the old install if the second rename fails.
-    let backup_dir = plugins_dir.join(format!("{}.old", plugin_id));
-    let mut moved_aside = false;
-    if dest_dir.exists() {
-        let _ = std::fs::remove_dir_all(&backup_dir);
-        if let Err(e) = std::fs::rename(&dest_dir, &backup_dir) {
-            cleanup(&staging);
-            return Err(format!("Không thể thay thế bản cài cũ: {}", e));
-        }
-        moved_aside = true;
-    }
-    if let Err(e) = std::fs::rename(&staging, &dest_dir) {
-        if moved_aside {
-            let _ = std::fs::rename(&backup_dir, &dest_dir);
-        }
-        cleanup(&staging);
-        return Err(format!("Không thể cài đặt plugin: {}", e));
-    }
-    let _ = std::fs::remove_dir_all(&backup_dir);
-
-    let mut manager = state.write().await;
-    if let Err(e) = manager.register_installed(gumballz_plugin_sdk::InstalledPlugin {
-        id: plugin_id.to_string(),
-        version: version.clone(),
-        installed_at: chrono::Utc::now().to_rfc3339(),
-        updated_at: chrono::Utc::now().to_rfc3339(),
-        enabled: true,
-        repo,
-        source_release,
-    }) {
-        // The files are in place but the registry write failed: roll the
-        // install back so `installed.json` and the disk never disagree.
-        let _ = std::fs::remove_dir_all(&dest_dir);
-        return Err(format!("Không ghi được danh sách plugin đã cài: {}", e));
-    }
-
-    Ok(version)
+    swap_staged_into_place(&staging, plugin_id, version, repo, source_release, state).await
 }
 
 /// Open `zip_path`, extract it into `staging` (Zip-Slip + symlink + size
@@ -823,6 +864,217 @@ pub async fn install_plugin_from_file(
     }
     emit_plugins_changed(&app);
     Ok(version)
+}
+
+/// File extension of the native plugin library on this platform — the same
+/// extension the loader's dir-scan (`find_native_lib`) looks for.
+fn native_lib_extension() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "dll"
+    } else if cfg!(target_os = "macos") {
+        "dylib"
+    } else {
+        "so"
+    }
+}
+
+/// Resolve a bundled plugin payload dir, if this build ships one. The
+/// bundler copies `bundle.resources` into the resource dir (in dev,
+/// `tauri-build` copies them next to the binary in `target/<profile>/`);
+/// a build with no resources folder — e.g. the Windows portable .exe —
+/// resolves to a path that does not exist.
+fn bundled_plugin_dir(
+    app: &tauri::AppHandle,
+    plugin_id: &str,
+) -> Option<std::path::PathBuf> {
+    let dir = app
+        .path()
+        .resolve(
+            format!("bundled-plugins/{plugin_id}"),
+            tauri::path::BaseDirectory::Resource,
+        )
+        .ok()?;
+    if dir.is_dir() {
+        Some(dir)
+    } else {
+        None
+    }
+}
+
+/// Read + validate the `plugin.json` of a bundled payload: it must parse
+/// and its id must equal `plugin_id`.
+fn read_bundled_manifest(
+    bundled_dir: &std::path::Path,
+    plugin_id: &str,
+) -> Result<PluginManifest, String> {
+    let manifest_path = bundled_dir.join("plugin.json");
+    let manifest_str = std::fs::read_to_string(&manifest_path)
+        .map_err(|_| format!("Gói plugin đi kèm '{plugin_id}' thiếu plugin.json"))?;
+    let manifest: PluginManifest = serde_json::from_str(&manifest_str)
+        .map_err(|e| format!("plugin.json không hợp lệ: {}", e))?;
+    if let Err(e) = validate_plugin_id(&manifest.id) {
+        return Err(format!("plugin.json có id không hợp lệ: {}", e));
+    }
+    if manifest.id != plugin_id {
+        return Err(format!(
+            "plugin.json có id '{}' nhưng đang cài '{}'",
+            manifest.id, plugin_id
+        ));
+    }
+    Ok(manifest)
+}
+
+/// The native libraries in a bundled payload dir. These manifests have no
+/// `rust_crate`, so the loader scans the installed dir for any single
+/// `.dll` / `.so` / `.dylib` — the payload must therefore contain exactly
+/// one. Zero or more than one is an error, never a guess.
+fn bundled_native_libs(
+    bundled_dir: &std::path::Path,
+) -> Result<Vec<std::path::PathBuf>, String> {
+    let ext = native_lib_extension();
+    let mut libs = Vec::new();
+    let entries = std::fs::read_dir(bundled_dir).map_err(|e| e.to_string())?;
+    for entry in entries {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let path = entry.path();
+        let is_native = path.is_file()
+            && path
+                .extension()
+                .and_then(|e| e.to_str())
+                .map(|e| e == ext)
+                .unwrap_or(false);
+        if is_native {
+            libs.push(path);
+        }
+    }
+    Ok(libs)
+}
+
+/// Install one of the five official tools from the payload shipped inside
+/// the app bundle — no network, no registry, no file picker. The bundled
+/// payload (one cdylib + `plugin.json`, staged by `build.rs`) is copied
+/// into a fresh staging dir under the plugins dir, then goes through the
+/// SAME atomic swap + `register_installed` path as the zip installer, with
+/// `repo: None, source_release: None` so the update checks skip it (it is
+/// bundled, not from a repo). After a successful install the plugin is
+/// loaded and `plugins-changed` is emitted, exactly like install-from-file.
+#[tauri::command]
+pub async fn install_plugin_from_bundle(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, Arc<tokio::sync::RwLock<PluginManager>>>,
+    plugin_id: String,
+) -> Result<String, String> {
+    // Allowlist first: only the five bundled ids, before touching the
+    // filesystem — the id becomes a resource path below.
+    if !BUNDLED_PLUGIN_IDS.contains(&plugin_id.as_str()) {
+        return Err(format!(
+            "Plugin '{plugin_id}' không có trong gói đi kèm ứng dụng"
+        ));
+    }
+    validate_plugin_id(&plugin_id).map_err(|e| e.to_string())?;
+    let bundled_dir = bundled_plugin_dir(&app, &plugin_id).ok_or_else(|| {
+        format!(
+            "Bản dựng này không kèm gói plugin '{plugin_id}' (bản portable .exe không có thư mục resources). Hãy cài plugin từ kho plugin hoặc từ tệp .zip."
+        )
+    })?;
+    let manifest = read_bundled_manifest(&bundled_dir, &plugin_id)?;
+    let native_libs = bundled_native_libs(&bundled_dir)?;
+    let native_lib = match native_libs.len() {
+        0 => {
+            return Err(format!(
+                "Gói plugin đi kèm '{plugin_id}' thiếu thư viện cho nền tảng này"
+            ));
+        }
+        1 => native_libs.into_iter().next().expect("exactly one lib"),
+        _ => {
+            return Err(format!(
+                "Gói plugin đi kèm '{plugin_id}' chứa nhiều hơn một thư viện, đã từ chối"
+            ));
+        }
+    };
+
+    let plugins_dir = {
+        let manager = state.read().await;
+        manager.plugins_dir().to_path_buf()
+    };
+    std::fs::create_dir_all(&plugins_dir).map_err(|e| e.to_string())?;
+
+    let staging = plugins_dir.join(format!(
+        ".tmp-{}-{}",
+        plugin_id,
+        uuid::Uuid::new_v4().as_simple()
+    ));
+    let cleanup = |staging: &std::path::Path| {
+        let _ = std::fs::remove_dir_all(staging);
+    };
+    if let Err(e) = std::fs::create_dir_all(&staging) {
+        return Err(format!("Không tạo được thư mục tạm: {}", e));
+    }
+
+    // Copy exactly the two payload files — plugin.json + the single native
+    // lib — with a size cap and symlink rejection. A resource dir should
+    // never contain a symlink; a symlink here could point the copy outside
+    // the staging dir.
+    let mut copied_bytes: u64 = 0;
+    for src in [bundled_dir.join("plugin.json"), native_lib] {
+        let metadata = std::fs::symlink_metadata(&src).map_err(|e| e.to_string())?;
+        if metadata.file_type().is_symlink() {
+            cleanup(&staging);
+            return Err(format!(
+                "Gói plugin đi kèm '{plugin_id}' chứa liên kết tượng trưng (symlink), đã từ chối"
+            ));
+        }
+        copied_bytes = copied_bytes.saturating_add(metadata.len());
+        if copied_bytes > MAX_BUNDLED_PLUGIN_BYTES {
+            cleanup(&staging);
+            return Err("Gói plugin đi kèm vượt quá giới hạn cho phép (100 MB)".into());
+        }
+        let file_name = src.file_name().ok_or_else(|| {
+            format!("Gói plugin đi kèm '{plugin_id}' có tên tệp không hợp lệ")
+        })?;
+        if let Err(e) = std::fs::copy(&src, staging.join(file_name)) {
+            cleanup(&staging);
+            return Err(format!("Không sao chép được gói plugin đi kèm: {}", e));
+        }
+    }
+
+    let version = swap_staged_into_place(
+        &staging,
+        &plugin_id,
+        manifest.version.clone(),
+        None,
+        None,
+        &state.inner().clone(),
+    )
+    .await?;
+
+    {
+        let mut manager = state.write().await;
+        if !manager.is_loaded(&plugin_id) {
+            let plugins_dir = manager.plugins_dir().to_path_buf();
+            let host = build_plugin_host(&app, plugins_dir);
+            let _ = manager.load_one(&plugin_id, host);
+        }
+    }
+    emit_plugins_changed(&app);
+    Ok(version)
+}
+
+/// Ids among the five bundled tools whose payload is present in this build,
+/// so the frontend can grey out Install when a build ships no bundle
+/// (e.g. the portable .exe, which carries no resources folder).
+#[tauri::command]
+pub fn list_bundled_plugins(app: tauri::AppHandle) -> Vec<String> {
+    let mut bundled = Vec::new();
+    for id in BUNDLED_PLUGIN_IDS {
+        let present = bundled_plugin_dir(&app, id)
+            .map(|dir| dir.join("plugin.json").is_file())
+            .unwrap_or(false);
+        if present {
+            bundled.push(id.to_string());
+        }
+    }
+    bundled
 }
 
 async fn fetch_registry_entries() -> Result<Vec<RegistryEntry>, String> {

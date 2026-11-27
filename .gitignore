@@ -14,6 +14,9 @@ vite.config.ts.timestamp-*
 # Rust / Cargo
 src-tauri/target/
 
+# Bundled plugin payloads staged by src-tauri/build.rs (generated, never committed)
+src-tauri/resources/bundled-plugins/
+
 # Tauri generated
 src-tauri/gen/schemas
 

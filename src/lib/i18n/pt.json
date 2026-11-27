@@ -168,6 +168,7 @@
       "empty_title": "Nada encontrado",
       "empty_desc": "Tente outra palavra, ou mude o filtro de plataforma.",
       "not_on_this_os": "Esta ferramenta não roda no seu sistema ({{os}}).",
+      "not_in_this_build": "Not included in this build.",
       "soon_title": "Em desenvolvimento",
       "soon_desc": "Esta ferramenta está no plano do GumballZ Get e ainda não funciona. Ela aparece aqui para você saber o que vem por aí.",
       "no_plugins_title": "No plugins installed yet",
