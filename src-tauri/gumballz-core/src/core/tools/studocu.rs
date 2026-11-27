@@ -15,7 +15,7 @@
 //! | Text layer | `{objectKey}{n}.page` | decimal | Positioned `<span>`s, signed per page. Not used here. |
 //! | Blurred preview | `pages/blurred/page{n}.webp` | decimal | Small thumbnail with the blur baked in; served even for locked pages. |
 //! | Clear raster | `pages/page{n}.webp` | decimal | The whole page as one image; 403 on premium-locked pages. |
-/// | Stylesheet | `{objectKey}.css` | | Fonts and layout. Not used here. |
+//! | Stylesheet | `{objectKey}.css` | | Fonts and layout. Not used here. |
 //!
 //! The signing keys live in `#__NEXT_DATA__` under
 //! `props.pageProps.documentAccess.signedQueryParams`, and the shape varies:
