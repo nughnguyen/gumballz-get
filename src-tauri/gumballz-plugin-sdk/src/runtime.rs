@@ -11,13 +11,20 @@
 /// construct the plugin with `new()` and call `handle_command` without
 /// `initialize` still get a runtime.
 pub struct PluginRuntime {
-    runtime: tokio::runtime::Runtime,
+    // Deliberately leaked: dropping a multi-thread Runtime blocks the
+    // current thread to shut it down, and Tokio panics when that happens
+    // from within an asynchronous context ("Cannot drop a runtime in a
+    // context where blocking is not allowed") — which is exactly where a
+    // plugin is dropped in unit tests. The leak matches the real lifetime
+    // anyway: the loader never unloads a plugin, so its runtime lives
+    // until the process exits.
+    runtime: &'static tokio::runtime::Runtime,
 }
 
 impl PluginRuntime {
     pub fn new() -> anyhow::Result<Self> {
         Ok(Self {
-            runtime: tokio::runtime::Runtime::new()?,
+            runtime: Box::leak(Box::new(tokio::runtime::Runtime::new()?)),
         })
     }
 
